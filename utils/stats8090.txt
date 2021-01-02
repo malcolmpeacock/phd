@@ -1,0 +1,27 @@
+90%
+
+Method    Correlation RMSE NRMSE R-SQUARED
+ Ruhnau    0.98        0.31 0.40  0.98
+ Watson    0.98        0.36 0.46  0.97
+ HDD 15.5  0.98        0.30 0.38  0.98
+ HDD 12.8  0.97        0.25 0.32  0.98
+Load duration curves
+ Method    Correlation RMSE NRMSE R-SQUARED
+ Ruhnau    0.98        0.31 0.40  0.99
+ Waston    0.98        0.36 0.46  0.98
+ HDD 15.5  0.98        0.30 0.38  0.99
+ HDD 12.8  0.97        0.25 0.32  0.99
+
+80%
+
+Method    Correlation RMSE NRMSE R-SQUARED
+ Ruhnau    0.98        0.20 0.25  0.98
+ Watson    0.98        0.25 0.31  0.97
+ HDD 15.5  0.98        0.19 0.24  0.98
+ HDD 12.8  0.97        0.17 0.21  0.98
+Load duration curves
+ Method    Correlation RMSE NRMSE R-SQUARED
+ Ruhnau    0.98        0.20 0.25  0.99
+ Waston    0.98        0.25 0.31  0.98
+ HDD 15.5  0.98        0.19 0.24  0.99
+ HDD 12.8  0.97        0.17 0.21  0.99
