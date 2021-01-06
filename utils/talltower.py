@@ -86,7 +86,8 @@ def read_netcdf(directory,name,yearmonth):
 #   data = {'windspeed' : wind_speed, 'status': status_flag}
     data = wind_speed
     # Transform to pd.DataFrame
-    df = pd.DataFrame(data=data, index=pd.DatetimeIndex(times, name='time'))
+#   df = pd.DataFrame(data=data, index=pd.DatetimeIndex(times, name='time'))
+    df = pd.Series(data=data, index=pd.DatetimeIndex(times, name='time'), name=name)
     # interpolate missing values
     df = df.interpolate()
     # incase the first or last value was NaN use back forward fill
@@ -94,6 +95,8 @@ def read_netcdf(directory,name,yearmonth):
     df = df.fillna(method='bfill')
     # resample to hourly
     df = df.resample('H').mean()
+    print('TOWER')
+    print(df)
     return df
 
 # power law using wind speed from 2 heights to work out alpha first
@@ -107,8 +110,12 @@ def read_netcdf(directory,name,yearmonth):
 def power_law_given_2heights(df,h1,h2,v1,v2,href,vref,h,v):
     # calculate the power law exponent alpha from h1,h2,v1,v2
     base = h2 / h1
-    vd = v1 / v2
+    vd = v2 / v1
+    # log vd to base = ln(vd) / ln(base)
     alpha = np.log(vd) / np.log(base)
+#   alpha = np.exp(log_alpha)
+    print('ALPHA')
+    print(alpha)
     # create an array of the same length filled with h/href
     n = np.empty(len(df))
     n.fill(h / href )
@@ -186,17 +193,44 @@ era5 = power_law_given_2heights(era5,10,100,era5['wind10'],era5['wind100'],10,er
 era5 = power_law_given_2heights(era5,10,100,era5['wind10'],era5['wind100'],100,era5['wind100'],116,'power116')
 print(era5)
 
-# output wind plots
+# output wind plots for 70m
 
 tower['wind70'].plot(label='Tower Wind Speed at 70m')
 tower['log70'].plot(label='Log law from 21m to 70m')
 tower['power70'].plot(label='Power law from 21m to 70m')
+era5['log70'].plot(label='ERA5 Log law from 10m to 70m')
+era5['power70'].plot(label='ERA5 Power law using 2 heights 70m')
 plt.title('Amsterdam Offshore Tower windspeed for December 2010')
-plt.xlabel('Day of the year')
+plt.xlabel('Day of the month')
 plt.ylabel('Wind Speed (M/S)')
 plt.legend(loc='upper right')
 plt.show()
 
-#stats.print_stats_header()
-#stats.print_stats(tower['log70'], tower['wind70'], 'Log law to actual 70m', 1, True, 'Log law wind speed (m/s)', 'Actual wind speed (m/s)' )
-#stats.print_stats(tower['power70'], tower['wind70'], 'Power law to actual 70m', 1, True, 'Power law wind speed (m/s)', 'Actual wind speed (m/s)' )
+# output stats for 70m
+
+stats.print_stats_header()
+stats.print_stats(tower['log70'], tower['wind70'], 'Log law 70m', 1, True, 'Log law wind speed (m/s)', 'Actual wind speed (m/s)' )
+stats.print_stats(tower['power70'], tower['wind70'], 'Power law 70m', 1, True, 'Power law wind speed (m/s)', 'Actual wind speed (m/s)' )
+stats.print_stats(era5['log70'], tower['wind70'], 'ERA5 log law', 1, True, 'Power law wind speed (m/s)', 'Actual wind speed (m/s)' )
+stats.print_stats(era5['power70'], tower['wind70'], 'ERA5 Power law', 1, True, 'Power law wind speed (m/s)', 'Actual wind speed (m/s)' )
+
+# output wind plots for 116m
+
+tower['wind116'].plot(label='Tower Wind Speed at 116m')
+tower['log116'].plot(label='Log law from 21m to 116m')
+tower['power116'].plot(label='Power law from 21m to 116m')
+era5['log116'].plot(label='ERA5 Log law from 10m to 116m')
+era5['power116'].plot(label='ERA5 Power law using 2 heights 116m')
+plt.title('Amsterdam Offshore Tower windspeed for December 2010')
+plt.xlabel('Day of the month')
+plt.ylabel('Wind Speed (M/S)')
+plt.legend(loc='upper right')
+plt.show()
+
+# output stats for 116m
+
+stats.print_stats_header()
+stats.print_stats(tower['log116'], tower['wind116'], 'Log law 116m', 1, True, 'Log law wind speed (m/s)', 'Actual wind speed (m/s)' )
+stats.print_stats(tower['power116'], tower['wind116'], 'Power law 116m', 1, True, 'Power law wind speed (m/s)', 'Actual wind speed (m/s)' )
+stats.print_stats(era5['log116'], tower['wind116'], 'ERA5 log law', 1, True, 'Power law wind speed (m/s)', 'Actual wind speed (m/s)' )
+stats.print_stats(era5['power116'], tower['wind116'], 'ERA5 Power law', 1, True, 'Power law wind speed (m/s)', 'Actual wind speed (m/s)' )
