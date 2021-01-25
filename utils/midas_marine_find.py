@@ -25,8 +25,11 @@ midas_filename = '/home/malcolm/uclan/data/midas/marine/midas_marine-obs-lon-ban
 #longitude = 1.8
 #latitude = 57.0
 # london array
-longitude = 1.39
-latitude = 51.59
+#longitude = 1.39
+#latitude = 51.59
+# greater gabbard.
+longitude = 1.5
+latitude = 51.5
 
 closest = 100000000.0
 closest_key = (9999999999999.0, 9999999999999.0)
@@ -46,7 +49,7 @@ for key in groups.keys():
             closest = distance
             closest_key = key
             print('Latitude {} Longitude {} Distance {}'.format(key[1], key[0], distance) )
-print('Latitude {} Longitude {} Distance {}'.format(closest_key[1], closest_key[0], closest) )
+print('Closest: Latitude {} Longitude {} Distance {}'.format(closest_key[1], closest_key[0], closest) )
 # find those with 8000 hours or more
 quit()
 east = midas['longitude'] > 1.5

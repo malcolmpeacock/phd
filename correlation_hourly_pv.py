@@ -1,5 +1,5 @@
 # Get lots of variables from the 2018 weather and see how they correlate
-# with the 2018 gas demand.
+# with the 2018 electicity demand and embedded PV generation forecast
 
 # Python modules
 import os
@@ -145,9 +145,10 @@ print(newdf)
 
 # add correlation variables:
 #   hour of the day - can't have it because gas only daily!
+newdf['hour'] = newdf.index.hour
 #   month of the year
 newdf['month'] = newdf.index.month
-#   (day of the year )
+#   (day of the year? )
 #   previous days temperature
 #   wind speed from u and v
 newdf['wind'] = np.sqrt(np.square(newdf['wind_u']) + np.square(newdf['wind_v']))
@@ -158,20 +159,9 @@ print(newdf.index)
 print(newdf)
 
 # convert to daily because only have daily gas
-matrix = newdf.resample('D', axis=0).mean()
+#matrix = newdf.resample('D', axis=0).mean()
+matrix = newdf
 print(matrix)
-
-# add gas
-# read historic gas demand
-year = '2018'
-gas_filename = '/home/malcolm/uclan/data/GasLDZOfftakeEnergy' + year + '.csv'
-gas = readers.read_gas(gas_filename)
-
-# Convert gas energy from kWh to MWh
-gas = gas * (10 ** -3)
-print(gas)
-
-matrix['gas'] = gas.values
 
 # read 2018 historical electricity demand
 
@@ -180,10 +170,12 @@ demand_filename = '/home/malcolm/uclan/data/ElectricityDemandData_2018.csv'
 demand18 = readers.read_electric_hourly(demand_filename)
 electric18 = demand18['ENGLAND_WALES_DEMAND'] * scotland_factor
 
-electric18 = electric18.resample('D').sum()
 print(electric18)
-
 matrix['electric'] = electric18.values
+
+solar = demand18['EMBEDDED_SOLAR_GENERATION']
+print(solar)
+matrix['pv'] = solar.values
 
 print(matrix)
 print(matrix.columns)

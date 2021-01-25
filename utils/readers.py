@@ -194,3 +194,41 @@ def read_midas_marine(filename):
     midas = midas[notnull]
     print(midas.info())
     return midas
+
+def read_crown(filename):
+#   crown = pd.read_csv(filename, sep=' ', comment='*', parse_dates=[0,1], index_col=0, header=0 )
+#   crown = pd.read_csv(filename, sep=',', header=0 )
+    crown = pd.read_csv(filename, sep=',', header=0, parse_dates=[0], date_parser=lambda x: datetime.strptime(x, '%d/%m/%Y %H:%M'),index_col=0)
+    # hourly mean windspeed, since we have 10 minutes data
+    crown = crown.resample('H').mean()
+    return crown
+
+def read_clnr(filename):
+    clnr = pd.read_csv(filename, sep=',', header=0, parse_dates=[2], date_parser=lambda x: datetime.strptime(x, '%d/%m/%Y %H:%M:%S'))
+    print(clnr)
+    return clnr
+
+    
+
+def rhpp_dt_parse(y,m,d,H,M):
+    dt = '{}-{}-{} {}:{}:00'.format(y, m.zfill(2), d.zfill(2), H.zfill(2), M.zfill(2))
+    return datetime.strptime(dt, "%Y-%m-%d %H:%M:%S")
+
+def read_rhpp(filename, location):
+    rhpp = pd.read_csv(filename, header=0, sep=',', parse_dates={'datetime': [1,2,3,4,5]}, date_parser=rhpp_dt_parse, index_col='datetime')
+#   print(rhpp.columns)
+    rhpp = rhpp.drop(['Matlab_time'], axis=1)
+    # create a datetime index so we can plot
+    rhpp.index = pd.DatetimeIndex(pd.to_datetime(rhpp.index))
+    # do some analysis
+    start = rhpp.index[0]
+    end = rhpp.index[-10]
+    heat_nans = rhpp['Hhp'].isna().sum()
+    elec_nans = rhpp['Ehp'].isna().sum()
+    tin_nans = rhpp['Tin'].isna().sum()
+    tsf_nans = rhpp['Tsf'].isna().sum()
+#   print('Start {} End {} Nans Hhp {} Ehp {} Tin {} Tsf {}'.format(start, end, heat_nans, elec_nans, tin_nans, tsf_nans) )
+    analysis = { 'start' : start, 'end': end, 'nans_Hhp': heat_nans, 'nans_Ehp': elec_nans, 'nans_tin': tin_nans, 'nans_tsf': tsf_nans, 'location' : location }
+    rhpp = rhpp.resample('H').mean()
+    
+    return rhpp, analysis

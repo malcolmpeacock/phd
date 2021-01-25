@@ -1,4 +1,5 @@
 # python script to validate the updated heat and cop with ERA5 etc
+# as used in R squared investigations and residuals plots.
 
 # contrib code
 import sys
@@ -120,25 +121,24 @@ space_and_waterH = get_heat(hdd128_filename, reference_year)
 space_and_waterS = get_heat(hdd155_filename, reference_year)
 
 # fix watson from regression
-wtotal = space_and_waterW.sum()
-g = -0.1288
-c = 0.09
-space_and_waterW = space_and_waterW * ( 1 - g ) - c
-g2 = 0.0314
-# g2 = 0.0314 * 0.5
-c2 = 0.01
-space_and_waterW = space_and_waterW * ( 1 - g2 ) - c2
-space_and_waterW = space_and_waterW * (wtotal / space_and_waterW.sum() )
+# wtotal = space_and_waterW.sum()
+# g = -0.1288
+# c = 0.09
+# space_and_waterW = space_and_waterW * ( 1 - g ) - c
+# g2 = 0.0314
+# c2 = 0.01
+# space_and_waterW = space_and_waterW * ( 1 - g2 ) - c2
+# space_and_waterW = space_and_waterW * (wtotal / space_and_waterW.sum() )
 
 # fix hdd15.5 from regression
-htotal = space_and_waterS.sum()
-g = 0.0865
-c = -0.05
-space_and_waterS = space_and_waterS * ( 1 - g ) - c
-g2 = -0.0536
-c2 = 0.01
-space_and_waterS = space_and_waterS * ( 1 - g2 ) - c2
-space_and_waterS = space_and_waterS * (htotal / space_and_waterS.sum() )
+# htotal = space_and_waterS.sum()
+# g = 0.0865
+# c = -0.05
+# space_and_waterS = space_and_waterS * ( 1 - g ) - c
+# g2 = -0.0536
+# c2 = 0.01
+# space_and_waterS = space_and_waterS * ( 1 - g2 ) - c2
+# space_and_waterS = space_and_waterS * (htotal / space_and_waterS.sum() )
 
 # read historic gas demand
 gas = read_gas(gas_filename)

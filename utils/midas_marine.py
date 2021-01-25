@@ -14,34 +14,24 @@ import stats
 import readers
 
 # main program
-midas_filename = '/home/malcolm/uclan/data/midas/marine/midas_marine-obs-lon-band-f_201801-201812.txt'
 
+# read midas marine data
+#midas_filename = '/home/malcolm/uclan/data/midas/marine/midas_marine-obs-lon-band-f_201801-201812.txt'
+midas_filename = '/home/malcolm/uclan/data/midas/marine/midas_marine-obs-lon-band-f_200901-200912.txt'
 midas = readers.read_midas_marine(midas_filename)
-east = midas['longitude'] > 1.5
-filtered = midas[east]
-print(filtered)
-north = filtered['latitude'] > 54.4
-filtered = filtered[north]
-print(filtered)
-west = filtered['longitude'] < 2.0
-filtered = filtered[west]
-south = filtered['latitude'] < 59.0
-filtered = filtered[south]
-print(filtered)
-# point1 = filtered.loc['2018-01-01 00:00:00']
-# lats = point1['latitude']
-# print(lats.nsmallest())
-# location = filtered['latitude'] == 57.0 and filtered['longitude'] == 1.8
-#
-location_lat = 57.0
+
+year = '2009'
+#location_lat = 57.0
+#location_lon = 1.8
+location_lat = 51.1
 location_lon = 1.8
-location = filtered['latitude'] == location_lat
-ldata = filtered[location]
+
+location = midas['latitude'] == location_lat
+ldata = midas[location]
 location = ldata['longitude'] == location_lon
 ldata = ldata[location]
 wind = ldata['windspeed']
 # create an index with the missing hours
-year = '2018'
 d = pd.date_range(start = year + '-01-01 00:00:00', end = year + '-12-31 23:00:00', freq='H' ).difference(wind.index)
 newdata={}
 for dt in d:
@@ -63,7 +53,13 @@ df.index = index.strftime('%Y-%m-%dT%H:%M:%SZ')
 print(df)
 print(df.dtypes)
 # drop sea_temperature because its not set.
-df.drop(columns=['latitude','longitude','version','sea_temperature'],inplace=True)
+df.drop(columns=['latitude','longitude','version','sea_temperature','shipdir'],inplace=True)
+# if any missing at the start then take the nearest
+#df = df.interpolate(method='nearest', axis=0)
+df = df.fillna(method='ffill')
+df = df.fillna(method='bfill')
+# take the mean of rows for the same date
+df = df.groupby('time').mean()
 print(df)
 output_dir = '/home/malcolm/uclan/output/wind/'
 output_file = '{}marine_lat{:.1f}_long{:.1f}_{}.csv'.format(output_dir, location_lat, location_lon, year)
