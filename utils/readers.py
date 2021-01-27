@@ -232,3 +232,21 @@ def read_rhpp(filename, location):
     rhpp = rhpp.resample('H').mean()
     
     return rhpp, analysis
+
+def read_advm(filename, location):
+    advm = pd.read_csv(filename, sep=',', header=0, parse_dates=[0], date_parser=lambda x: datetime.strptime(x, '%d/%m/%Y'), index_col=0, error_bad_lines=False, )
+    # merge all the half hourly columns into rows
+    advm = advm.melt(ignore_index=False)
+    # combine the date and time columns into a new index
+    advm.index = pd.DatetimeIndex(pd.to_datetime(advm.index.strftime("%Y-%m-%d") + ' ' + advm['variable']))
+    # sort by the new index
+    advm = advm.sort_index()
+    # drop the old time column
+    advm = advm.drop(['variable'], axis=1)
+    nans = advm['value'].isna().sum()
+    advm = advm.interpolate()
+    advm = advm.fillna(method='bfill')
+    advm = advm.fillna(method='ffill')
+    fnans = advm['value'].isna().sum()
+    analysis = { 'nans' : nans, 'location' : location, 'fixed' : fnans }
+    return advm, analysis
