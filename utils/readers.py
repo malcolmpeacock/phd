@@ -229,7 +229,8 @@ def read_rhpp(filename, location):
     tsf_nans = rhpp['Tsf'].isna().sum()
 #   print('Start {} End {} Nans Hhp {} Ehp {} Tin {} Tsf {}'.format(start, end, heat_nans, elec_nans, tin_nans, tsf_nans) )
     analysis = { 'start' : start, 'end': end, 'nans_Hhp': heat_nans, 'nans_Ehp': elec_nans, 'nans_tin': tin_nans, 'nans_tsf': tsf_nans, 'location' : location }
-    rhpp = rhpp.resample('H').mean()
+    rhpp = rhpp.interpolate()
+    rhpp = rhpp.resample('H').sum()
     
     return rhpp, analysis
 
