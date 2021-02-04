@@ -21,6 +21,8 @@ import torch.nn.functional as F
 # custom code
 import utils
 
+# class to create ANN
+
 class SimpleNet(nn.Module):
     # Initialize the layers
     def __init__(self):
@@ -34,7 +36,8 @@ class SimpleNet(nn.Module):
     def forward(self, x):
         x = self.linear1(x)
         x = self.act1(x)
-        x = self.linear2(x)
+#       x = self.linear2(x)
+        x = self.linear2(x).clamp(min=0.0)
         return x
 
 # Define a utility function to train the model
@@ -46,8 +49,17 @@ def fit(num_epochs, model, loss_fn, opt):
             loss = loss_fn(pred, yb)
             # Perform gradient descent
             loss.backward()
+#           print('BACKWARD', loss.item(), model.linear1.bias.grad, model.linear2.bias.grad)
+#           print(xb,yb)
+#           if math.isnan(loss.item()):
+#               print("Stopped because loss is nan")
+#               print(xb,yb)
+#               print('Loss and grad', loss.item(), model.linear1.bias.grad, model.linear2.bias.grad)
+#               quit()
             opt.step()
             opt.zero_grad()
+#           print('TRAIN:')
+#           print(loss.item(), model.linear1.bias.grad)
         print('epoch {}, loss {}'.format(epoch, loss.item()))
     print('Training loss: ', loss_fn(model(inputs), targets))
 
@@ -85,10 +97,6 @@ weather = weather.resample('30min').interpolate()
 
 print(weather)
 
-# error checks
-n_missing = utils.missing_times(pv, '30min')
-print('Number of missing pv rows: {}'.format(n_missing) )
-print('NaNs pv_power_mw {} irradiance {} temp {}'.format(pv['pv_power_mw'].isna().sum(), pv['irradiance_Wm-2'].isna().sum(), pv['panel_temp_C'].isna().sum()) )
 
 large_pv = pv['pv_power_mw'].max() * 0.8
 small_pv = pv['pv_power_mw'].max() * 0.2
@@ -120,6 +128,38 @@ if dataset!= 'fake':
     pv['pv_power_mw']['2018-05-08 14:00:00'] = pv['pv_power_mw']['2018-05-08 13:00:00']
     pv['pv_power_mw']['2018-06-15 11:30:00'] = pv['pv_power_mw']['2018-06-15 11:00:00']
     pv['pv_power_mw']['2018-06-15 12:00:00'] = pv['pv_power_mw']['2018-06-15 12:30:00']
+    pv['panel_temp_C']['2017-11-29 07:30:00'] = pv['panel_temp_C']['2017-11-29 08:00:00']
+# replace a suspect days with different ones.
+utils.replace_day(pv, '2018-03-04', '2018-03-03')
+
+# replace NaN panel temps with zero if irradiance is zero
+missing_panel_temp = pv[pv['panel_temp_C'].isnull().values]
+#rint(missing_panel_temp)
+missing_panel_temp_with0 = missing_panel_temp['pv_power_mw'] == 0.0
+#print(missing_panel_temp_with0)
+index_to_update = missing_panel_temp[missing_panel_temp_with0].index
+pv['panel_temp_C'][index_to_update] = 0.0
+print(pv)
+
+# check the errors were fixed
+# PV
+n_missing = utils.missing_times(pv, '30min')
+if n_missing>0:
+    print("Missing rows in pv {}".format(n_missing) )
+for col in pv.columns:
+    if pv[col].isna().sum() >0:
+        print("ERROR nans in {}".format(col))
+        print(pv[pv[col].isnull().values])
+        quit()
+# Weather
+n_missing = utils.missing_times(weather, '60min')
+if n_missing>0:
+    print("Missing rows in weather {}".format(n_missing) )
+for col in weather.columns:
+    if weather[col].isna().sum() >0:
+        print("ERROR nans in {}".format(col))
+        print(weather[col].isnull().values)
+        quit()
 
 # plot pv
 if args.plot:
@@ -163,19 +203,26 @@ weather['solar'] = weather['solar_location3']
 input_df = weather[['temp', 'solar']].copy()
 input_df['period'] = input_df.index.hour * 2 + (input_df.index.minute / 30)
 print(input_df)
+# santity check
+if pv['pv_power_mw'].isna().sum() >0:
+    print("ERROR NaN in pv")
+    quit()
+if weather['temp'].isna().sum() >0:
+    print("ERROR NaN in temp")
+    quit()
+if weather['solar'].isna().sum() >0:
+    print("ERROR NaN in solar")
+    quit()
+if input_df['period'].isna().sum() >0:
+    print("ERROR NaN in period")
+    quit()
 
 if method == 'ann':
-    # join the inputs onto input pv so its same length
-#   inputs = pv.join(inputs, how='left')
-    # then just include the columns we want
-#   input_df = weather[['day', 'period', 'solar', 'temp']]
-#   inputs = input_df[pv.index]
+#   torch.autograd.set_detect_anomaly(True) 
+    # Use the index from the pv to get weather inputs the same length
     print('INPUTS')
     inputs = input_df.loc[pv.index]
     print(inputs)
-#   dataset = input_df.values
-#   print(dataset)
-#   X = dataset[:,0:4]
     # normalise the inputs (X)
     inputs['solar'] = inputs['solar'] / inputs['solar'].max()
     inputs['temp'] = inputs['temp'] / inputs['temp'].max()
@@ -183,28 +230,29 @@ if method == 'ann':
     output = pv['pv_power_mw'] / pv['pv_power_mw'].max()
 
     inputs = torch.tensor(inputs.values.astype(np.float32))
-#   X_train = torch.from_numpy(input_df['solar'].values.astype(np.float32)).view(-1,1)
     print("inputs")
     print(inputs)
-#   targets = torch.tensor(output.values.astype(np.float32))
+#   The .view seems to tell it what shape the data is
     targets = torch.tensor(output.values.astype(np.float32)).view(-1,1)
-#   Y_train = torch.from_numpy(pv['pv_power_mw'].values.astype(np.float32)).view(-1,1)
     print("targets")
     print(targets)
     torch.manual_seed(1)    # reproducible
     train_ds = TensorDataset(inputs, targets)
-    train_ds[0:3]
+#   train_ds[0:3]
 
     # Define data loader
-    batch_size = 5
+#   batch_size = 1
+#   batch_size = 5
+    batch_size = 48
     train_dl = DataLoader(train_ds, batch_size, shuffle=True)
     next(iter(train_dl))
     # model using ANN
     model = SimpleNet()
 
     # Define optimizer
-    opt = torch.optim.SGD(model.parameters(), lr=1e-5)
-
+    opt = torch.optim.SGD(model.parameters(), lr=1e-4)
+#   opt = torch.optim.SGD(model.parameters(), lr=1e-5)
+#   opt = torch.optim.SGD(model.parameters(), lr=1e-6)
 
     # Define loss function
     loss_fn = F.mse_loss
@@ -212,11 +260,12 @@ if method == 'ann':
     loss = loss_fn(model(inputs), targets)
     print(loss)
     # Train the model for 100 epochs
-    fit(100, model, loss_fn, opt)
+    num_epochs=200
+    fit(num_epochs, model, loss_fn, opt)
     # prediction
     preds = model(inputs)
-    print(preds)
-    print(targets)
+#   print(preds)
+#   print(targets)
     if args.plot:
 #   hack to allow tensor plotting
 #       torch.Tensor.ndim = property(lambda self: len(self.shape))  # Fix it
@@ -228,6 +277,9 @@ if method == 'ann':
         plt.ylabel('PV Generation (MW)', fontsize=15)
         plt.legend(loc='upper right', fontsize=15)
         plt.show()
+
+    # TODO use the model to do another prediction based on the future 
+    # weather week.
 
 
 output_dir = "/home/malcolm/uclan/challenge/output/"
