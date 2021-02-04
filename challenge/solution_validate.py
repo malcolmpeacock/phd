@@ -23,7 +23,7 @@ filename = input_dir + solution
 print('***Validating File {}'.format(filename) )
 s = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
-print(s)
+#print(s)
 
 # no NaN's
 nans = s.isna().sum()
@@ -41,9 +41,9 @@ errors=0
 # For each day ...
 days = s.resample('D', axis=0).mean().index
 for day in days:
-    print(day)
+#   print(day)
     s_day = s[day : day + pd.Timedelta(hours=23,minutes=30)]
-    print(s_day)
+#   print(s_day)
 
     # for each period of the day ...
     for index, value in s_day.items():
