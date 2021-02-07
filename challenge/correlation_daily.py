@@ -43,12 +43,18 @@ mean_temp2 = df['temp2'].resample('D', axis=0).mean()
 demand_mean = df['demand'].resample('D', axis=0).mean()
 demand_max = df['demand'].resample('D', axis=0).max()
 demand_min = df['demand'].resample('D', axis=0).min()
-# these are not really summing, since there is only one 30 period 
+# find which k has the highest daily temp
+maxk=[]
+for day in demand_max.index.date:
+     day_data = df.loc[day.strftime('%Y-%m-%d')]
+     idd = day_data['demand'].idxmax()
+     maxk.append(day_data.loc[idd]['k'])
+ks = pd.Series(maxk, index=demand_max.index, name='kmax')
+
 k33 = df[df['k'] == 33].resample('D', axis=0).sum()
 k34 = df[df['k'] == 34].resample('D', axis=0).sum()
-matrix = pd.concat([mean_temp2, demand_mean, demand_max, demand_min, k33['demand'], k34['demand'], k33['temp2'],k34['temp2'] ], axis=1)
-matrix.columns=['temp2', 'demand_mean', 'demand_max', 'demand_min', 'k33', 'k34', 'tempk33', 'tempk34']
-#matrix['weekend']
+matrix = pd.concat([mean_temp2, demand_mean, demand_max, demand_min, k33['demand'], k34['demand'], k33['temp2'],k34['temp2'],ks.astype(int) ], axis=1)
+matrix.columns=['temp2', 'demand_mean', 'demand_max', 'demand_min', 'k33', 'k34', 'tempk33', 'tempk34', 'maxk']
 print(matrix)
 
 if args.plot:
@@ -92,3 +98,9 @@ print (corrMatrix)
 # plot
 sn.heatmap(corrMatrix, annot=True)
 plt.show()
+
+# output data
+output_dir = "/home/malcolm/uclan/challenge/output/"
+output_filename = '{}daily_values_{}.csv'.format(output_dir, dataset)
+
+matrix.to_csv(output_filename, float_format='%.2f')

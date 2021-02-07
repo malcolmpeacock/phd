@@ -123,11 +123,15 @@ for holiday in holidays:
 
 days = weather.resample('D', axis=0).mean().index.date
 for day in days:
-    print(day)
+#   print(day)
     if day.weekday() > 4:
         day_str = day.strftime('%Y-%m-%d')
-        print('weekend: ' + day_str)
+#       print('weekend: ' + day_str)
         weather[day_str+' 00:00:00' : day_str+' 23:30:00']['holiday'] = 1
+
+# add period, k
+weather['k'] = (weather.index.hour * 2) + (weather.index.minute / 30) + 1
+weather['k'] = weather['k'].astype(int)
 
 # plot weather
 if args.plot:
@@ -152,7 +156,7 @@ if args.plot:
 
 
 print(weather.columns)
-weather.columns = ['temp3', 'temp6', 'temp2', 'temp4', 'temp5', 'temp1', 'sun3', 'sun6', 'sun2', 'sun4', 'sun5', 'sun1', 'cs_ghi', 'poa_ghi', 'zenith', 'holiday']
+weather.columns = ['temp3', 'temp6', 'temp2', 'temp4', 'temp5', 'temp1', 'sun3', 'sun6', 'sun2', 'sun4', 'sun5', 'sun1', 'cs_ghi', 'poa_ghi', 'zenith', 'holiday', 'k']
 
 history = weather.loc[pv.index]
 forecast_index = pd.date_range(start = history.last_valid_index() + pd.Timedelta(minutes=30) , end= history.last_valid_index() + pd.Timedelta(days=6, hours=23, minutes=30), freq='30min')

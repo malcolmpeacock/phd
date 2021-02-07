@@ -74,7 +74,7 @@ def fit(num_epochs, model, loss_fn, opt):
 # process command line
 
 parser = argparse.ArgumentParser(description='Create pv forecast.')
-parser.add_argument('set', help='PV file eg set0')
+parser.add_argument('set', help='input data eg set0')
 parser.add_argument('--method', action="store", dest="method", help='Forecasting method:' , default='simple' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 
