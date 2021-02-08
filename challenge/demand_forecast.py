@@ -137,15 +137,31 @@ if args.plot:
     day3 = weather['2018-06-06 00:00:00' : '2018-06-06 23:30:00']
     day4 = weather['2018-06-07 00:00:00' : '2018-06-07 23:30:00']
     day5 = weather['2018-06-08 00:00:00' : '2018-06-08 23:30:00']
-    plt.plot(day1['k'], day1['demand'], label='monday', color='red')
-    plt.plot(day2['k'], day2['demand'], label='tuesday', color='blue')
-    plt.plot(day3['k'], day3['demand'], label='wednesday', color='green')
-    plt.plot(day4['k'], day4['demand'], label='thursday', color='orange')
-    plt.plot(day5['k'], day5['demand'], label='friday', color='purple')
-    plt.title('Demand profiles for 1 week')
+    plt.plot(day1['k'], day1['demand'], label='monday 16.9C (peak k=34)', color='red')
+    plt.plot(day2['k'], day2['demand'], label='tuesday 14.4C (peak k=33)', color='blue')
+    plt.plot(day3['k'], day3['demand'], label='wednesday 15.6C (peak k=35)', color='green')
+    plt.plot(day4['k'], day4['demand'], label='thursday 14.5C (peak k=33)', color='orange')
+    plt.plot(day5['k'], day5['demand'], label='friday 15.2C (peak k=36)', color='purple')
+    plt.title('Demand profiles for 1 summer week 2018-06-04')
     plt.xlabel('K period of the day', fontsize=15)
     plt.ylabel('Demand (MW)', fontsize=15)
     plt.legend(loc='upper right', fontsize=15)
+    plt.show()
+
+    day1 = weather['2018-03-05 00:00:00' : '2018-03-05 23:30:00']
+    day2 = weather['2018-03-06 00:00:00' : '2018-03-06 23:30:00']
+    day3 = weather['2018-03-07 00:00:00' : '2018-03-07 23:30:00']
+    day4 = weather['2018-03-08 00:00:00' : '2018-03-08 23:30:00']
+    day5 = weather['2018-03-09 00:00:00' : '2018-03-09 23:30:00']
+    plt.plot(day1['k'], day1['demand'], label='monday 6.3C (peak k=37)', color='red')
+    plt.plot(day2['k'], day2['demand'], label='tuesday 5.9C (peak k=38)', color='blue')
+    plt.plot(day3['k'], day3['demand'], label='wednesday 5.6C (peak k=38)', color='green')
+    plt.plot(day4['k'], day4['demand'], label='thursday 5.6C (peak k=38)', color='orange')
+    plt.plot(day5['k'], day5['demand'], label='friday 7C (peak k=37)', color='purple')
+    plt.title('Demand profiles for 1 spring week 2018-03-05')
+    plt.xlabel('K period of the day', fontsize=15)
+    plt.ylabel('Demand (MW)', fontsize=15)
+    plt.legend(loc='lower right', fontsize=15)
     plt.show()
 
 input_df = weather[['k', 'temp2', 'sun2', 'holiday']].copy()

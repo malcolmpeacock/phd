@@ -115,6 +115,13 @@ if args.plot:
     plt.legend(loc='upper right', fontsize=15)
     plt.show()
 
+    efficency = pv['pv_power_mw'] / pv['irradiance_Wm-2']
+    plt.scatter(pv['panel_temp_C'].values, efficency.values, s=12, color='blue')
+    plt.title('Panel Temperature vs Efficiency')
+    plt.xlabel('Panel Temperature (degrees C)', fontsize=15)
+    plt.ylabel('Efficiency = power/irradiance', fontsize=15)
+    plt.show()
+
     fewdays = pv['2018-06-01 00:00:00' : '2018-06-04 23:30:00']
     ax = fewdays['pv_power_mw'].plot(label='PV power generation', color='red')
     plt.ylabel('Power (MW)', fontsize=15, color='red')

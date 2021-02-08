@@ -12,3 +12,12 @@ def replace_day(df,d,r):
     print(previous_day)
     df.update(previous_day)
     return(df)
+
+def krange(df):
+    # extract k=32,42 from the datafram
+    kabove31 = df['k'] > 31
+    kabove31_df = df[kabove31]
+    kbelow43 = kabove31_df['k'] < 43
+    output = kabove31_df[kbelow43]
+    return output
+
