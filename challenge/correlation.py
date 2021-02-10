@@ -13,6 +13,9 @@ from shapely.geometry import Point
 import numpy as np
 import seaborn as sn
 
+# custom
+import utils
+
 parser = argparse.ArgumentParser(description='Data correlations.')
 parser.add_argument('set', help='data files eg set0')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
@@ -53,10 +56,8 @@ if args.plot:
     plt.legend(loc='upper right', fontsize=15)
     plt.show()
 
-    lat =   [ 50.33,   50.5,  50.5,  51.0, 51.5,   50.0, 50.0 ]
-    lon =   [-4.034, -4.375, -3.75, -3.75, -2.5, -4.375, -3.75]
-    label = ['pv',     'w1',  'w2',  'w3', 'w4',   'w5', 'w6' ]
-
+    # geographic location of the points
+    label, lat,lon = utils.location_lists()
     fig, ax = plt.subplots()
     ax.scatter(lon, lat)
     for i, txt in enumerate(label):

@@ -128,8 +128,7 @@ for day in days:
         df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','holiday'] = 1
 
 # add period, k
-df['k'] = (df.index.hour * 2) + (df.index.minute / 30) + 1
-df['k'] = df['k'].astype(int)
+df['k'] = utils.index2k(index)
 
 # plot weather
 if args.plot:
@@ -144,8 +143,12 @@ if args.plot:
     fewdays = df['2018-06-01 00:00:00' : '2018-06-04 23:30:00']
     fewdays['sun1'].plot(label='sun 1', color='red')
     fewdays['sun2'].plot(label='sun 2', color='green')
+    fewdays['sun5'].plot(label='sun 5', color='purple')
+    fewdays['sun6'].plot(label='sun 6', color='yellow')
+    fewdays['sunw'].plot(label='sun w', color='black')
     fewdays['cs_ghi'].plot(label='clear sky ghi', color='blue')
     fewdays['poa_ghi'].plot(label='sun 2 poa 30 south', color='orange')
+    fewdays['pv_ghi'].plot(label='pv ghi', color='brown')
     plt.title('Solar Irradiance')
     plt.xlabel('Hour of the year', fontsize=15)
     plt.ylabel('Irradiance (W/m2)', fontsize=15)

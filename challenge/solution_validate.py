@@ -11,14 +11,15 @@ import argparse
 import numpy as np
 import math
 
+# custom
+import utils
+
 # main program
 
 solution = sys.argv[1]
 
 # read in the data
-#input_dir = "/home/malcolm/uclan/challenge/input/"
 input_dir = "/home/malcolm/uclan/challenge/output/"
-#solution = 'teamname_set0.csv'
 filename = input_dir + solution
 print('***Validating File {}'.format(filename) )
 s = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
@@ -53,7 +54,7 @@ for day in days:
             print('Value {} out of range at line {}'.format(value, count) )
             errors+=1
         # period
-        k = index.hour * 2 + (index.minute / 30)
+        k = utils.index2k(index)
         # B <= 0 if period >= 32
         if k>31 and k<43 and value >0:
             print('Charging at the wrong time: Value {} period {} at line {}'.format(value, k, count) )

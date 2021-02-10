@@ -50,10 +50,38 @@ for col in weather.columns:
         print(weather[col].isnull().values)
         quit()
 
-# TODO add ( bilinear interpolation ) for ( 50.33, -4.034 )
-# TODO add mean weather of the 6 points
-#weather['temp_mean'] = weather['temp_location3']
-#weather['solar_mean'] = weather['solar_location3']
+# Calculate weighted average temperature of the 4 points around the PV
+points = utils.locations()
+weights = { '1' : math.dist(points['pv'], points['w1']),
+            '2' : math.dist(points['pv'], points['w2']),
+            '5' : math.dist(points['pv'], points['w5']),
+            '6' : math.dist(points['pv'], points['w6']) }
+
+weight_sum = 0
+for weight in weights.values():
+    weight_sum += weight
+
+weather['tempw'] = 0.0
+weather['sunw'] = 0.0
+temp_sum = weather['tempw'].copy()
+sun_sum = weather['sunw'].copy()
+for loc,weight in weights.items():
+    weather['tempw'] = weather['tempw'] + (weather['temp_location'+loc] * weight )
+    weather['sunw'] = weather['sunw'] + (weather['solar_location'+loc] * weight )
+    temp_sum = temp_sum + weather['temp_location'+loc]
+    sun_sum = sun_sum + weather['solar_location'+loc]
+    print('loc {} weight {} weight_sum {}'.format(loc, weight, weight_sum) )
+
+#weather['tempw'] = (weather['tempw'] * weight_sum *4.0 ) / temp_sum
+#weather['sunw'] = (weather['sunw'] * weight_sum *4.0 ) / sun_sum
+weather['tempw'] = weather['tempw'] / weight_sum
+weather['sunw'] = weather['sunw'] / weight_sum
+# incase there was a divide by zero due to zero temperature
+weather['tempw'] = weather['tempw'].fillna(0)
+weather['sunw'] = weather['sunw'].fillna(0)
+
+# calculate mean temperature over all 6 
+weather['tempm'] = ( weather['temp_location1'] + weather['temp_location2'] + weather['temp_location3'] + weather['temp_location4'] + weather['temp_location5'] + weather['temp_location6'] ) / 6.0
 
 # plot weather
 if args.plot:
@@ -76,7 +104,7 @@ if args.plot:
 
 
 print(weather.columns)
-weather.columns = ['temp3', 'temp6', 'temp2', 'temp4', 'temp5', 'temp1', 'sun3', 'sun6', 'sun2', 'sun4', 'sun5', 'sun1']
+weather.columns = ['temp3', 'temp6', 'temp2', 'temp4', 'temp5', 'temp1', 'sun3', 'sun6', 'sun2', 'sun4', 'sun5', 'sun1', 'tempw', 'sunw', 'tempm']
 
 output_dir = "/home/malcolm/uclan/challenge/output/"
 

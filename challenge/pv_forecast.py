@@ -76,7 +76,7 @@ def fit(num_epochs, model, loss_fn, opt):
 
 parser = argparse.ArgumentParser(description='Create pv forecast.')
 parser.add_argument('set', help='input data eg set0')
-parser.add_argument('--method', action="store", dest="method", help='Forecasting method: reg2, reg, ann' , default='simple' )
+parser.add_argument('--method', action="store", dest="method", help='Forecasting method: reg2, reg, ann, sday' , default='simple' )
 parser.add_argument('--week', action="store", dest="week", help='Week to forecast: set=read the set forecast file, first= first week, last=last week, otherwise integer week' , default='set' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 
@@ -92,6 +92,7 @@ merged_filename = '{}merged_{}.csv'.format(output_dir, dataset)
 df = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
 print(df)
+utils.print_metrics(df['pv_ghi'], df['sun2'])
 
 # weather data (forecast)
 forecast_filename = '{}forecast_{}.csv'.format(output_dir, dataset)
@@ -148,6 +149,23 @@ for column in input_df.columns:
 if output.isna().sum() >0:
     print("ERROR NaN in output")
     quit()
+
+# closest weather day method
+if method == 'sday':
+    days = pd.Series(df.index.date).unique()
+    fdays = pd.Series(forecast.index.date).unique()
+    sun_range = forecast['sun2'].max() - forecast['sun2'].min()
+    print(fdays)
+    for day in fdays:
+        print("Testing {}".format(day))
+        closest_day, closeness = utils.find_closest_day(day, days, forecast, df, 'sunw')
+        print(closest_day)
+        rows = df.loc[closest_day.strftime('%Y-%m-%d')]
+#       print(rows)
+        forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = rows['pv_power'].values
+        probability = (sun_range - closeness) / sun_range
+        forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
+    print(forecast)
 
 if method == 'r2':
     rmodel = sm.OLS(output.values, sm.add_constant(df['sun2'].values))
@@ -262,7 +280,15 @@ print(forecast)
 
 # metrics
 if 'pv_power' in forecast.columns:
-    utils.print_metrics(forecast['pv_power'], forecast['prediction'])
+    utils.print_metrics(forecast['pv_power'], forecast['prediction'], args.plot)
+    if args.plot:
+        forecast['pv_power'].plot(label='actual power', color='blue')
+        forecast['prediction'].plot(label='predicted power', color='red')
+        plt.title('pv prediction : '+method)
+        plt.xlabel('Hour of the year', fontsize=15)
+        plt.ylabel('PV Generation (MW)', fontsize=15)
+        plt.legend(loc='upper right', fontsize=15)
+        plt.show()
 
 output_dir = "/home/malcolm/uclan/challenge/output/"
 output_filename = '{}pv_forecast_{}_{}.csv'.format(output_dir, dataset, method)

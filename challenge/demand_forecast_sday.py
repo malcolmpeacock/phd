@@ -21,42 +21,6 @@ import math
 # custom code
 import utils
 
-# function to find the difference in weather between 2 days
-
-def day_diff(day1, day2, df1, df2):
-    day1_data = df1.loc[day1.strftime('%Y-%m-%d')]
-#   print(day1_data)
-    day2_data = df2.loc[day2.strftime('%Y-%m-%d')]
-#   print(day2_data)
-    diff = day1_data['temp2'].values - day2_data['temp2'].values
-#   print(diff)
-    score = np.abs(diff).sum()
-#   print(day1,day2,score)
-    return score
-
-# function to assess the demand forecast accuracy between 2 days
-def demand_diff(day1, day2):
-    day1_data = df.loc[day1.strftime('%Y-%m-%d')]
-    day2_data = df.loc[day2.strftime('%Y-%m-%d')]
-    day1k = utils.krange(day1_data)
-    day2k = utils.krange(day2_data)
-    diff = day1k['demand'].values - day2k['demand'].values
-    score = np.abs(diff).sum()
-#   print(day1,day2,score)
-    return score
-
-def find_closest_day(given_day, days, df1, df2):
-    closest_day = days[0]
-    closest_day_score = 999999999999999.9
-    for day in days:
-        if day!=given_day:
-            day_diff_score = day_diff(given_day, day, df1, df2)
-            if day_diff_score < closest_day_score:
-                closest_day = day
-                closest_day_score = day_diff_score
-    return closest_day
-
-
 # main program
 
 # process command line
@@ -64,7 +28,7 @@ def find_closest_day(given_day, days, df1, df2):
 parser = argparse.ArgumentParser(description='Create demand forecast.')
 parser.add_argument('set', help='input data eg set0')
 parser.add_argument('--method', action="store", dest="method", help='Forecasting method:' , default='similarday' )
-parser.add_argument('--mode', action="store", dest="mode", help='Mode forecast or test', default='forecast' )
+parser.add_argument('--mode', action="store", dest="mode", help='Mode: forecast or test', default='forecast' )
 parser.add_argument('--week', action="store", dest="week", help='Week to forecast: set=read the set forecast file, first= first week, last=last week, otherwise integer week' , default='set' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 
@@ -106,18 +70,10 @@ print(days)
 
 if args.mode == 'test':
     given_day = days[len(days)-1]
-    closest_day = days[0]
-    closest_day_score = 999999999999999.9
-    for day in days:
-        if day!=given_day:
-            print(given_day, day)
-            day_diff_score = day_diff(given_day, day, df, df)
-            if day_diff_score < closest_day_score:
-                closest_day = day
-                closest_day_score = day_diff_score
+    closest_day, closeness = utils.find_closest_day(given_day, days, df, df, 'tempm')
 
-    demand_score = demand_diff(given_day, closest_day)
-    print("given_day {} closest day {} weather score {} demand score {}".format(given_day, closest_day, closest_day_score, demand_score) )
+    demand_score = utils.forecast_diff(given_day, closest_day, 'demand', df)
+    print("given_day {} closest day {} demand score {}".format(given_day, closest_day, demand_score) )
     given_data = df.loc[given_day.strftime('%Y-%m-%d')]
     found_data = df.loc[closest_day.strftime('%Y-%m-%d')]
     if args.plot:
@@ -142,7 +98,7 @@ if args.mode == 'test':
     #   compare its demand difference with the week before with its best 
     print('Naive forecast assesment')
     for id in range(len(days)-7,len(days)-1):
-        dd = demand_diff(days[id], days[id-7])
+        dd = utils.forecast_diff(days[id], days[id-7], 'demand', df)
         print('{} {} {}'.format(days[id].strftime('%Y-%m-%d'), days[id-7].strftime('%Y-%m-%d'), dd) )
 
     # try it for all days!
@@ -150,8 +106,8 @@ if args.mode == 'test':
     all_scores={}
     for given_day in days:
         print("Testing {}".format(given_day))
-        closest_day = find_closest_day(given_day, days, df, df)
-        all_scores[given_day] = demand_diff(given_day, closest_day)
+        closest_day, closeness = utils.find_closest_day(given_day, days, df, df, 'tempm')
+        all_scores[given_day] = utils.forecast_diff(given_day, closest_day,'demand', df)
 
     print("=========== Results")
     sorted_scores = sorted(all_scores, key=all_scores.get, reverse=True)
@@ -160,7 +116,7 @@ if args.mode == 'test':
 
     worst = sorted_scores[0]
     print('Worst {}'.format(worst) )
-    worst_closest = find_closest_day(worst, days, df, df)
+    worst_closest, closeness = utils.find_closest_day(worst, days, df, df, 'tempm')
     closest_data = df.loc[worst_closest.strftime('%Y-%m-%d')]
     worst_data = df.loc[worst.strftime('%Y-%m-%d')]
     if args.plot:
@@ -181,21 +137,17 @@ if args.mode == 'test':
 
 else:
     fdays = pd.Series(forecast.index.date).unique()
+    temp_range = forecast['temp2'].max() - forecast['temp2'].min()
     print(fdays)
     for day in fdays:
         print("Testing {}".format(day))
-        closest_day = find_closest_day(day, days, forecast, df)
+        closest_day, closeness = utils.find_closest_day(day, days, forecast, df, 'tempm')
         print(closest_day)
         rows = df.loc[closest_day.strftime('%Y-%m-%d')]
 #       print(rows)
         forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = rows['demand'].values
-#       times = forecast.loc[day.strftime('%Y-%m-%d')].index
-#       print(times)
-#       quit()
-#       forecast.loc[day, 'prediction'] = rows['demand'].values
-#       for index, row in rows.iterrows():
-#           print(index, row)
-#           forecast.loc[index, 'prediction'] = row['demand']
+        probability = (temp_range - closeness) / temp_range
+        forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
     print(forecast)
 
 # metrics
