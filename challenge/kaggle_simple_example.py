@@ -30,6 +30,8 @@ targets = np.array([[56, 70], [81, 101], [119, 133], [22, 37], [103, 119],
                     [56, 70], [81, 101], [119, 133], [22, 37], [103, 119]], dtype='float32')
 
 inputs = torch.from_numpy(inputs)
+print('INPUTS')
+print(inputs)
 targets = torch.from_numpy(targets)
 
 train_ds = TensorDataset(inputs, targets)

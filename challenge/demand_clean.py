@@ -36,7 +36,9 @@ demand = pd.read_csv(demand_filename, header=0, sep=',', parse_dates=[0], index_
 # error checks
 n_missing = utils.missing_times(demand, '30min')
 print('Number of missing demand rows: {}'.format(n_missing) )
+print('SMALLEST')
 print(demand.nsmallest())
+print('LARGEST')
 print(demand.nlargest())
 
 # fix zeros
@@ -57,8 +59,10 @@ demand.update(last_week)
 
 # replace a suspect days with different ones.
 if dataset=='set0':
-    utils.replace_day(demand, '2018-05-10', '2018-05-09')
-    utils.replace_day(demand, '2018-05-11', '2018-05-12')
+#   utils.replace_day(demand, '2018-05-10', '2018-05-09')
+#   utils.replace_day(demand, '2018-05-11', '2018-05-12')
+    demand.drop(demand['2018-05-10'].index, inplace=True)
+    demand.drop(demand['2018-05-11'].index, inplace=True)
 
 # plot demand
 if args.plot:

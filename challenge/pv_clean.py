@@ -62,13 +62,17 @@ print('PV small but temp large {}'.format(len(suspect)) )
 print(suspect)
 
 # fix errors
+# TODO replacing whole days doesn't make sense as the weather will be 
+# different - so better to remove, so the join with weather df will have
+# missing index values - but we can cope with this.
 if dataset== 'set0':
     pv['pv_power_mw']['2018-05-08 14:00:00'] = pv['pv_power_mw']['2018-05-08 13:00:00']
     pv['pv_power_mw']['2018-06-15 11:30:00'] = pv['pv_power_mw']['2018-06-15 11:00:00']
     pv['pv_power_mw']['2018-06-15 12:00:00'] = pv['pv_power_mw']['2018-06-15 12:30:00']
     pv['panel_temp_C']['2017-11-29 07:30:00'] = pv['panel_temp_C']['2017-11-29 08:00:00']
-# replace a suspect days with different ones.
-utils.replace_day(pv, '2018-03-04', '2018-03-03')
+    # replace a suspect days with different ones.
+#   utils.replace_day(pv, '2018-03-04', '2018-03-01')
+    pv.drop(pv['2018-03-04'].index, inplace=True)
 
 # replace NaN panel temps with zero if irradiance is zero
 missing_panel_temp = pv[pv['panel_temp_C'].isnull().values]
@@ -77,7 +81,31 @@ missing_panel_temp_with0 = missing_panel_temp['pv_power_mw'] == 0.0
 #print(missing_panel_temp_with0)
 index_to_update = missing_panel_temp[missing_panel_temp_with0].index
 pv['panel_temp_C'][index_to_update] = 0.0
-print(pv)
+
+# look for zero power during the middle of the day
+zero_power = pv[pv['pv_power_mw'] == 0.0]
+zero_power['hour'] = zero_power.index.hour
+print(zero_power)
+midday_zero = zero_power[zero_power['hour'] >10]
+midday_zero = midday_zero[midday_zero['hour'] <15]
+print(' MID DAY ZERO')
+print(midday_zero)
+if dataset== 'set0':
+    pv['pv_power_mw']['2017-12-26 14:30:00'] = pv['pv_power_mw']['2017-12-26 14:00:00']
+    # replace a suspect days with different ones.
+#   utils.replace_day(pv, '2018-03-02', '2018-03-01')
+#   utils.replace_day(pv, '2018-03-03', '2018-03-01')
+#   utils.replace_day(pv, '2018-03-04', '2018-03-01')
+#   utils.replace_day(pv, '2018-03-05', '2018-03-01')
+#   utils.replace_day(pv, '2018-05-08', '2018-05-09')
+#   utils.replace_day(pv, '2018-06-15', '2018-06-14')
+    # drop day completely
+    print('DROPPING')
+    pv.drop(pv['2018-03-02'].index, inplace=True)
+    pv.drop(pv['2018-03-03'].index, inplace=True)
+    pv.drop(pv['2018-03-05'].index, inplace=True)
+    pv.drop(pv['2018-05-08'].index, inplace=True)
+    pv.drop(pv['2018-06-15'].index, inplace=True)
 
 # check the errors were fixed
 # PV
@@ -90,7 +118,9 @@ for col in pv.columns:
         print(pv[pv[col].isnull().values])
         quit()
 
-print(pv)
+#print(pv)
+print('Smallest Power')
+print(pv['pv_power_mw'].nsmallest())
 
 # plot pv
 if args.plot:

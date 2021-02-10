@@ -23,21 +23,11 @@ dataset = args.set
 # read in the data
 output_dir = "/home/malcolm/uclan/challenge/output/"
 
-# demand data
-demand_filename = '{}demand_fixed_{}.csv'.format(output_dir, dataset)
-demand = pd.read_csv(demand_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
-print(demand)
+# merged data file
+merged_filename = '{}merged_{}.csv'.format(output_dir, dataset)
+df = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
-# weather data
-weather_filename = '{}weather_{}.csv'.format(output_dir, dataset)
-weather = pd.read_csv(weather_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
-print(weather)
-
-# stick it all together
-df = pd.concat([demand, weather], axis=1)
-df['k'] = (df.index.hour * 2) + (df.index.minute / 30) + 1
-df['k'] = df['k'].astype(int)
-print(df['k'])
+print(df)
 
 mean_temp2 = df['temp2'].resample('D', axis=0).mean()
 demand_mean = df['demand'].resample('D', axis=0).mean()

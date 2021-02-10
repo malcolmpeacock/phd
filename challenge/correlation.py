@@ -23,25 +23,12 @@ dataset = args.set
 # read in the data
 output_dir = "/home/malcolm/uclan/challenge/output/"
 
-# demand data
-demand_filename = '{}demand_fixed_{}.csv'.format(output_dir, dataset)
-demand = pd.read_csv(demand_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
-print(demand)
+# merged data file
+merged_filename = '{}merged_{}.csv'.format(output_dir, dataset)
+df = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
-# pv data
-pv_filename = '{}pv_fixed_{}.csv'.format(output_dir, dataset)
-pv = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
-print(pv)
-
-# weather data
-weather_filename = '{}weather_{}.csv'.format(output_dir, dataset)
-weather = pd.read_csv(weather_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
-print(weather)
-
-# stick it all together
-df = pd.concat([demand, pv, weather], axis=1)
-#df.columns = ['demand', 'pv_ghi', 'pv_power', 'pv_temp', 'cs_ghi', 'dni', 'dhi', 'temp3', 'temp6', 'temp2', 'temp4', 'temp5', 'temp1', 'sun3', 'sun6', 'sun2', 'sun4', 'sun5', 'sun1']
 print(df)
+
 print(df.columns)
 
 if args.plot:

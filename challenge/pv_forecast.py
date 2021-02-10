@@ -5,6 +5,7 @@
 import sys
 import pandas as pd
 from datetime import datetime
+from datetime import timedelta
 import pytz
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
@@ -75,7 +76,8 @@ def fit(num_epochs, model, loss_fn, opt):
 
 parser = argparse.ArgumentParser(description='Create pv forecast.')
 parser.add_argument('set', help='input data eg set0')
-parser.add_argument('--method', action="store", dest="method", help='Forecasting method:' , default='simple' )
+parser.add_argument('--method', action="store", dest="method", help='Forecasting method: reg2, reg, ann' , default='simple' )
+parser.add_argument('--week', action="store", dest="week", help='Week to forecast: set=read the set forecast file, first= first week, last=last week, otherwise integer week' , default='set' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 
 args = parser.parse_args()
@@ -85,43 +87,58 @@ dataset = args.set
 # read in the data
 output_dir = "/home/malcolm/uclan/challenge/output/"
 
-# pv data
-pv_filename = '{}pv_fixed_{}.csv'.format(output_dir, dataset)
-pv = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
-print(pv)
+# merged data file
+merged_filename = '{}merged_{}.csv'.format(output_dir, dataset)
+df = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
-# weather data (historic)
-weather_filename = '{}weather_{}.csv'.format(output_dir, dataset)
-weather = pd.read_csv(weather_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
-
-print(weather)
+print(df)
 
 # weather data (forecast)
 forecast_filename = '{}forecast_{}.csv'.format(output_dir, dataset)
 forecast = pd.read_csv(forecast_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+print(forecast)
+
+if args.week != 'set':
+    days = df.resample('D', axis=0).mean().index.date
+    nweeks = math.floor(len(days) / 7 )
+    print("Number of weeks {}".format(nweeks) )
+    if args.week == 'first':
+       week=0
+    else: 
+       if args.week == 'last':
+           week = nweeks -1
+       else:
+           week = int(week)
+    first_day = days[len(days)-1] + pd.Timedelta(days=1) - pd.Timedelta(weeks=nweeks-week)
+    print(type(first_day))
+    last_day  = first_day + pd.Timedelta(days=6)
+    last_day  = datetime.combine(last_day, datetime.min.time())
+    last_day  += timedelta(hours=23,minutes=30)
+    print(first_day, last_day)
+    columns = forecast.columns.append(pd.Index(['pv_power']))
+    print(type(columns))
+    forecast = df.loc[first_day : last_day]
+    forecast = forecast[columns]
+    # drop this week from main data as we will forecast it
+    df.drop(df[first_day : last_day].index, inplace=True)
 
 print(forecast)
 
 # Set up Naive PV forecast based on same as last week
-pv['probability'] = 0.9
-pv_forecast = pv[['pv_power','probability']].tail(7*48)
-next_day = pv_forecast.last_valid_index() + pd.Timedelta(minutes=30)
-last_day = pv_forecast.last_valid_index() + pd.Timedelta(days=7)
-new_index = pd.date_range(start = next_day, end= last_day, freq='30min')
-pv_forecast.index = new_index
-pv_forecast.index.name = 'datetime'
-print(pv_forecast)
+forecast['probability'] = 0.9
+forecast['prediction'] = df['pv_power'].tail(7*48).values
+print(forecast)
 
 # set up inputs
 # weather for location 
 # ( using location 2 since it seems most closely correlated )
 #input_df = weather[['cs_ghi', 'sun2']].copy()
-input_df = weather[['cs_ghi', 'sun2']].copy()
+input_df = df[['cs_ghi', 'sun2']].copy()
 #input_df['period'] = input_df.index.hour * 2 + (input_df.index.minute / 30)
 print(input_df)
 
 # set up output
-output = pv['pv_power']
+output = df['pv_power']
 
 # santity check
 for column in input_df.columns:
@@ -133,20 +150,20 @@ if output.isna().sum() >0:
     quit()
 
 if method == 'r2':
-    rmodel = sm.OLS(output.values, sm.add_constant(weather['sun2'].values))
+    rmodel = sm.OLS(output.values, sm.add_constant(df['sun2'].values))
     residual_results = rmodel.fit()
     res_const = residual_results.params[0]
     res_grad = residual_results.params[1]
     print("Intercept {} Gradient {}".format(res_const, res_grad) )
-    pv['prediction'] = weather['sun2'] * res_grad + res_const
+    df['prediction'] = df['sun2'] * res_grad + res_const
 #   pred = pv[['prediction', 'pv_power']]
 #   print(pred['2018-06-01 10:00:00' : '2018-06-01 15:00:00'] )
-    pv_forecast['pv_power'] = forecast['sun2'] * res_grad + res_const
+    forecast['prediction'] = forecast['sun2'] * res_grad + res_const
 
     # plots
     if args.plot:
-        plt.scatter(weather['sun2'], output, s=12, color='blue')
-        x = np.array([weather['sun2'].min(),weather['sun2'].max()])
+        plt.scatter(df['sun2'], output, s=12, color='blue')
+        x = np.array([df['sun2'].min(),df['sun2'].max()])
         y = res_const + res_grad * x
         plt.plot(x,y,color='green')
         plt.title('Regression sun2 v power')
@@ -154,8 +171,8 @@ if method == 'r2':
         plt.ylabel('Power ')
         plt.show()
         
-        pv['pv_power'].plot(label='actual power', color='blue')
-        pv['prediction'].plot(label='predicted power', color='red')
+        df['pv_power'].plot(label='actual power', color='blue')
+        df['prediction'].plot(label='predicted power', color='red')
         plt.title('pv regression prediction')
         plt.xlabel('Hour of the year', fontsize=15)
         plt.ylabel('PV Generation (MW)', fontsize=15)
@@ -229,9 +246,9 @@ if method == 'ann' or method == 'reg':
         plt.show()
 #   hack to allow tensor plotting
 #       torch.Tensor.ndim = property(lambda self: len(self.shape))  # Fix it
-        pv['prediction'] = preds.detach().numpy() * pv['pv_power'].max()
-        pv['pv_power'].plot(label='actual power', color='blue')
-        pv['prediction'].plot(label='predicted power', color='red')
+        df['prediction'] = preds.detach().numpy() * df['pv_power'].max()
+        df['pv_power'].plot(label='actual power', color='blue')
+        df['prediction'].plot(label='predicted power', color='red')
         plt.title('pv ann prediction')
         plt.xlabel('Hour of the year', fontsize=15)
         plt.ylabel('PV Generation (MW)', fontsize=15)
@@ -241,8 +258,13 @@ if method == 'ann' or method == 'reg':
     # TODO use the model to do another prediction based on the future 
     # weather week.
 
+print(forecast)
+
+# metrics
+if 'pv_power' in forecast.columns:
+    utils.print_metrics(forecast['pv_power'], forecast['prediction'])
 
 output_dir = "/home/malcolm/uclan/challenge/output/"
-output_filename = '{}pv_forecast_{}.csv'.format(output_dir, dataset, method)
+output_filename = '{}pv_forecast_{}_{}.csv'.format(output_dir, dataset, method)
 
-pv_forecast.to_csv(output_filename, float_format='%.2f')
+forecast.to_csv(output_filename, float_format='%.2f')
