@@ -168,6 +168,33 @@ if method == 'sday':
         forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
     print(forecast)
 
+# closest weather day method
+if method == 'sdays':
+    days = pd.Series(df.index.date).unique()
+    fdays = pd.Series(forecast.index.date).unique()
+    for day in fdays:
+        closest_days = utils.find_closest_days(day, days, forecast, df, 'sun1', 10)
+        new_day1 = utils.create_day(closest_days.index, df, 'pv_power')
+        new_day1.columns = ['pv1']
+        closest_days = utils.find_closest_days(day, days, forecast, df, 'sun2', 10)
+        new_day2 = utils.create_day(closest_days.index, df, 'pv_power')
+        new_day2.columns = ['pv2']
+        closest_days = utils.find_closest_days(day, days, forecast, df, 'sun5', 10)
+        new_day5 = utils.create_day(closest_days.index, df, 'pv_power')
+        new_day5.columns = ['pv5']
+        closest_days = utils.find_closest_days(day, days, forecast, df, 'sun6', 10)
+        new_day6 = utils.create_day(closest_days.index, df, 'pv_power')
+        new_day6.columns = ['pv6']
+        new_days = pd.concat([new_day1, new_day2, new_day5, new_day6], axis=1)
+        new_days.index=forecast.loc[day.strftime('%Y-%m-%d')].index
+        print(new_days)
+        utils.add_weighted(new_days, 'pv', 'pv_power')
+        print(new_days)
+        forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = new_days['pv_power'].values
+        probability = 0.8
+        forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
+    print(forecast)
+
 if method == 'r2':
     rmodel = sm.OLS(output.values, sm.add_constant(df['sun2'].values))
     residual_results = rmodel.fit()

@@ -112,6 +112,32 @@ def find_closest_day(given_day, days, df1, df2, parm):
                 closest_day_score = day_diff_score
     return closest_day, closest_day_score
 
+# find n closest weather days to a given day
+def find_closest_days(given_day, days, df1, df2, parm, n):
+    closest_day_score = day_diff(given_day, days[0], df1, df2, parm)
+    closest_days=pd.Series([closest_day_score], index=[days[0]], name='sdays')
+    for day in days:
+        if day!=given_day:
+            day_diff_score = day_diff(given_day, day, df1, df2, parm)
+            # if not got enough days yet, just add the new one.
+            if len(closest_days) < n:
+                closest_days[day] = day_diff_score
+            else:
+                if day_diff_score < closest_days.max():
+                    idmax = closest_days.idxmax()
+                    closest_days.drop(idmax, inplace=True)
+                    closest_days[day] = day_diff_score
+    return closest_days
+
+# function to create a new day from a set of others by interpolation
+def create_day(days, df, parm):
+    df_days = pd.concat([ df.loc[day.strftime('%Y-%m-%d')] for day in days])
+    df_days = df_days[['k', parm]]
+
+    newday = df_days.groupby('k').mean()
+#   newday.index=df.loc[days[0].strftime('%Y-%m-%d')].index
+    return newday
+
 # function to assess the forecast accuracy between 2 days
 def forecast_diff(day1, day2, parm, df):
     day1_data = df.loc[day1.strftime('%Y-%m-%d')]
@@ -187,3 +213,26 @@ def solution_score(solution, pv, demand):
         Sd.append(Rp * ( P1 * C1 + P2 * C2 ) )
     Sfinal = sum(Sd) / 7.0
     return Sfinal, new_demand
+
+# function to add new column to df based on weighted average
+def add_weighted(df, col_prefix, newcol):
+    points = locations()
+    weights = { '1' : math.dist(points['pv'], points['w1']),
+                '2' : math.dist(points['pv'], points['w2']),
+                '5' : math.dist(points['pv'], points['w5']),
+                '6' : math.dist(points['pv'], points['w6']) }
+
+    weight_sum = 0
+    for weight in weights.values():
+        weight_sum += weight
+
+    df[newcol] = 0.0
+    sun_sum = df[newcol].copy()
+    for loc,weight in weights.items():
+        df[newcol] = df[newcol] + (df[col_prefix+loc] * weight )
+    sun_sum = sun_sum + df[col_prefix+loc]
+    #   print('loc {} weight {} weight_sum {}'.format(loc, weight, weight_sum) )
+    df[newcol] = df[newcol] / weight_sum
+    # incase there was a divide by zero due to zero temperature
+    df[newcol] = df[newcol].fillna(0)
+
