@@ -79,6 +79,7 @@ parser.add_argument('set', help='input data eg set0')
 parser.add_argument('--method', action="store", dest="method", help='Forecasting method: reg2, reg, ann, sday' , default='simple' )
 parser.add_argument('--week', action="store", dest="week", help='Week to forecast: set=read the set forecast file, first= first week, last=last week, otherwise integer week' , default='set' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--small', action="store_true", dest="small", help='Only output the prediction itself', default=False)
 
 args = parser.parse_args()
 method = args.method
@@ -134,7 +135,7 @@ print(forecast)
 # weather for location 
 # ( using location 2 since it seems most closely correlated )
 #input_df = weather[['cs_ghi', 'sun2']].copy()
-input_df = df[['cs_ghi', 'sun2']].copy()
+input_df = df[['zenith', 'sunw', 'tempw']].copy()
 #input_df['period'] = input_df.index.hour * 2 + (input_df.index.minute / 30)
 print(input_df)
 
@@ -292,5 +293,11 @@ if 'pv_power' in forecast.columns:
 
 output_dir = "/home/malcolm/uclan/challenge/output/"
 output_filename = '{}pv_forecast_{}_{}.csv'.format(output_dir, dataset, method)
+
+if args.small:
+    forecast = forecast['prediction']
+    forecast = forecast.squeeze()
+    forecast = forecast.rename('pv_forecast')
+    forecast.index.rename('datetime', inplace=True)
 
 forecast.to_csv(output_filename, float_format='%.2f')

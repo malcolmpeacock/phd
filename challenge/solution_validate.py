@@ -16,7 +16,16 @@ import utils
 
 # main program
 
-solution = sys.argv[1]
+# process command line
+
+parser = argparse.ArgumentParser(description='Create charging strategy.')
+parser.add_argument('solution', help='solution file name')
+parser.add_argument('--demand', action="store", dest="demand", help='Demand file for plotting' , default=None )
+parser.add_argument('--pv', action="store", dest="pv", help='PV file for plotting' , default=None )
+parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+
+args = parser.parse_args()
+solution = args.solution
 
 # read in the data
 input_dir = "/home/malcolm/uclan/challenge/output/"
@@ -38,6 +47,9 @@ if len(s) != 48 * 7:
 count=0
 store=0.0
 errors=0
+
+daily_charge = {}
+daily_discharge = {}
 
 # For each day ...
 days = s.resample('D', axis=0).mean().index
@@ -68,9 +80,47 @@ for day in days:
         if store <0 or store >6:
             print('Store out of range: store {} day {} period {} at line {}'.format(store, day, k, count) )
             errors+=1
-            quit()
+        # daily summary
+        if k<32:
+            daily_charge[day] = store
+        else:
+            daily_discharge[day] = store
+
+    # Check for full discharge at day end
+    if store>0.0:
+        print('Warning: on day {} store had some left {}'.format(day, store) )
+        store=0.0
 
 if errors==0:
     print("PASSED")
 else:
     print("Failed {} errors".format(errors) )
+
+for day, value in daily_charge.items():
+    print('Day {} Charge {}'.format(day, value) )
+
+if args.demand and args.pv:
+    # demand data
+    demand_filename = input_dir + args.demand
+    demand = pd.read_csv(demand_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+
+    print(demand)
+
+    # pv data
+    pv_filename = input_dir + args.pv
+    pv = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+
+    final_score, new_demand = utils.solution_score(s, pv, demand)
+    print('Final Score {}'.format(final_score) )
+
+    if args.plot:
+        pv['prediction'].plot(label='PV Generation Forecast', color='red')
+        new_demand.plot(label='Modified demand', color='yellow')
+        demand['prediction'].plot(label='Demand Forecast', color='blue')
+        s.plot(label='Battery Charge', color='green')
+        plt.title('Charging Solution')
+        plt.xlabel('Hour of the year', fontsize=15)
+        plt.ylabel('MWh', fontsize=15)
+        plt.legend(loc='lower right', fontsize=15)
+        plt.show()
+
