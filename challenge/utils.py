@@ -236,3 +236,42 @@ def add_weighted(df, col_prefix, newcol):
     # incase there was a divide by zero due to zero temperature
     df[newcol] = df[newcol].fillna(0)
 
+# function to find the points and threshold to charge at
+def charge_points(df):
+    # get periods with k < 32
+    df['k'] = (df.index.hour * 2) + (df.index.minute / 30) + 1
+    df['k'] = df['k'].astype(int)
+    kbelow32 = df['k'] < 32
+    df = df[kbelow32]
+    # start with a zero line, threshold=0 and move up and down alternately
+    # until sum(demands - threshold) within limit of the battery capacity
+    #  this is effectively the area under the curve.
+    threshold = 0
+    move_amount = 0.8 * df['average'].max()
+    limit = 0.05
+    capacity = 12.0
+    csum, points = charge_sum(df, threshold)
+    # whilst difference between sum of generation for demand and capacity
+    # is less than limit ...
+    while abs(csum - capacity) > limit:
+        print('csum {} threshold {} move_amount {} '.format(csum, threshold, move_amount) )
+        # move up or down a smaller and smaller bit
+        if csum > capacity:
+            threshold += move_amount
+        else:
+            threshold -= move_amount
+        csum, points = charge_sum(df, threshold)
+        move_amount = move_amount * 0.5
+        print('csum {} threshold {} move_amount {} '.format(csum, threshold, move_amount) )
+
+    # return the points and the ( demand - threshold )
+    return points
+
+# function to return the sum of the differences of the demand values
+# and the threshold for all points where this is positive
+def charge_sum(df, threshold):
+    above_threshold = df['average'] > threshold
+    df_above = df[above_threshold]
+    diff = df_above['average'] - threshold
+    csum = diff.sum()
+    return csum, diff

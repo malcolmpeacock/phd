@@ -46,6 +46,9 @@ pv = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, s
 pv['weight'] = pv['prediction'] * pv['probability']
 demand['weight'] = demand['prediction'] * demand['probability']
 
+# create pv weighted average
+pv['average'] = pv['prediction'].rolling(window=5).mean()
+
 # create solution file of zeros
 
 solution = pv.copy()
@@ -62,34 +65,32 @@ for day in days:
     pv_day = pv[day : day + pd.Timedelta(hours=23,minutes=30)].copy()
 #   print(pv_day)
 
-    # sort by power weighted by probability of correct forecast
-    pv_day.sort_values(by='weight', ascending=False, inplace=True)
+    # get charging pattern
+    cpoints = utils.charge_points(pv_day)
+    print(cpoints)
+    print(type(cpoints))
+    print(cpoints.sum())
 
-    # charge the battery from the pv
-    # we only put weight into the battery incase the forecast is too high
-    # TODO - modify this if there is not enough PV to fill the battery?
-    #        the weighting could cause unncessary charging from the grid?
-    #        perhaps a 2nd pass if we run out?
+    tolerance = 0.001
 
     battery = 0.0
     # this is 12 rather than 6 to avoid multiplying by 0.5 all the time
     # ( so its 6 half MWhs )
-    capacity = 11.9999
-    for index, row in pv_day.iterrows():
+    capacity = 12 - tolerance
+    for index, value in cpoints.iteritems():
         k = utils.index2k(index)
-        print('Charging k {} battery {} index {} weight {} pv {}'.format(k, battery, index, row['weight'], row['prediction']) )
-        if k<32:
-            charge = min(row['weight'],2.5)
-            charge_output = min(charge, capacity-battery)
-            print('Adding Charge {}'.format(charge_output) )
+        print('Charging k {} battery {} index {} pv {}'.format(k, battery, index, value) )
+        charge_output = min(value, capacity-battery)
+        print('Adding Charge {}'.format(charge_output) )
             # don't overfill the battery
+        if charge_output>0:
             solution[index] = charge_output
-            battery += charge
+            battery += charge_output
         # stop when battery is full
-        if battery>capacity:
-            battery = capacity
-            break;
-    print('Charged: k {} battery {} index {} weight {} pv {}'.format(k, battery, index, row['weight'], row['prediction']) )
+#       if battery>capacity:
+#           battery = capacity
+#           break;
+#   print('Charged: k {} battery {} index {} weight {} pv {}'.format(k, battery, index, row['weight'], row['prediction']) )
 
     # get the demand for this day
     demand_day = demand[day : day + pd.Timedelta(hours=23,minutes=30)]
@@ -121,6 +122,7 @@ print('Final Score {}'.format(final_score) )
 
 if args.plot:
     pv['prediction'].plot(label='PV Generation Forecast', color='red')
+    pv['average'].plot(label='PV Generation Forecast', color='red', linestyle = 'dotted')
     new_demand.plot(label='Modified demand', color='yellow')
     demand['prediction'].plot(label='Demand Forecast', color='blue')
     solution.plot(label='Battery Charge', color='green')
@@ -137,3 +139,6 @@ output_filename = output_dir + 'solution.csv'
 
 solution.index.rename('datetime', inplace=True)
 solution.to_csv(output_filename, float_format='%g')
+
+output_filename = output_dir + 'modified_demand.csv'
+new_demand.to_csv(output_filename, float_format='%g')

@@ -54,6 +54,7 @@ daily_discharge = {}
 # For each day ...
 days = s.resample('D', axis=0).mean().index
 for day in days:
+    daily_discharge[day] = 0.0
 #   print(day)
     s_day = s[day : day + pd.Timedelta(hours=23,minutes=30)]
 #   print(s_day)
@@ -84,7 +85,7 @@ for day in days:
         if k<32:
             daily_charge[day] = store
         else:
-            daily_discharge[day] = store
+            daily_discharge[day] += (0.5 * value)
 
     # Check for full discharge at day end
     if store>0.0:
@@ -98,6 +99,8 @@ else:
 
 for day, value in daily_charge.items():
     print('Day {} Charge {}'.format(day, value) )
+for day, value in daily_discharge.items():
+    print('Day {} DisCharge {}'.format(day, value) )
 
 if args.demand and args.pv:
     # demand data
