@@ -6,9 +6,15 @@ from datetime import timedelta
 import numpy as np
 import matplotlib.pyplot as plt
 
+# get k for a single index value
 def index2k(index):
     k = (index.hour * 2) + (index.minute / 30) + 1
     return math.floor(k)
+
+# get series of k's
+def index2ks(index):
+    k = (index.hour * 2) + (index.minute / 30) + 1
+    return k.astype(int)
 
 def missing_times(df,f):
     d = pd.date_range(start = df.index[0], end = df.last_valid_index() , freq=f ).difference(df.index)

@@ -31,8 +31,6 @@ parser.add_argument('--method', action="store", dest="method", help='Forecasting
 parser.add_argument('--mode', action="store", dest="mode", help='Mode: forecast or test', default='forecast' )
 parser.add_argument('--week', action="store", dest="week", help='Week to forecast: set=read the set forecast file, first= first week, last=last week, otherwise integer week' , default='set' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
-parser.add_argument('--small', action="store_true", dest="small", help='Only output the prediction itself', default=False)
-
 
 args = parser.parse_args()
 method = args.method
@@ -156,12 +154,13 @@ if 'demand' in forecast.columns:
     utils.print_metrics(forecast['demand'], forecast['prediction'])
 
 output_dir = "/home/malcolm/uclan/challenge/output/"
-output_filename = '{}demand_forecast_{}.csv'.format(output_dir, dataset, method)
+output_filename = '{}demand_forecast_{}.csv'.format(output_dir, dataset)
 
-if args.small:
-    forecast = forecast['prediction']
-    forecast = forecast.squeeze()
-    forecast = forecast.rename('demand_forecast')
-    forecast.index.rename('datetime', inplace=True)
+# only the demand for Bogdan
+forecast = forecast['prediction']
+forecast = forecast.squeeze()
+forecast = forecast.rename('demand_forecast')
+forecast.index.rename('datetime', inplace=True)
 
+output_filename = '{}demand_forecast_{}_only.csv'.format(output_dir, dataset)
 forecast.to_csv(output_filename, float_format='%.2f')

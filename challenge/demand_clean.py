@@ -36,19 +36,13 @@ demand = pd.read_csv(demand_filename, header=0, sep=',', parse_dates=[0], index_
 # error checks
 n_missing = utils.missing_times(demand, '30min')
 print('Number of missing demand rows: {}'.format(n_missing) )
-print('SMALLEST')
-print(demand.nsmallest())
-print('LARGEST')
-print(demand.nlargest())
 
 # fix zeros
 
-low = demand[demand < 0.1]
-#print(low)
-last_week = demand[low.index - pd.Timedelta(days=7)]
-last_week.index = low.index
+#last_week = demand[low.index - pd.Timedelta(days=7)]
+#last_week.index = low.index
 #print(last_week)
-demand.update(last_week)
+#demand.update(last_week)
 
 #bad_day = demand['2018-05-10']
 #print(bad_day)
@@ -58,11 +52,23 @@ demand.update(last_week)
 #demand.update(previous_day)
 
 # replace a suspect days with different ones.
-if dataset=='set0':
+if dataset[0:3]=='set':
 #   utils.replace_day(demand, '2018-05-10', '2018-05-09')
 #   utils.replace_day(demand, '2018-05-11', '2018-05-12')
+    print('Dropping days 2018-05-08 2018-05-09')
+    # drop because of small values
+    demand.drop(demand['2018-05-08'].index, inplace=True)
+    demand.drop(demand['2018-05-09'].index, inplace=True)
+    # drop because of large values
     demand.drop(demand['2018-05-10'].index, inplace=True)
     demand.drop(demand['2018-05-11'].index, inplace=True)
+print('Low demand values')
+low = demand[demand < 0.1]
+print(low)
+print('SMALLEST')
+print(demand.nsmallest())
+print('LARGEST')
+print(demand.nlargest())
 
 # plot demand
 if args.plot:

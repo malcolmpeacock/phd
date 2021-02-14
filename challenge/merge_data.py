@@ -128,7 +128,7 @@ for day in days:
         df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','holiday'] = 1
 
 # add period, k
-df['k'] = utils.index2k(index)
+df['k'] = utils.index2ks(df.index)
 
 # plot weather
 if args.plot:

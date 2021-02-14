@@ -10,53 +10,61 @@ import statsmodels.api as sm
 import argparse
 import numpy as np
 import math
-from numpy import trapz
+from scipy.optimize import minimize
+from scipy.optimize import Bounds
 
 # custom code
 import utils
+
+# function defining the constraints on the battery charge
+# do we need a constraint that charge is always -ve ? and <2.5 ?
+def con(charge):
+    return sum(charge) + battery
+
+# function to optimize ie the peak demand by adding the battery 
+# charge (which is negative)
+def peak(c):
+    return (demand_krange['prediction'] + c ).max()
 
 # main program
 
 # process command line
 
 parser = argparse.ArgumentParser(description='Create charging strategy.')
-parser.add_argument('demand', help='Demand file')
-parser.add_argument('pv', help='Weather file')
+parser.add_argument('set', help='weather file eg set0')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 
 args = parser.parse_args()
-pv_file = args.pv
-demand_file = args.demand
-print('Demand forecast {} PV forecast {}'.format(demand_file, pv_file) )
+dataset = args.set
+print('Creating soution for set {}'.format(dataset) )
 
 # read in the data
 input_dir = "/home/malcolm/uclan/challenge/output/"
 
 # demand data
-demand_filename = input_dir + demand_file
+demand_filename = '{}demand_forecast_{}.csv'.format(input_dir, dataset)
+print('Reading demand from {}'.format(demand_filename) )
 demand = pd.read_csv(demand_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+demand['k'] = utils.index2ks(demand.index)
 
 print(demand)
 
 # pv data
-pv_filename = input_dir + pv_file
+pv_filename = '{}pv_forecast_{}.csv'.format(input_dir, dataset)
+print('Reading pv from {}'.format(pv_filename) )
 pv = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
-
-# set weight to sort on
-pv['weight'] = pv['prediction'] * pv['probability']
-demand['weight'] = demand['prediction'] * demand['probability']
 
 # create pv weighted average
 pv['average'] = pv['prediction'].rolling(window=5).mean()
+pv['prediction'].fillna(0.0)
 
 # create solution file of zeros
 
 solution = pv.copy()
 solution['charge_MW'] = 0.0
-#solution = solution.drop(['prediction', 'probability', 'weight'], axis=1)
-solution = solution['charge_MW']
-solution.index.rename('datetime')
-solution = solution.squeeze()
+solution['k'] = utils.index2ks(solution.index)
+print(solution)
+print(solution.columns)
 
 # For each day ...
 days = solution.resample('D', axis=0).mean().index
@@ -77,47 +85,37 @@ for day in days:
     # this is 12 rather than 6 to avoid multiplying by 0.5 all the time
     # ( so its 6 half MWhs )
     capacity = 12 - tolerance
+    # for each point in the charge strategy ...
     for index, value in cpoints.iteritems():
         k = utils.index2k(index)
         print('Charging k {} battery {} index {} pv {}'.format(k, battery, index, value) )
+        # double check on not exceeding the battery
         charge_output = min(value, capacity-battery)
         print('Adding Charge {}'.format(charge_output) )
             # don't overfill the battery
         if charge_output>0:
-            solution[index] = charge_output
+            solution['charge_MW'][index] = charge_output
             battery += charge_output
-        # stop when battery is full
-#       if battery>capacity:
-#           battery = capacity
-#           break;
-#   print('Charged: k {} battery {} index {} weight {} pv {}'.format(k, battery, index, row['weight'], row['prediction']) )
 
-    # get the demand for this day
+    # get the demand for this day and solution
     demand_day = demand[day : day + pd.Timedelta(hours=23,minutes=30)]
-#   print(demand_day)
-    # sort the demand so we discharge at points of heighest demand
-    demand_day.sort_values(by='weight', ascending=False, inplace=True)
-    # calculate areas under the curve
-#   heights
-#   for index, row in demand_day.iterrows():
-#       k = utils.index2k(index)
-#       if k>31 and k<43:
-    # discharge the battery
-    for index, row in demand_day.iterrows():
-        k = utils.index2k(index)
-        print('Discharging k {} battery {} index {} demand {}'.format(k, battery, index, row['prediction']) )
-        if k>31 and k<43:
-            # don't discharge the battery below empty
-            discharge = min(battery,2.5)
-            print('Dis Charge {}'.format(discharge) )
-            solution[index] = -discharge
-            battery -= discharge
-        # stop when battery is empty
-        if battery<0.001:
-            break;
+    solution_day = solution[day : day + pd.Timedelta(hours=23,minutes=30)]
+    # Get k=32 to 42
+    demand_krange = utils.krange(demand_day)
+    solution_krange = utils.krange(solution_day)
+    # intialise the discharge solution equally.
+    solution_krange['charge_MW'] = battery / len(solution_krange)
+    # define the contstraint as an equality
+    #  :-con is a function checking sum(charges) = battery 
+    cons = { 'type' : 'eq', 'fun': con }
+    x0 = np.array(solution_krange['charge_MW'])
+#   res = minimize(peak, x0, method='trust-constr', options={'disp': True, 'maxiter':1000}, constraints=cons, bounds=Bounds(-2.5,0.0) )
+#   res = minimize(peak, x0, method='SLSQP', options={'xatol': 1e-8, 'disp': True, 'maxiter':50}, constraints=cons, bounds=Bounds(-2.5,0.0) )
+    res = minimize(peak, x0, method='SLSQP', options={'disp': True, 'maxiter':200}, constraints=cons, bounds=Bounds(-2.5,0.0) )
+    print(res.x)
+    solution.loc[solution_krange.index, 'charge_MW'] = res.x
 
-#print(solution)
-final_score, new_demand = utils.solution_score(solution, pv, demand)
+final_score, new_demand = utils.solution_score(solution['charge_MW'], pv, demand)
 print('Final Score {}'.format(final_score) )
 
 if args.plot:
@@ -125,7 +123,7 @@ if args.plot:
     pv['average'].plot(label='PV Generation Forecast', color='red', linestyle = 'dotted')
     new_demand.plot(label='Modified demand', color='yellow')
     demand['prediction'].plot(label='Demand Forecast', color='blue')
-    solution.plot(label='Battery Charge', color='green')
+    solution['charge_MW'].plot(label='Battery Charge', color='green')
     plt.title('Charging Solution')
     plt.xlabel('Hour of the year', fontsize=15)
     plt.ylabel('MWh', fontsize=15)
@@ -135,8 +133,10 @@ if args.plot:
 
 
 output_dir = "/home/malcolm/uclan/challenge/output/"
-output_filename = output_dir + 'solution.csv'
+output_filename = '{}solution_{}.csv'.format(output_dir,dataset)
 
+solution = solution['charge_MW']
+solution = solution.squeeze()
 solution.index.rename('datetime', inplace=True)
 solution.to_csv(output_filename, float_format='%g')
 

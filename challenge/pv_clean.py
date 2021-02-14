@@ -35,6 +35,39 @@ print('Cleaning {} {}'.format(dataset, pv_filename) )
 pv = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
 print(pv)
+# fix errors at particular points
+# Note: replacing whole days doesn't make sense as the weather will be 
+# different - so better to remove, so the join with weather df will have
+# missing index values - but we can cope with this.
+if dataset[0:3] == 'set':
+    print('Fixing certain dodgy hours')
+    # 2017-11-29 07:30:00 - no panel temperature value
+    pv['panel_temp_C']['2017-11-29 07:30:00'] = pv['panel_temp_C']['2017-11-29 08:00:00']
+    # 2018-02-28 11:00:00 - no power but irradiance.
+    #   - irradiance is pretty low here as well
+    pv['panel_temp_C']['2018-02-28 11:00:00'] = pv['panel_temp_C']['2018-02-28 10:30:00']
+    # replace a suspect days with different ones.
+#   utils.replace_day(pv, '2018-03-04', '2018-03-01')
+    print('Dropping 2018-03-04 lot of missing values')
+    pv.drop(pv.loc['2018-03-04'].index, inplace=True)
+    # 2017-12-26 14:30:00 - Zero power value
+    pv['pv_power_mw']['2017-12-26 14:30:00'] = pv['pv_power_mw']['2017-12-26 14:00:00']
+    # replace a suspect days with different ones.
+#   utils.replace_day(pv, '2018-06-15', '2018-06-14')
+    # drop day completely
+    print('DROPPING')
+#   2018-03-02  - no power for several hours but irradiance
+    pv.drop(pv.loc['2018-03-02'].index, inplace=True)
+#   2018-03-03  - no power for several hours but irradiance
+    pv.drop(pv.loc['2018-03-03'].index, inplace=True)
+#   2018-03-05  - no power for several hours but irradiance
+    pv.drop(pv.loc['2018-03-05'].index, inplace=True)
+#   2018-03-08  - no power for several hours but irradiance
+    pv.drop(pv.loc['2018-05-08'].index, inplace=True)
+#   2018-06-15  - no power for several hours but irradiance
+    pv.drop(pv.loc['2018-06-15'].index, inplace=True)
+
+# ERROR CHECKS:
 
 large_pv = pv['pv_power_mw'].max() * 0.8
 small_pv = pv['pv_power_mw'].max() * 0.2
@@ -61,18 +94,6 @@ suspect = pv_small[pv_small['panel_temp_C']>large_temp]
 print('PV small but temp large {}'.format(len(suspect)) )
 print(suspect)
 
-# fix errors
-# TODO replacing whole days doesn't make sense as the weather will be 
-# different - so better to remove, so the join with weather df will have
-# missing index values - but we can cope with this.
-if dataset== 'set0':
-    pv['pv_power_mw']['2018-05-08 14:00:00'] = pv['pv_power_mw']['2018-05-08 13:00:00']
-    pv['pv_power_mw']['2018-06-15 11:30:00'] = pv['pv_power_mw']['2018-06-15 11:00:00']
-    pv['pv_power_mw']['2018-06-15 12:00:00'] = pv['pv_power_mw']['2018-06-15 12:30:00']
-    pv['panel_temp_C']['2017-11-29 07:30:00'] = pv['panel_temp_C']['2017-11-29 08:00:00']
-    # replace a suspect days with different ones.
-#   utils.replace_day(pv, '2018-03-04', '2018-03-01')
-    pv.drop(pv['2018-03-04'].index, inplace=True)
 
 # replace NaN panel temps with zero if irradiance is zero
 missing_panel_temp = pv[pv['panel_temp_C'].isnull().values]
@@ -83,29 +104,13 @@ index_to_update = missing_panel_temp[missing_panel_temp_with0].index
 pv['panel_temp_C'][index_to_update] = 0.0
 
 # look for zero power during the middle of the day
-zero_power = pv[pv['pv_power_mw'] == 0.0]
+zero_power = pv[pv['pv_power_mw'] == 0.0].copy()
 zero_power['hour'] = zero_power.index.hour
 print(zero_power)
 midday_zero = zero_power[zero_power['hour'] >10]
 midday_zero = midday_zero[midday_zero['hour'] <15]
 print(' MID DAY ZERO')
 print(midday_zero)
-if dataset== 'set0':
-    pv['pv_power_mw']['2017-12-26 14:30:00'] = pv['pv_power_mw']['2017-12-26 14:00:00']
-    # replace a suspect days with different ones.
-#   utils.replace_day(pv, '2018-03-02', '2018-03-01')
-#   utils.replace_day(pv, '2018-03-03', '2018-03-01')
-#   utils.replace_day(pv, '2018-03-04', '2018-03-01')
-#   utils.replace_day(pv, '2018-03-05', '2018-03-01')
-#   utils.replace_day(pv, '2018-05-08', '2018-05-09')
-#   utils.replace_day(pv, '2018-06-15', '2018-06-14')
-    # drop day completely
-    print('DROPPING')
-    pv.drop(pv['2018-03-02'].index, inplace=True)
-    pv.drop(pv['2018-03-03'].index, inplace=True)
-    pv.drop(pv['2018-03-05'].index, inplace=True)
-    pv.drop(pv['2018-05-08'].index, inplace=True)
-    pv.drop(pv['2018-06-15'].index, inplace=True)
 
 # check the errors were fixed
 # PV
@@ -145,11 +150,13 @@ if args.plot:
     plt.legend(loc='upper right', fontsize=15)
     plt.show()
 
-    efficency = pv['pv_power_mw'] / pv['irradiance_Wm-2']
+    expected_power = pv['irradiance_Wm-2'] * 0.8 * 5000.0
+#   efficency = pv['pv_power_mw'] / pv['irradiance_Wm-2']
+    efficency = pv['pv_power_mw'] / expected_power
     plt.scatter(pv['panel_temp_C'].values, efficency.values, s=12, color='blue')
     plt.title('Panel Temperature vs Efficiency')
     plt.xlabel('Panel Temperature (degrees C)', fontsize=15)
-    plt.ylabel('Efficiency = power/irradiance', fontsize=15)
+    plt.ylabel('Efficiency = power/expected', fontsize=15)
     plt.show()
 
     fewdays = pv['2018-06-01 00:00:00' : '2018-06-04 23:30:00']
