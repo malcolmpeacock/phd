@@ -18,6 +18,24 @@ import pvlib
 # custom code
 import utils
 
+def sethols(df):
+    # holiday indicator
+    holidays = ['2017-01-01', '2017-01-02', '2017-04-14', '2017-04-17', '2017-05-01', '2017-05-29', '2017-08-28', '2017-12-25', '2017-12-26', '2018-01-01', '2018-03-30', '2018-05-07', '2018-05-28', '2018-08-27', '2018-12-25', '2018-12-26']
+    df['holiday'] = 0
+    for holiday in holidays:
+    #   if holiday in weather.index.date:
+    #   df[holiday+' 00:00:00' : holiday+' 23:30:00']['holiday'] = 1
+        df.loc[holiday+' 00:00:00' : holiday+' 23:30:00','holiday'] = 1
+
+    days = df.resample('D', axis=0).mean().index.date
+    for day in days:
+#   print(day)
+        if day.weekday() > 4:
+            day_str = day.strftime('%Y-%m-%d')
+#       print('weekend: ' + day_str)
+#       df[day_str+' 00:00:00' : day_str+' 23:30:00']['holiday'] = 1
+            df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','holiday'] = 1
+
 def ghi2irradiance(site_location, tilt, surface_azimuth, in_ghi):
     # Get solar azimuth and zenith to pass to the transposition function
     solar_position = site_location.get_solarposition(times=in_ghi.index)
@@ -70,6 +88,7 @@ weather_filename = '{}weather_fixed_{}.csv'.format(output_dir, dataset)
 weather = pd.read_csv(weather_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 print(weather)
 
+# split off the historical part of the weather and the forecast
 history = weather.loc[pv.index]
 forecast_index = pd.date_range(start = history.last_valid_index() + pd.Timedelta(minutes=30) , end= history.last_valid_index() + pd.Timedelta(days=6, hours=23, minutes=30), freq='30min')
 forecast = weather.loc[forecast_index]
@@ -77,12 +96,16 @@ forecast = weather.loc[forecast_index]
 last_index = forecast.last_valid_index() + pd.Timedelta(minutes=30)
 last_row = pd.DataFrame(forecast[-1:].values, index=[last_index], columns=forecast.columns)
 forecast = forecast.append(last_row)
+# add the holiday flag
+sethols(forecast)
+forecast.index.rename('datetime', inplace=True)
+
 print(forecast)
 
 # stick it all together
 df = pd.concat([pv, history], axis=1)
 df = df.join(demand, how='inner')
-#df = pd.concat([demand, pv, history], axis=1)
+sethols(df)
 print(df)
 
 # clear sky irradiance
@@ -110,22 +133,6 @@ surface_azimuth = 180
 # NB: this is for location 2 - should it be mean ?
 df['poa_ghi'], df['zenith'] = ghi2irradiance(site_location, tilt, surface_azimuth, df['sun2'])
 
-# holiday indicator
-holidays = ['2017-01-01', '2017-01-02', '2017-04-14', '2017-04-17', '2017-05-01', '2017-05-29', '2017-08-28', '2017-12-25', '2017-12-26', '2018-01-01', '2018-03-30', '2018-05-07', '2018-05-28', '2018-08-27', '2018-12-25', '2018-12-26']
-df['holiday'] = 0
-for holiday in holidays:
-#   if holiday in weather.index.date:
-#   df[holiday+' 00:00:00' : holiday+' 23:30:00']['holiday'] = 1
-    df.loc[holiday+' 00:00:00' : holiday+' 23:30:00','holiday'] = 1
-
-days = df.resample('D', axis=0).mean().index.date
-for day in days:
-#   print(day)
-    if day.weekday() > 4:
-        day_str = day.strftime('%Y-%m-%d')
-#       print('weekend: ' + day_str)
-#       df[day_str+' 00:00:00' : day_str+' 23:30:00']['holiday'] = 1
-        df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','holiday'] = 1
 
 # add period, k
 df['k'] = utils.index2ks(df.index)
@@ -157,7 +164,6 @@ if args.plot:
 
 
 print(df.columns)
-#weather.columns = ['temp3', 'temp6', 'temp2', 'temp4', 'temp5', 'temp1', 'sun3', 'sun6', 'sun2', 'sun4', 'sun5', 'sun1', 'cs_ghi', 'poa_ghi', 'zenith', 'holiday', 'k']
 
 output_dir = "/home/malcolm/uclan/challenge/output/"
 

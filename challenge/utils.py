@@ -5,6 +5,7 @@ from datetime import datetime
 from datetime import timedelta
 import numpy as np
 import matplotlib.pyplot as plt
+import pytz
 
 # get k for a single index value
 def index2k(index):
@@ -67,7 +68,6 @@ def print_metrics(s1,s2, plot=False):
         plt.ylabel(s2.name)
         plt.show()
 
-
 # extract the week to forecast into a different df.
 def extract_forecast_week(week_arg,df,parm,forecast):
     days = df.resample('D', axis=0).mean().index.date
@@ -93,38 +93,78 @@ def extract_forecast_week(week_arg,df,parm,forecast):
     # drop this week from main data as we will forecast it
     return df.drop(df[first_day : last_day].index), forecast
 
+# look at the first hour of the day and convert it to DST then look at
+# the difference.
+# if day1 is in winter and day2 is in summer then it will be -2
+# if they are both in winter or summer it will be zero
+def dst_diff(day1_data, day2_data):
+    hour_day1 = day1_data.index[0].tz_localize('UTC').astimezone(tz=pytz.timezone('Europe/London')).hour
+    hour_day2 = day2_data.index[0].tz_localize('UTC').astimezone(tz=pytz.timezone('Europe/London')).hour
+    hour_diff = hour_day1 - hour_day2
+    return hour_diff*2
+
+def get_forecast(day_data, similar_day_data, parm, dst=False):
+    values = similar_day_data[parm].values
+    if dst:
+        dd = dst_diff(day_data, similar_day_data)
+        # if similar_day is in summer and the current day is winter then dd
+        # will be -2 indicating we need to set its demand value further back 
+        # 2 half hour periods (the clocks having moved forwards in spring)
+        values[2+dd:len(values)+dd-2] = values[2:-2]
+    return values
+
 # function to find the difference in weather between 2 days
 
-def day_diff(day1, day2, df1, df2, parm):
+def day_diff(day1, day2, df1, df2, parm, dst=False):
     day1_data = df1.loc[day1.strftime('%Y-%m-%d')]
 #   print(day1_data)
     day2_data = df2.loc[day2.strftime('%Y-%m-%d')]
 #   print(day2_data)
-    diff = day1_data[parm].values - day2_data[parm].values
+    values1 = day1_data[parm].values
+    values2 = day2_data[parm].values
+    if dst:
+        dd = dst_diff(day1_data, day2_data)
+#       print('day1 {} day2 {} hour_diff {}'.format(day1, day2, dd) )
+        # this is ignores the first 2 and last 2 elements
+        values1 = values1[2:-2]
+        # if day 2 is in summer then dd will be -2 indicating we need to go back
+        # 2 half hour periods
+        values2 = values2[2+dd:len(values2)+dd-2]
+    diff = values1 - values2
+#   diff = day1_data[parm].values - day2_data[parm].values
 #   print(diff)
-    score = np.abs(diff).sum() / len(day1_data)
+    score = np.abs(diff).sum() / len(values1)
 #   print(day1,day2,score)
     return score
 
 # find closest weather day to a given day
-def find_closest_day(given_day, days, df1, df2, parm):
+# Parameters:
+#  given_day - day we are searching for
+#       days - list of days we are searching in
+#        df1 - dataframe that given_day is in
+#        df2 - dataframe that days are in
+#       parm - column within the df1 and df2 to compare
+#        dst - to match up by Daylight Saving Time, rather than UTC
+def find_closest_day(given_day, days, df1, df2, parm, dst=False):
     closest_day = days[0]
-    closest_day_score = day_diff(given_day, closest_day, df1, df2, parm)
+    if given_day == days[0]:
+        closest_day = days[1]
+    closest_day_score = day_diff(given_day, closest_day, df1, df2, parm, dst)
     for day in days:
         if day!=given_day:
-            day_diff_score = day_diff(given_day, day, df1, df2, parm)
+            day_diff_score = day_diff(given_day, day, df1, df2, parm, dst)
             if day_diff_score < closest_day_score:
                 closest_day = day
                 closest_day_score = day_diff_score
     return closest_day, closest_day_score
 
 # find n closest weather days to a given day
-def find_closest_days(given_day, days, df1, df2, parm, n):
-    closest_day_score = day_diff(given_day, days[0], df1, df2, parm)
+def find_closest_days(given_day, days, df1, df2, parm, n, dst=False):
+    closest_day_score = day_diff(given_day, days[0], df1, df2, parm, dst)
     closest_days=pd.Series([closest_day_score], index=[days[0]], name='sdays')
     for day in days:
         if day!=given_day:
-            day_diff_score = day_diff(given_day, day, df1, df2, parm)
+            day_diff_score = day_diff(given_day, day, df1, df2, parm, dst)
             # if not got enough days yet, just add the new one.
             if len(closest_days) < n:
                 closest_days[day] = day_diff_score

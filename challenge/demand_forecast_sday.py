@@ -61,15 +61,22 @@ print(forecast)
 
 # find most similar day to a given day and then plot the profiles.
 
-#days = df.resample('D', axis=0).mean().index.date
 days = pd.Series(df.index.date).unique()
+print(" -- days --")
 print(days)
+holidays = pd.Series(df[df['holiday']==1].index.date).unique()
+print(" -- holidays --")
+print(holidays)
+weekdays = pd.Series(df[df['holiday']==0].index.date).unique()
+print(" -- weekdays --")
+print(weekdays)
 
 # testing the algorithm
 
 if args.mode == 'test':
-    given_day = days[len(days)-1]
-    closest_day, closeness = utils.find_closest_day(given_day, days, df, df, 'tempm')
+#   given_day = days[len(days)-1]
+    given_day = datetime(2017,11,3).date()
+    closest_day, closeness = utils.find_closest_day(given_day, days, df, df, 'tempm', True)
 
     demand_score = utils.forecast_diff(given_day, closest_day, 'demand', df)
     print("given_day {} closest day {} demand score {}".format(given_day, closest_day, demand_score) )
@@ -105,7 +112,11 @@ if args.mode == 'test':
     all_scores={}
     for given_day in days:
         print("Testing {}".format(given_day))
-        closest_day, closeness = utils.find_closest_day(given_day, days, df, df, 'tempm')
+        day_list = weekdays
+        if df.loc[given_day.strftime('%Y-%m-%d'),'holiday'][0] == 1:
+            print('Holiday')
+            day_list = holidays
+        closest_day, closeness = utils.find_closest_day(given_day, day_list, df, df, 'tempm', True)
         all_scores[given_day] = utils.forecast_diff(given_day, closest_day,'demand', df)
 
     print("=========== Results")
@@ -115,7 +126,7 @@ if args.mode == 'test':
 
     worst = sorted_scores[0]
     print('Worst {}'.format(worst) )
-    worst_closest, closeness = utils.find_closest_day(worst, days, df, df, 'tempm')
+    worst_closest, closeness = utils.find_closest_day(worst, days, df, df, 'tempm', True)
     closest_data = df.loc[worst_closest.strftime('%Y-%m-%d')]
     worst_data = df.loc[worst.strftime('%Y-%m-%d')]
     if args.plot:
@@ -140,11 +151,16 @@ else:
     print(fdays)
     for day in fdays:
         print("Testing {}".format(day))
-        closest_day, closeness = utils.find_closest_day(day, days, forecast, df, 'tempm')
-        print(closest_day)
+        day_list = weekdays
+        if forecast.loc[day.strftime('%Y-%m-%d'),'holiday'][0] == 1:
+            print('Holiday')
+            day_list = holidays
+        closest_day, closeness = utils.find_closest_day(day, day_list, forecast, df, 'tempm', True)
+        print('Closest day: {}'.format(closest_day) )
         rows = df.loc[closest_day.strftime('%Y-%m-%d')]
 #       print(rows)
-        forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = rows['demand'].values
+#       forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = rows['demand'].values
+        forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = utils.get_forecast(forecast.loc[day.strftime('%Y-%m-%d')], rows, 'demand', True)
         probability = (temp_range - closeness) / temp_range
         forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
     print(forecast)
@@ -152,6 +168,14 @@ else:
 # metrics
 if 'demand' in forecast.columns:
     utils.print_metrics(forecast['demand'], forecast['prediction'])
+    if args.plot:
+        forecast['demand'].plot(label='Actual Demand', color='blue')
+        forecast['prediction'].plot(label='Predicted Demand', color='red')
+        plt.title('Comparison of actual and forecast demand')
+        plt.xlabel('K period of the day', fontsize=15)
+        plt.ylabel('Demand', fontsize=15)
+        plt.legend(loc='upper right', fontsize=15)
+        plt.show()
 
 output_dir = "/home/malcolm/uclan/challenge/output/"
 output_filename = '{}demand_forecast_{}.csv'.format(output_dir, dataset)
