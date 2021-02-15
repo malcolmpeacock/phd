@@ -66,6 +66,8 @@ if dataset[0:3] == 'set':
     pv.drop(pv.loc['2018-05-08'].index, inplace=True)
 #   2018-06-15  - no power for several hours but irradiance
     pv.drop(pv.loc['2018-06-15'].index, inplace=True)
+#   2018-08-12  - no power for several hours but irradiance
+    pv.drop(pv.loc['2018-08-12'].index, inplace=True)
 
 # ERROR CHECKS:
 
@@ -106,7 +108,7 @@ pv['panel_temp_C'][index_to_update] = 0.0
 # look for zero power during the middle of the day
 zero_power = pv[pv['pv_power_mw'] == 0.0].copy()
 zero_power['hour'] = zero_power.index.hour
-print(zero_power)
+#print(zero_power)
 midday_zero = zero_power[zero_power['hour'] >10]
 midday_zero = midday_zero[midday_zero['hour'] <15]
 print(' MID DAY ZERO')
