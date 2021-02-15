@@ -74,6 +74,7 @@ print(weekdays)
 # testing the algorithm
 
 if args.mode == 'test':
+    # try it for one day
 #   given_day = days[len(days)-1]
     given_day = datetime(2017,11,3).date()
     closest_day, closeness = utils.find_closest_day(given_day, days, df, df, 'tempm', True)
@@ -118,6 +119,8 @@ if args.mode == 'test':
             day_list = holidays
         closest_day, closeness = utils.find_closest_day(given_day, day_list, df, df, 'tempm', True)
         all_scores[given_day] = utils.forecast_diff(given_day, closest_day,'demand', df)
+        rows = df.loc[closest_day.strftime('%Y-%m-%d')]
+        df.loc[given_day.strftime('%Y-%m-%d'), 'prediction'] = utils.get_forecast(df.loc[given_day.strftime('%Y-%m-%d')], rows, 'demand', True)
 
     print("=========== Results")
     sorted_scores = sorted(all_scores, key=all_scores.get, reverse=True)
@@ -129,9 +132,10 @@ if args.mode == 'test':
     worst_closest, closeness = utils.find_closest_day(worst, days, df, df, 'tempm', True)
     closest_data = df.loc[worst_closest.strftime('%Y-%m-%d')]
     worst_data = df.loc[worst.strftime('%Y-%m-%d')]
+    utils.print_metrics(df['demand'], df['prediction'])
     if args.plot:
         plt.plot(closest_data['k'], closest_data['temp2'], label='Day that was found', color='blue')
-        plt.title('Finding a similar day to a given day')
+        plt.title('Worst forecast day from the data')
         plt.xlabel('K period of the day', fontsize=15)
         plt.ylabel('Temperature (Degrees C)', fontsize=15)
         plt.legend(loc='upper right', fontsize=15)
@@ -139,9 +143,17 @@ if args.mode == 'test':
 
         plt.plot(worst_data['k'], worst_data['demand'], label='Day to look for', color='red')
         plt.plot(closest_data['k'], closest_data['demand'], label='Day that was found', color='blue')
-        plt.title('Finding a similar day to a given day')
+        plt.title('Worst forecast day from the data')
         plt.xlabel('K period of the day', fontsize=15)
         plt.ylabel('Demand (MW)', fontsize=15)
+        plt.legend(loc='upper right', fontsize=15)
+        plt.show()
+
+        df['demand'].plot(label='Actual Demand', color='blue')
+        df['prediction'].plot(label='Predicted Demand', color='red')
+        plt.title('Comparison of actual and forecast demand')
+        plt.xlabel('K period of the day', fontsize=15)
+        plt.ylabel('Demand', fontsize=15)
         plt.legend(loc='upper right', fontsize=15)
         plt.show()
 
