@@ -191,6 +191,7 @@ if 'demand' in forecast.columns:
 
 output_dir = "/home/malcolm/uclan/challenge/output/"
 output_filename = '{}demand_forecast_{}.csv'.format(output_dir, dataset)
+forecast.to_csv(output_filename, float_format='%.2f')
 
 # only the demand for Bogdan
 forecast = forecast['prediction']

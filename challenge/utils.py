@@ -221,14 +221,16 @@ def solution_score(solution, pv, demand):
     C1 = 3.0
     C2 = 1.0
     Sd = []
-    new_demand = demand['prediction'].copy()
+    Rpd = []
+    P1d = []
+    new_demand = demand.copy()
     days = pd.Series(solution.index.date).unique()
     # For each day ...
     for day in days:
         peak_old = 0
         peak_new = 0
-        day_demand = demand.loc[day.strftime('%Y-%m-%d'), 'prediction']
-        day_pv = pv.loc[day.strftime('%Y-%m-%d'), 'prediction']
+        day_demand = demand.loc[day.strftime('%Y-%m-%d')]
+        day_pv = pv.loc[day.strftime('%Y-%m-%d')]
         day_solution = solution.loc[day.strftime('%Y-%m-%d')]
 #       print(day_demand, day_pv, day_solution)
         B=[]
@@ -257,6 +259,9 @@ def solution_score(solution, pv, demand):
         Rp = 100 * ( peak_old - peak_new ) / peak_old
         print('P1 {} P2 {} peak_old {} peak_new {} Rp {}'.format(P1, P2, peak_old, peak_new, Rp) )
         Sd.append(Rp * ( P1 * C1 + P2 * C2 ) )
+        Rpd.append(Rp)
+        P1d.append(P1)
+    print('Rpd average {} P1 average {}'.format( sum(Rpd) / 7.0, sum(P1d) / 7.0 ) )
     Sfinal = sum(Sd) / 7.0
     return Sfinal, new_demand
 

@@ -113,7 +113,7 @@ if args.demand and args.pv:
     pv_filename = input_dir + args.pv
     pv = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
-    final_score, new_demand = utils.solution_score(s, pv, demand)
+    final_score, new_demand = utils.solution_score(s, pv['prediction'], demand['prediction'])
     print('Final Score {}'.format(final_score) )
 
     if args.plot:

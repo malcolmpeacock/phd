@@ -55,8 +55,8 @@ print('Reading pv from {}'.format(pv_filename) )
 pv = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
 # create pv weighted average
-pv['average'] = pv['prediction'].rolling(window=5).mean()
-pv['prediction'].fillna(0.0)
+pv['average'] = pv['prediction'].rolling(window=7, center=True).mean()
+pv['average'].fillna(0.0)
 
 # create solution file of zeros
 
@@ -115,7 +115,7 @@ for day in days:
     print(res.x)
     solution.loc[solution_krange.index, 'charge_MW'] = res.x
 
-final_score, new_demand = utils.solution_score(solution['charge_MW'], pv, demand)
+final_score, new_demand = utils.solution_score(solution['charge_MW'], pv['prediction'], demand['prediction'])
 print('Final Score {}'.format(final_score) )
 
 if args.plot:

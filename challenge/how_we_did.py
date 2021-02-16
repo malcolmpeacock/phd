@@ -61,15 +61,20 @@ print(solution)
 #print(data)
 
 pv_new = pv_new.loc[solution.index]
-print(pv_new)
+#print(pv_new)
 demand_new = demand_new.loc[solution.index]
-print(demand_new)
+#print(demand_new)
 
+print('PV Forecast')
 utils.print_metrics(pv_new['irradiance_Wm-2'], pv_forecast['prediction'])
+print('Demand Forecast')
 utils.print_metrics(demand_new, demand_forecast['prediction'])
 
 print('Demand total Forecast {} Actual {}'.format(demand_forecast['prediction'].sum(), demand_new.sum() ) )
 print('PV total Forecast {} Actual {}'.format(pv_forecast['prediction'].sum(), pv_new['pv_power_mw'].sum() ) )
+
+final_score, modified_demand = utils.solution_score(solution, pv_new['pv_power_mw'], demand_new)
+print('Final Score {}'.format(final_score) )
 
 # plots
 if args.plot:
@@ -78,6 +83,7 @@ if args.plot:
     demand_forecast['prediction'].plot(label='Demand Forecast', color='orange')
     demand_new.plot(label='Actual demand', color='yellow')
     solution.plot(label='Battery Charge', color='green')
+    modified_demand.plot(label='Modified Demand', color='black')
     plt.title('How we did set {}'.format(set1) )
     plt.xlabel('Hour of the year', fontsize=15)
     plt.ylabel('MWh', fontsize=15)

@@ -97,7 +97,6 @@ utils.print_metrics(df['pv_ghi'], df['sun2'])
 # weather data (forecast)
 forecast_filename = '{}forecast_{}.csv'.format(output_dir, dataset)
 forecast = pd.read_csv(forecast_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
-print(forecast)
 
 if args.week != 'set':
     days = df.resample('D', axis=0).mean().index.date
@@ -111,19 +110,14 @@ if args.week != 'set':
        else:
            week = int(week)
     first_day = days[len(days)-1] + pd.Timedelta(days=1) - pd.Timedelta(weeks=nweeks-week)
-    print(type(first_day))
     last_day  = first_day + pd.Timedelta(days=6)
     last_day  = datetime.combine(last_day, datetime.min.time())
     last_day  += timedelta(hours=23,minutes=30)
-    print(first_day, last_day)
     columns = forecast.columns.append(pd.Index(['pv_power']))
-    print(type(columns))
     forecast = df.loc[first_day : last_day]
     forecast = forecast[columns]
     # drop this week from main data as we will forecast it
     df.drop(df[first_day : last_day].index, inplace=True)
-
-print(forecast)
 
 # Set up Naive PV forecast based on same as last week
 forecast['probability'] = 0.9
@@ -186,9 +180,7 @@ if method == 'sdays':
         new_day6.columns = ['pv6']
         new_days = pd.concat([new_day1, new_day2, new_day5, new_day6], axis=1)
         new_days.index=forecast.loc[day.strftime('%Y-%m-%d')].index
-        print(new_days)
         utils.add_weighted(new_days, 'pv', 'pv_power')
-        print(new_days)
         forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = new_days['pv_power'].values
         probability = 0.8
         forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
