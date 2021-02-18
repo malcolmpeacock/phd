@@ -326,3 +326,30 @@ def charge_sum(df, threshold):
     diff = df_above['average'] - threshold
     csum = diff.sum()
     return csum, diff
+
+# function to find the closest half hour periods given certain parameters
+# and thresholds
+def find_closest(needle, haystack, thresholds, parm):
+    distance = {}
+    for tparm in thresholds:
+        distance[tparm] = thresholds[tparm] * ( haystack[tparm].max() - haystack[tparm].min() )
+#   print(distance)
+    values_in_range = []
+    for index, row in haystack.iterrows():
+        matching = True
+#       print(row)
+        for tparm in thresholds:
+            if abs(row[tparm] - needle[tparm]) > distance[tparm] :
+                matching = False
+        #       print('Did not match {} {} {} {}'.format(tparm, row[tparm], needle[tparm], distance[tparm]) )
+        if matching:
+        #   print('Matched {} {}'.format(parm, row[parm]) )
+            values_in_range.append(row[parm])
+    if len(values_in_range) ==0:
+            print('ERROR: no matches found for {}'.format(index) )
+            quit()
+    s = pd.Series(values_in_range)
+    prediction = { 'mean' : s.mean(), 'sd' : s.std(), 'n' : len(s) }
+    print(prediction)
+    return prediction
+    

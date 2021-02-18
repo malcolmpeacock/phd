@@ -36,7 +36,7 @@ print('Cleaning {} {}'.format(dataset, weather_filename) )
 weather = pd.read_csv(weather_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
 # up sample to 30 mins (with interpolation)
-weather = weather.resample('30min').interpolate()
+weather = weather.resample('30min').interpolate(method='cubic')
 
 print(weather)
 
@@ -95,10 +95,14 @@ if args.plot:
 
     fewdays = weather['2018-06-01 00:00:00' : '2018-06-04 23:30:00']
     fewdays['solar_location1'].plot(label='sun 1', color='red')
-    fewdays['solar_location2'].plot(label='sun 2', color='green')
-    plt.title('Solar Irradiance')
-    plt.xlabel('Hour of the year', fontsize=15)
+    ax = fewdays['solar_location2'].plot(label='sun 2', color='green')
     plt.ylabel('Irradiance (W/m2)', fontsize=15)
+    ax2 = ax.twinx()
+    ax2.set_ylabel('Temperature (Degrees C)', fontsize=15)
+    fewdays['temp_location1'].plot(label='temp 1', color='blue')
+    fewdays['temp_location2'].plot(label='temp 2', color='purple')
+    plt.title('Solar Irradiance and temperature')
+    plt.xlabel('Hour of the year', fontsize=15)
     plt.legend(loc='upper right', fontsize=15)
     plt.show()
 

@@ -61,13 +61,18 @@ print(forecast)
 
 # find most similar day to a given day and then plot the profiles.
 
+# list of unique days
 days = pd.Series(df.index.date).unique()
 print(" -- days --")
 print(days)
-holidays = pd.Series(df[df['holiday']==1].index.date).unique()
+
+# holidays are either public holidays or weekends
 print(" -- holidays --")
+holidays = pd.Series(df[ (df['wd']>4) | (df['ph']==1) ].index.date).unique()
 print(holidays)
-weekdays = pd.Series(df[df['holiday']==0].index.date).unique()
+
+# week days
+weekdays = pd.Series(df[df['wd']<5].index.date).unique()
 print(" -- weekdays --")
 print(weekdays)
 
@@ -164,7 +169,7 @@ else:
     for day in fdays:
         print("Testing {}".format(day))
         day_list = weekdays
-        if forecast.loc[day.strftime('%Y-%m-%d'),'holiday'][0] == 1:
+        if forecast.loc[day.strftime('%Y-%m-%d'),'ph'][0] == 1 or forecast.loc[day.strftime('%Y-%m-%d'),'wd'][0] >4:
             print('Holiday')
             day_list = holidays
         closest_day, closeness = utils.find_closest_day(day, day_list, forecast, df, 'tempm', True)
