@@ -181,8 +181,12 @@ def create_day(days, df, parm):
     df_days = df_days[['k', parm]]
 
     newday = df_days.groupby('k').mean()
-#   newday.index=df.loc[days[0].strftime('%Y-%m-%d')].index
     return newday
+
+# function to get the mean power value for the given half hour periods
+def create_half_hour(periods, pv_power):
+    df_periods = pd.Series([ pv_power.loc[period] for period in periods] )
+    return df_periods.mean()
 
 # function to assess the forecast accuracy between 2 days
 def forecast_diff(day1, day2, parm, df):
@@ -353,3 +357,22 @@ def find_closest(needle, haystack, thresholds, parm):
     print(prediction)
     return prediction
     
+# function to find the closest half hour periods to a given period
+# with a similar solar zenith
+def find_closest_periods(needle, haystack, tparm, n):
+    zparm = 'zenith'
+    first_row = haystack.iloc[0]
+    closest_score = abs(first_row[tparm] - needle[tparm])
+    closest_hours=pd.Series([closest_score], index=[haystack.index[0]], name='shours')
+    for index, row in haystack.iterrows():
+        if abs(row[zparm] - needle[zparm]) < 10.0 :
+            closest_score = abs(row[tparm] - needle[tparm])
+            # if not got enough hours yet, just add the new one.
+            if len(closest_hours) < n:
+                closest_hours[index] = closest_score
+            else:
+                if closest_score < closest_hours.max():
+                    idmax = closest_hours.idxmax()
+                    closest_hours.drop(idmax, inplace=True)
+                    closest_hours[index] = closest_score
+    return closest_hours
