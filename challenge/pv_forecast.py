@@ -34,11 +34,15 @@ class PVregression(torch.nn.Module):
         self.c = torch.nn.Parameter(torch.randn(()))
         self.d = torch.nn.Parameter(torch.randn(()))
         self.e = torch.nn.Parameter(torch.randn(()))
+        self.act1 = nn.ReLU() 
 
     # x is a tensore of input data
     def forward(self, x):
-        value = self.a + self.b * x[:,0] + self.c * x[:,1] + self.d * x[:,2] + self.e * x[:,3]
-        return value
+#       pv = self.a + self.b * x[:,0] + self.c * x[:,1] + self.d * x[:,2] + self.e * x[:,3]
+        pv = (self.a + x[:,0]) * ( self.b * x[:,1] + self.c * x[:,2] + self.d * x[:,3] + self.e * x[:,4] )
+#       return pv.clamp(min=0.0)
+        return pv
+#       return self.act1(pv)
 
     def string(self):
         return f'y = {self.a.item()} + {self.b.item()} x + {self.c.item()} x^2 + {self.d.item()} x^3'
@@ -179,12 +183,15 @@ def forecast_r2(df, forecast, day):
 
 # reg - regression
 
-def forecast_reg(df, forecast, day):
+def forecast_reg(df, forecast, day, method):
     # don't try to predict pv at night!
     day_df = df[df['zenith'] < 87]
     # set up inputs
 #   input_columns = ['zenith', 'sunw', 'tempw']
-    input_columns = ['sun2', 'sun1', 'sun5', 'sun6']
+    if method == 'regl':
+        input_columns = ['sun2', 'sun1', 'sun5', 'sun6']
+    if method == 'regp':
+        input_columns = ['zenith', 'sun2', 'sun1', 'sun5', 'sun6']
     input_df = day_df[input_columns].copy()
 
     # set up output
@@ -225,10 +232,13 @@ def forecast_reg(df, forecast, day):
     next(iter(train_dl))
 
     num_inputs = len(input_df.columns)
+    
+    if method == 'regl':
     # model using regression
-#   model = nn.Linear(num_inputs,1)
+        model = nn.Linear(num_inputs,1)
+    if method == 'regp':
     # custom function didn't converge
-    model = PVregression()
+        model = PVregression()
 
     opt = torch.optim.SGD(model.parameters(), lr=1e-5)
 
@@ -239,7 +249,7 @@ def forecast_reg(df, forecast, day):
     loss = loss_fn(model(inputs), targets)
     print(loss)
     # Train the model for 100 epochs
-    num_epochs=200
+    num_epochs=300
     losses = fit(num_epochs, model, loss_fn, opt, train_dl)
     print('Training loss: ', loss_fn(model(inputs), targets))
     preds = model(inputs)
@@ -463,8 +473,8 @@ for day in fdays:
     if method == 'r2':
         forecast_r2(history, forecast, day)
 
-    if method == 'reg':
-        losses = forecast_reg(history, forecast, day)
+    if method[0:3] == 'reg':
+        losses = forecast_reg(history, forecast, day, method)
         if args.plot:
             plt.plot(losses)
             plt.title('PV Regression convergence')

@@ -60,7 +60,9 @@ def sethols(df):
     df['wd'] = df['wd'].astype(int)
 
     # dst indicator
-    df['dsk'] = df['k'] + 2 * (df.index.hour - df.index.tz_localize('UTC').tz_convert(tz=pytz.timezone('Europe/London')).hour)
+    df['dsk'] = df['k'] + 2 * (df.index.hour - df.index.tz_localize('UTC').tz_convert(tz=pytz.timezone('Europe/London')).hour + 1)
+    df.loc[df['dsk']==95, 'dsk'] = 47
+    df.loc[df['dsk']==96, 'dsk'] = 48
 
 def get_zenith(site_location, index):
     solar_position = site_location.get_solarposition(times=index)
