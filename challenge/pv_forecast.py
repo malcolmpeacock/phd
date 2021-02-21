@@ -22,6 +22,18 @@ import torch.nn.functional as F
 # custom code
 import utils
 
+# function to remove inaccurate weather forecasts
+
+def remove_bad_weather(df, bad):
+    before = len(df)
+    df['acc2'] = np.abs(df['sun2'].values - df['pv_ghi'].values)
+    cut_off = df['acc2'].max() * bad
+    todrop = df[df['acc2'] > cut_off]
+#   df.drop( df['acc2'] > cut_off, inplace=True )
+    df.drop( todrop.index, inplace=True )
+    after = len(df)
+    print('Removing inacurate weather above {} of the maximum. before {} after {}'.format(bad, before, after))
+
 # class for custom regression
 
 class PVregression(torch.nn.Module):
@@ -36,16 +48,48 @@ class PVregression(torch.nn.Module):
         self.e = torch.nn.Parameter(torch.randn(()))
         self.act1 = nn.ReLU() 
 
-    # x is a tensore of input data
+    # x is a tensor of input data
     def forward(self, x):
 #       pv = self.a + self.b * x[:,0] + self.c * x[:,1] + self.d * x[:,2] + self.e * x[:,3]
-        pv = (self.a + x[:,0]) * ( self.b * x[:,1] + self.c * x[:,2] + self.d * x[:,3] + self.e * x[:,4] )
+#       pv = (x[:,0] - self.a) * ( self.b * x[:,1] + self.c * x[:,2] + self.d * x[:,3] + self.e * x[:,4] )
+        pv = self.a + self.b * x[:,0] + self.c * x[:,1] + self.d * x[:,2] + self.e * x[:,3] + self.e * x[:,4]
 #       return pv.clamp(min=0.0)
+# this gives negative power.
         return pv
+#    this causes zero pv
 #       return self.act1(pv)
 
     def string(self):
         return f'y = {self.a.item()} + {self.b.item()} x + {self.c.item()} x^2 + {self.d.item()} x^3'
+
+# regp class
+
+class RegP(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear1 = nn.Linear(4, 1)
+        self.bilinear1 = nn.Bilinear(1, 1, 1)
+        self.act1 = nn.LeakyReLU() 
+
+    # Perform the computation
+    def forward(self, x):
+        y = self.linear1(x[:,1:5])
+        z = self.bilinear1(x[:,0].view(-1,1),y)
+        z = self.act1(z).clamp(min=0.0)
+        return z
+
+# regl class
+
+class RegL(nn.Module):
+    def __init__(self,num_inputs,num_outputs):
+        super().__init__()
+        self.linear1 = nn.Linear(num_inputs, num_outputs)
+
+    # Perform the computation
+    def forward(self, x):
+        x = self.linear1(x).clamp(min=0.0)
+        return x
+
 
 # class to create ANN
 
@@ -179,11 +223,11 @@ def forecast_r2(df, forecast, day):
     df['prediction'] = df['sun2'] * res_grad + res_const
 #   pred = pv[['prediction', 'pv_power']]
 #   print(pred['2018-06-01 10:00:00' : '2018-06-01 15:00:00'] )
-    forecast.loc[day, 'prediction'] = forecast.loc[day, 'sun2'] * res_grad + res_const
+    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = forecast.loc[day.strftime('%Y-%m-%d'), 'sun2'] * res_grad + res_const
 
 # reg - regression
 
-def forecast_reg(df, forecast, day, method):
+def forecast_reg(df, forecast, day, method, seed, num_epochs):
     # don't try to predict pv at night!
     day_df = df[df['zenith'] < 87]
     # set up inputs
@@ -218,77 +262,84 @@ def forecast_reg(df, forecast, day, method):
         quit()
 
     inputs = torch.tensor(input_df.values.astype(np.float32))
-    print("inputs")
-    print(inputs)
+#   print("inputs")
+#   print(inputs)
 #   The .view seems to tell it what shape the data is
     targets = torch.tensor(output.values.astype(np.float32)).view(-1,1)
-    print("targets")
-    print(targets)
-    torch.manual_seed(1)    # reproducible
+#   print("targets")
+#   print(targets)
+    torch.manual_seed(seed)  
     train_ds = TensorDataset(inputs, targets)
 
-    batch_size = 48
+#   batch_size = 48
+    batch_size = 60
     train_dl = DataLoader(train_ds, batch_size, shuffle=True)
     next(iter(train_dl))
 
     num_inputs = len(input_df.columns)
+    print('num_inputs {}'.format(num_inputs))
     
     if method == 'regl':
     # model using regression
-        model = nn.Linear(num_inputs,1)
+#       model = nn.Linear(num_inputs,1)
+        model = RegL(num_inputs,1)
     if method == 'regp':
-    # custom function didn't converge
-        model = PVregression()
+    # custom function converges but gives negative power
+#       model = PVregression()
+        model = RegP()
 
-    opt = torch.optim.SGD(model.parameters(), lr=1e-5)
+#   opt = torch.optim.SGD(model.parameters(), lr=1e-6)
+#   opt = torch.optim.SGD(model.parameters(), lr=1e-5)
+#   opt = torch.optim.SGD(model.parameters(), lr=1e-4)
+    opt = torch.optim.SGD(model.parameters(), lr=1e-3)
+#   opt = torch.optim.SGD(model.parameters(), lr=1e-9)
 
     # Define loss function
     loss_fn = F.mse_loss
 #   loss_fn = F.l1_loss
 
-    loss = loss_fn(model(inputs), targets)
-    print(loss)
     # Train the model for 100 epochs
-    num_epochs=300
+#   num_epochs=300
+    print('Starting loss: ', loss_fn(model(inputs), targets))
     losses = fit(num_epochs, model, loss_fn, opt, train_dl)
     print('Training loss: ', loss_fn(model(inputs), targets))
     preds = model(inputs)
-    print(preds)
+#   print(preds)
     # prediction
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
-    print(forecast_day)
+#   print(forecast_day)
     day_f = forecast_day[forecast_day['zenith'] < 87]
     input_f = day_f[input_columns].copy()
-    print(input_f)
+#   print(input_f)
     # normalise the inputs (using same max as for the model)
     for column in input_f.columns:
         input_f[column] = input_f[column] / input_max[column]
     f_inputs = torch.tensor(input_f.values.astype(np.float32))
-    print('f_inputs')
-    print(f_inputs)
+#   print('f_inputs')
+#   print(f_inputs)
     preds = model(f_inputs)
-    print(preds)
+#   print(preds)
     forecast_day['prediction'] = 0.0
     # denormalize using df for the original model
     prediction_values = preds.detach().numpy() * output_max
-    print(prediction_values)
+#   print(prediction_values)
     # set forecast for zentih angle for daylight and denormalize using
     forecast_day.loc[forecast_day['zenith']<87, 'prediction'] = prediction_values
-    print(forecast_day['prediction'].values)
+#   print(forecast_day['prediction'].values)
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = forecast_day['prediction'].values
 
     return losses
 
 # ann - artificial neural network.
 
-def forecast_ann(df, forecast, day):
+def forecast_ann(df, forecast, day, seed, num_epochs):
     # don't try to predict pv at night!
     day_df = df[df['zenith'] < 87]
     # set up inputs
-#   input_columns = ['zenith', 'sunw', 'tempw']
-    input_columns = ['sun1', 'sun2', 'sun5', 'sun6']
+    input_columns = ['zenith', 'sunw', 'tempw', 'cs_ghi']
+#   input_columns = ['sun1', 'sun2', 'sun5', 'sun6']
     input_df = day_df[input_columns].copy()
-    print(input_df)
+#   print(input_df)
 
     # set up output
     output_column = 'pv_power'
@@ -314,13 +365,14 @@ def forecast_ann(df, forecast, day):
         quit()
 
     inputs = torch.tensor(input_df.values.astype(np.float32))
-    print("inputs")
-    print(inputs)
+#   print("inputs")
+#   print(inputs)
 #   The .view seems to tell it what shape the data is
     targets = torch.tensor(output.values.astype(np.float32)).view(-1,1)
-    print("targets")
-    print(targets)
-    torch.manual_seed(1)    # reproducible
+#   print("targets")
+#   print(targets)
+#   torch.manual_seed(1)    # reproducible
+    torch.manual_seed(seed)    # reproducible
 #   torch.manual_seed(8)    # reproducible
     train_ds = TensorDataset(inputs, targets)
 #   train_ds[0:3]
@@ -328,7 +380,7 @@ def forecast_ann(df, forecast, day):
     # Define data loader
 #   batch_size = 1
 #   batch_size = 5
-    batch_size = 48
+    batch_size = 100
     train_dl = DataLoader(train_ds, batch_size, shuffle=True)
     next(iter(train_dl))
 
@@ -349,7 +401,7 @@ def forecast_ann(df, forecast, day):
     loss = loss_fn(model(inputs), targets)
     print(loss)
     # Train the model for 100 epochs
-    num_epochs=100
+#   num_epochs=300
     losses = fit(num_epochs, model, loss_fn, opt, train_dl)
     print('Training loss: ', loss_fn(model(inputs), targets))
     # prediction
@@ -358,7 +410,7 @@ def forecast_ann(df, forecast, day):
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     day_f = forecast_day[forecast_day['zenith'] < 87]
     input_f = day_f[input_columns].copy()
-    print(input_f)
+#   print(input_f)
     # normalise the inputs (using same max as for the model)
     for column in input_f.columns:
         input_f[column] = input_f[column] / input_max[column]
@@ -372,7 +424,7 @@ def forecast_ann(df, forecast, day):
     forecast_day.loc[forecast_day['zenith']<87, 'prediction'] = prediction_values
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = forecast_day['prediction'].values
 
-    print(forecast)
+#   print(forecast)
     return losses
 # closest 10 hours from each weather grid, then weighted average
 
@@ -398,6 +450,9 @@ parser.add_argument('set', help='input data eg set0')
 parser.add_argument('--method', action="store", dest="method", help='Forecasting method: reg2, reg, ann, sday' , default='simple' )
 parser.add_argument('--day', action="store", dest="day", help='Day to forecast: set=read the set forecast file, first= first day, last=last day, all=loop to forecast all days based on the others, otherwise integer day' , default='set' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--bad', action="store", dest="bad", help='Fraction of bad weather to remove, default=0.0', type=float, default=0.0)
+parser.add_argument('--seed', action="store", dest="seed", help='Random seed, default=1.0', type=float, default=1.0)
+parser.add_argument('--epochs', action="store", dest="epochs", help='Number of epochs', type=int, default=100)
 
 args = parser.parse_args()
 method = args.method
@@ -410,7 +465,7 @@ output_dir = "/home/malcolm/uclan/challenge/output/"
 merged_filename = '{}merged_{}.csv'.format(output_dir, dataset)
 df = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
-print(df)
+#print(df)
 
 # weather data (forecast)
 forecast_filename = '{}forecast_{}.csv'.format(output_dir, dataset)
@@ -428,14 +483,14 @@ if args.day != 'set':
            if args.day == 'last':
                day=len(days)-1
            else:
-               day = int(day)
+               day = int(args.day)
         day_text = days[day].strftime("%Y-%m-%d")
         day_start = day_text + ' 00:00:00'
         day_end = day_text + ' 23:30:00'
         forecast = df.loc[day_start : day_end]
         forecast = forecast[columns]
 
-print(forecast)
+#print(forecast)
 
 # for each day to be forecast ...
 fdays = pd.Series(forecast.index.date).unique()
@@ -446,9 +501,14 @@ for day in fdays:
     day_end = day_text + ' 23:30:00'
     # drop this day from main data
     if args.day == 'set':
-        history = forecast
+        history = df
     else:
         history = df.drop(df.loc[day_text].index)
+
+    # remove bad weather data
+    if args.bad > 0:
+        print('Removing bad weather values')
+        remove_bad_weather(history, args.bad)
 
     # Naive PV forecast based on same as last week
     if method == 'naive':
@@ -474,7 +534,7 @@ for day in fdays:
         forecast_r2(history, forecast, day)
 
     if method[0:3] == 'reg':
-        losses = forecast_reg(history, forecast, day, method)
+        losses = forecast_reg(history, forecast, day, method, args.seed, args.epochs)
         if args.plot:
             plt.plot(losses)
             plt.title('PV Regression convergence')
@@ -483,7 +543,7 @@ for day in fdays:
             plt.show()
 
     if method == 'ann':
-        losses = forecast_ann(history, forecast, day)
+        losses = forecast_ann(history, forecast, day, args.seed, args.epochs)
         if args.plot:
             plt.plot(losses)
             plt.title('pv ann convergence')
@@ -491,7 +551,7 @@ for day in fdays:
             plt.ylabel('Loss', fontsize=15)
             plt.show()
 
-print(forecast)
+#print(forecast)
 
 # metrics
 if 'pv_power' in forecast.columns:
