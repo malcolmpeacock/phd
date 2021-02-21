@@ -98,21 +98,29 @@ def ghi2irradiance(site_location, tilt, surface_azimuth, in_ghi):
 parser = argparse.ArgumentParser(description='Clean weather data.')
 parser.add_argument('set', help='weather file eg set0')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--raw', action="store_true", dest="raw", help='Use the original uncorrected data', default=False)
 
 args = parser.parse_args()
 dataset = args.set
 
 # read in the data
+input_dir = "/home/malcolm/uclan/challenge/input/"
 output_dir = "/home/malcolm/uclan/challenge/output/"
 
 # demand data
 demand_filename = '{}demand_fixed_{}.csv'.format(output_dir, dataset)
+if args.raw:
+    demand_filename = '{}demand_train_{}.csv'.format(input_dir, dataset)
 demand = pd.read_csv(demand_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 print(demand)
 
 # pv data
 pv_filename = '{}pv_fixed_{}.csv'.format(output_dir, dataset)
+if args.raw:
+    pv_filename = '{}pv_train_{}.csv'.format(input_dir, dataset)
 pv = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+if args.raw:
+    pv.columns = ['pv_ghi','pv_power','pv_temp']
 print(pv)
 
 # weather data
@@ -202,9 +210,13 @@ output_dir = "/home/malcolm/uclan/challenge/output/"
 
 # output merged data.
 output_filename = '{}merged_{}.csv'.format(output_dir, dataset)
+if args.raw:
+    output_filename = '{}merged_raw_{}.csv'.format(output_dir, dataset)
 df.to_csv(output_filename, float_format='%.2f')
 
 # output weather forecast
 output_filename = '{}forecast_{}.csv'.format(output_dir, dataset)
+if args.raw:
+    output_filename = '{}forecast_raw_{}.csv'.format(output_dir, dataset)
 forecast.to_csv(output_filename, float_format='%.2f')
 

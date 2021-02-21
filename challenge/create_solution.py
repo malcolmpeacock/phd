@@ -12,6 +12,8 @@ import numpy as np
 import math
 from scipy.optimize import minimize
 from scipy.optimize import Bounds
+from scipy.signal import gaussian
+from scipy.ndimage import filters
 
 # custom code
 import utils
@@ -55,8 +57,14 @@ print('Reading pv from {}'.format(pv_filename) )
 pv = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
 # create pv weighted average
-pv['average'] = pv['prediction'].rolling(window=7, center=True).mean()
-pv['average'].fillna(0.0)
+#pv['average'] = pv['prediction'].rolling(window=7, center=True).mean()
+#pv['average'].fillna(0.0)
+
+#b = gaussian(39, 10)
+b = gaussian(39, 7)
+#b = gaussian(10, 5)
+gf = filters.convolve1d(pv['prediction'].values, b/b.sum())
+pv['average'] = gf
 
 # create solution file of zeros
 
@@ -111,7 +119,10 @@ for day in days:
     x0 = np.array(solution_krange['charge_MW'])
 #   res = minimize(peak, x0, method='trust-constr', options={'disp': True, 'maxiter':1000}, constraints=cons, bounds=Bounds(-2.5,0.0) )
 #   res = minimize(peak, x0, method='SLSQP', options={'xatol': 1e-8, 'disp': True, 'maxiter':50}, constraints=cons, bounds=Bounds(-2.5,0.0) )
-    res = minimize(peak, x0, method='SLSQP', options={'disp': True, 'maxiter':200}, constraints=cons, bounds=Bounds(-2.5,0.0) )
+#
+# descreasing ftol seems to improve the result
+    res = minimize(peak, x0, method='SLSQP', options={'disp': True, 'maxiter':200, 'ftol':1e-11}, constraints=cons, bounds=Bounds(-2.5,0.0) )
+#   res = minimize(peak, x0, method='SLSQP', options={'disp': True, 'maxiter':200, finite_diff_rel_step: None}, constraints=cons, bounds=Bounds(-2.5,0.0), jac='2-point' )
     print(res.x)
     solution.loc[solution_krange.index, 'charge_MW'] = res.x
 
