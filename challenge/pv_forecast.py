@@ -73,7 +73,10 @@ class RegP(nn.Module):
 
     # Perform the computation
     def forward(self, x):
+        # tensor columns 1 to 4 which is sun1, 2, 5, 6
+        # in a linear combination a0 * sun1 + a1 * sun2 + ...
         y = self.linear1(x[:,1:5])
+        # then tensor columns 0 which is zenith multiplied by y
         z = self.bilinear1(x[:,0].view(-1,1),y)
         z = self.act1(z).clamp(min=0.0)
         return z
@@ -142,11 +145,17 @@ def fit(num_epochs, model, loss_fn, opt, train_dl):
 
 # naive forecast based on the previous week
 def forecast_naive(df, forecast, day):
-    if day == df.index[0].date:
-        copy_day = df.last_valid_index().date.strftime('%Y-%m-%d')
-    else:
-        copy_day = (day - pd.Timedelta(days=1) ).strftime('%Y-%m-%d')
-    print(day, copy_day)
+    copy_day = df.last_valid_index().date.strftime('%Y-%m-%d')
+    # if the previous day doesn't exist (because its the first day) then
+    # use the last day instead
+    if copy_day not in df.index:
+        print('{} NOT FOUND using last day instead'.format(copy_day))
+        copy_day = df.last_valid_index().date().strftime('%Y-%m-%d')
+    if len(df.loc[copy_day, 'pv_power' ].values) == 0:
+        print('{} has no pv_power values, using last day instead'.format(copy_day))
+        copy_day = df.last_valid_index().date().strftime('%Y-%m-%d')
+    print('For day {} use day {}'.format(day, copy_day) )
+
     forecast['probability'] = 0.9
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = df.loc[copy_day, 'pv_power' ].values
 
