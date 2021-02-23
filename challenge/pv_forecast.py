@@ -113,20 +113,23 @@ class SimpleNet(nn.Module):
     # Initialize the layers
     def __init__(self,num_inputs,num_outputs):
         super().__init__()
-        self.linear1 = nn.Linear(num_inputs, num_inputs)
+#       num_nodes = num_inputs
+        num_nodes = 10
+        self.linear1 = nn.Linear(num_inputs, num_nodes)
         # Activation function
-        self.act1 = nn.LeakyReLU() 
+        self.act2 = nn.LeakyReLU() 
 #       self.act1 = nn.ReLU() 
-#       self.act1 = nn.Sigmoid() 
+        self.act1 = nn.Sigmoid() 
 #       Layer 1
-        self.linear2 = nn.Linear(num_inputs, num_outputs)
+        self.linear2 = nn.Linear(num_nodes, num_outputs)
 
     # Perform the computation
     def forward(self, x):
         x = self.linear1(x)
         x = self.act1(x)
-#       x = self.linear2(x)
-        x = self.linear2(x).clamp(min=0.0)
+        x = self.linear2(x)
+#       x = self.linear2(x).clamp(min=0.0)
+        x = self.act2(x)
         return x
 
 # Define a utility function to train the model
@@ -325,8 +328,12 @@ def forecast_reg(df, forecast, day, method, seed, num_epochs, set_weights):
     print('Starting loss: ', loss_fn(model(inputs), targets))
     losses = fit(num_epochs, model, loss_fn, opt, train_dl)
     print('Training loss: ', loss_fn(model(inputs), targets))
-    print(model.bilinear1.weight.data)
-    print(model.bilinear1.bias.data)
+    if method == 'regp':
+        print(model.bilinear1.weight.data)
+        print(model.bilinear1.bias.data)
+        print(model.linear1.weight.data)
+        print(model.linear1.bias.data)
+
     preds = model(inputs)
 #   print(preds)
     # prediction
@@ -360,7 +367,8 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
     # don't try to predict pv at night!
     day_df = df[df['zenith'] < 87]
     # set up inputs
-    input_columns = ['zenith', 'sunw', 'tempw', 'cs_ghi']
+    input_columns = ['zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'tempw', 'cs_ghi']
+#   input_columns = ['zenith', 'sunw', 'tempw', 'cs_ghi']
 #   input_columns = ['sun1', 'sun2', 'sun5', 'sun6']
     input_df = day_df[input_columns].copy()
 #   print(input_df)
@@ -415,12 +423,12 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
     # Define optimizer
 #   opt = torch.optim.SGD(model.parameters(), lr=1e-2)
 #   opt = torch.optim.SGD(model.parameters(), lr=1e-4)
-    opt = torch.optim.SGD(model.parameters(), lr=1e-5)
-#   opt = torch.optim.SGD(model.parameters(), lr=1e-6)
+#   opt = torch.optim.SGD(model.parameters(), lr=1e-5)
+    opt = torch.optim.SGD(model.parameters(), lr=1e-6)
 
     # Define loss function
-    loss_fn = F.mse_loss
-#   loss_fn = F.l1_loss
+#   loss_fn = F.mse_loss
+    loss_fn = F.l1_loss
 
     loss = loss_fn(model(inputs), targets)
     print(loss)
@@ -589,7 +597,9 @@ for id in range(len(fdays)):
 
 # metrics
 if 'pv_power' in forecast.columns:
+    kf = forecast[ (forecast['k'] > 12) & (forecast['k'] < 32)]
     utils.print_metrics(forecast['pv_power'], forecast['prediction'], args.plot)
+    utils.print_metrics(kf['pv_power'], kf['prediction'], False )
     if args.plot:
         forecast['pv_power'].plot(label='actual power', color='blue')
         forecast['prediction'].plot(label='predicted power', color='red')

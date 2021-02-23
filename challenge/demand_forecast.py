@@ -46,10 +46,13 @@ class Demandregression(torch.nn.Module):
     # x[0] is mean temperature
     # x[1] is holiday
     def forward(self, x):
+        # t = temperature
         t = x[:,0].view(-1,1)
 #       print(t)
+        # h = holiday flag
         h = x[:,1].view(-1,1)
 #       print(h)
+        # tsq = t-squared
         tsq = self.bilinear1(t, t)
 #       print(tsq)
         xx = torch.cat([tsq, t, h], 1)
@@ -329,32 +332,48 @@ def forecast_nreg(df, forecast, day, seed, num_epochs):
 
 # reg - regression
 
-def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period):
+def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki):
     pred_values=[]
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     if period == all:
         # for each k period, train a seperate model ...
         for index, row in forecast_day.iterrows():
             dsk = row['dsk']
-            print('Period {}'.format(dsk) )
-            dsk_df = df[df['dsk'] == dsk]
-            dsk_f = forecast_day[forecast_day['dsk'] == dsk]
-            prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk)
+            if ki and (row['k'] < 32 or row['k'] > 42):
+                prediction_values = 1.0
+            else:
+                print('Period {}'.format(dsk) )
+                dsk_df = df[df['dsk'] == dsk]
+                dsk_f = forecast_day[forecast_day['dsk'] == dsk]
+                prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki)
+                if math.isnan(prediction_values):
+                    print('WARNING NaN set to Zero at period {}'.format(row['k']))
+                    prediction_values = 0
+                if not math.isfinite(prediction_values):
+                    print('WARNING Inf set to Zero at period {}'.format(row['k']))
+                    prediction_values = 0
             pred_values.append(prediction_values)
         forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = pd.Series(pred_values, index=forecast_day.index)
     else:
         dsk = int(period)
         dsk_df = df[df['dsk'] == dsk]
         dsk_f = forecast_day[forecast_day['dsk'] == dsk]
-        prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk)
+        prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki)
         print('Predicted value {} for period {}'.format(prediction_values, period))
         quit()
 
-def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk):
+def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki):
     # set up inputs
     if method == 'regl':
 #       input_columns = ['tempm', 'zenith']
-        input_columns = ['tempm', 'zenith', 'holiday', 'nothol']
+        input_columns = ['tempm', 'zenith', 'holiday']
+#       input_columns = ['tempm', 'zenith', 'holiday', 'nothol']
+        batch_size = 1
+        rate = 1e-4
+    if method == 'regm':
+# sunw causes nans in predicition?
+        input_columns = ['tempm', 'zenith', 'holiday', 'nothol', 'tsqd', 'th', 'tnh', 'sunw', 'sh']
+#       input_columns = ['tempm', 'zenith', 'holiday', 'nothol', 'tsqd', 'th', 'tnh']
         batch_size = 1
         rate = 1e-4
     if method == 'regd':
@@ -374,7 +393,10 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk):
     # normalise the inputs
     for column in input_df.columns:
         input_max[column] = input_df[column].max()
-        input_df[column] = input_df[column] / input_df[column].max()
+        if input_df[column].max() > 0.0:
+            input_df[column] = input_df[column] / input_df[column].max()
+        else:
+            input_df[column] = 0.0
     # normalise the output (Y)
     output_max = output.max()
     output = output / output_max
@@ -404,6 +426,10 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk):
     num_inputs = len(input_df.columns)
 
     if method == 'regl':
+    # model using regression
+        model = nn.Linear(num_inputs,1)
+        loss_fn = F.mse_loss
+    if method == 'regm':
     # model using regression
         model = nn.Linear(num_inputs,1)
         loss_fn = F.mse_loss
@@ -569,6 +595,8 @@ parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagn
 parser.add_argument('--seed', action="store", dest="seed", help='Random seed, default=1.0', type=float, default=1.0)
 parser.add_argument('--epochs', action="store", dest="epochs", help='Number of epochs', type=int, default=100)
 parser.add_argument('--period', action="store", dest="period", help='Period k to forecast', type=float, default=all)
+parser.add_argument('--step', action="store", dest="step", help='If using days=all or step only do every step days', type=int, default=1)
+parser.add_argument('--ki', action="store_true", dest="ki", help='Only forecast K of interest.', default=False)
 
 args = parser.parse_args()
 method = args.method
@@ -586,6 +614,10 @@ df.loc[(df['wd']>4) | (df['ph']==1), 'holiday' ] = 1
 df['nothol'] = 0
 df.loc[(df['wd']<2) | (df['ph']==0), 'nothol' ] = 1
 
+df['tsqd'] = df['tempm'] * df['tempm']
+df['th'] = df['tempm'] * df['holiday']
+df['tnh'] = df['tempm'] * df['nothol']
+
 print(df)
 
 # weather data (forecast)
@@ -596,11 +628,14 @@ forecast['holiday'] = 0
 forecast.loc[(forecast['wd']>4) | (forecast['ph']==1), 'holiday' ] = 1
 forecast['nothol'] = 0
 forecast.loc[(forecast['wd']<2) | (forecast['ph']==0), 'nothol' ] = 1
+forecast['tsqd'] = forecast['tempm'] * forecast['tempm']
+forecast['th'] = forecast['tempm'] * forecast['holiday']
+forecast['tnh'] = forecast['tempm'] * forecast['nothol']
 
 if args.day != 'set':
     columns = forecast.columns.append(pd.Index(['demand']))
     if args.day == 'all':
-        forecast = df[columns]
+        forecast = df[columns].copy()
     else:
         days = pd.Series(df.index.date).unique()
         if args.day == 'first':
@@ -623,66 +658,78 @@ fdays = pd.Series(forecast.index.date).unique()
 num_fdays = len(fdays)
 count=0
 print('Forecasting {} days'.format(len(fdays)) )
-for day in fdays:
+for id in range(len(fdays)):
+    day = fdays[id]
+#for day in fdays:
     count+=1
     print('Method {} day {} of {} date {}'.format(method, count, num_fdays, day) )
     day_text = day.strftime("%Y-%m-%d")
     day_start = day_text + ' 00:00:00'
     day_end = day_text + ' 23:30:00'
-    # drop this day from main data
-    if args.day == 'set':
-        history = forecast
+    if id%args.step != 0:
+        print('SKIPPING due to step')
+        forecast.drop(forecast.loc[day_text].index, inplace=True)
     else:
-        history = df.drop(df.loc[day_text].index)
 
-    # Naive Demand forecast based on same as last week
-    if method == 'naive':
-        forecast_naive(history, forecast, day)
+        # drop this day from main data
+        if args.day == 'set':
+            history = forecast
+        else:
+            history = df.drop(df.loc[day_text].index)
+
+        # Naive Demand forecast based on same as last week
+        if method == 'naive':
+            forecast_naive(history, forecast, day)
     
-    # closest weather day method
-    if method == 'sday':
-        forecast_closest_day(history, forecast, day)
+        # closest weather day method
+        if method == 'sday':
+            forecast_closest_day(history, forecast, day)
 
-    # closest weather day method using several days
-    if method == 'sdays':
-        forecast_closest_days(history, forecast, day)
+        # closest weather day method using several days
+        if method == 'sdays':
+            forecast_closest_days(history, forecast, day)
 
-    if method[0:3] == 'reg':
-        forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period)
+        if method[0:3] == 'reg':
+            forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ki)
 
-    if method == 'skt':
-        forecast_skt(df, forecast, day)
-    if method == 'nreg':
-        losses = forecast_nreg(history, forecast, day, args.seed, args.epochs)
-        if args.plot:
-            plt.plot(losses)
-            plt.title('demand nreg convergence')
-            plt.xlabel('Epochs', fontsize=15)
-            plt.ylabel('Loss', fontsize=15)
-            plt.show()
+        if method == 'skt':
+            forecast_skt(df, forecast, day)
+        if method == 'nreg':
+            losses = forecast_nreg(history, forecast, day, args.seed, args.epochs)
+            if args.plot:
+                plt.plot(losses)
+                plt.title('demand nreg convergence')
+                plt.xlabel('Epochs', fontsize=15)
+                plt.ylabel('Loss', fontsize=15)
+                plt.show()
 
-    if method == 'numpy':
-        losses = forecast_numpy(history, forecast, day)
-        if args.plot:
-            plt.plot(losses)
-            plt.title('demand numpy convergence')
-            plt.xlabel('Epochs', fontsize=15)
-            plt.ylabel('Loss', fontsize=15)
-            plt.show()
+        if method == 'numpy':
+            losses = forecast_numpy(history, forecast, day)
+            if args.plot:
+                plt.plot(losses)
+                plt.title('demand numpy convergence')
+                plt.xlabel('Epochs', fontsize=15)
+                plt.ylabel('Loss', fontsize=15)
+                plt.show()
 
-    if method == 'ann':
-        losses = forecast_ann(history, forecast, day, args.seed, args.epochs)
-        if args.plot:
-            plt.plot(losses)
-            plt.title('demand ann convergence')
-            plt.xlabel('Epochs', fontsize=15)
-            plt.ylabel('Loss', fontsize=15)
-            plt.show()
+        if method == 'ann':
+            losses = forecast_ann(history, forecast, day, args.seed, args.epochs)
+            if args.plot:
+                plt.plot(losses)
+                plt.title('demand ann convergence')
+                plt.xlabel('Epochs', fontsize=15)
+                plt.ylabel('Loss', fontsize=15)
+                plt.show()
 
 print(forecast)
 
 # metrics
 if 'demand' in forecast.columns:
+    if args.ki:
+        kf = forecast[ (forecast['k'] > 31) & (forecast['k'] < 43)]
+        print(kf['demand'])
+        print(kf['prediction'])
+        utils.print_metrics(kf['demand'], kf['prediction'], False)
     utils.print_metrics(forecast['demand'], forecast['prediction'], args.plot)
     fpeak = forecast.loc[(forecast['k']>31) & (forecast['k']<43)]
     peak = (fpeak['demand'].max() - fpeak['prediction'].max() ) / fpeak['demand'].max()

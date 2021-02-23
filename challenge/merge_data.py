@@ -203,8 +203,21 @@ if args.plot:
     plt.legend(loc='upper right', fontsize=15)
     plt.show()
 
+    plt.scatter(df['tempm'].values, df['demand'].values, s=12, color='blue')
+    plt.title('Demand vs temperature')
+    plt.xlabel('Demand (MWh)', fontsize=15)
+    plt.ylabel('Temperature (Degrees C)', fontsize=15)
+    plt.legend(loc='upper right', fontsize=15)
+    plt.show()
+
 
 print(df.columns)
+for col in df.columns:
+    if df[col].isna().sum() >0:
+        print("ERROR nans in {}".format(col))
+        print(df[col].isnull().values)
+        quit()
+
 
 output_dir = "/home/malcolm/uclan/challenge/output/"
 
