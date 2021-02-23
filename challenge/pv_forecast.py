@@ -333,7 +333,7 @@ def forecast_reg(df, forecast, day, method, seed, num_epochs):
     prediction_values = preds.detach().numpy() * output_max
 #   print(prediction_values)
     # set forecast for zentih angle for daylight and denormalize using
-    forecast_day.loc[forecast_day['zenith']<87, 'prediction'] = prediction_values
+    forecast_day.loc[forecast_day['zenith']<87, 'prediction'] = prediction_values.reshape(len(prediction_values),)
 #   print(forecast_day['prediction'].values)
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = forecast_day['prediction'].values
 
@@ -474,6 +474,7 @@ output_dir = "/home/malcolm/uclan/challenge/output/"
 merged_filename = '{}merged_{}.csv'.format(output_dir, dataset)
 df = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
+
 #print(df)
 
 # weather data (forecast)
@@ -509,10 +510,11 @@ for day in fdays:
     day_start = day_text + ' 00:00:00'
     day_end = day_text + ' 23:30:00'
     # drop this day from main data
+    # the .copy() is so we don't keep removing bad data in a loop!
     if args.day == 'set':
-        history = df
+        history = df.copy()
     else:
-        history = df.drop(df.loc[day_text].index)
+        history = df.drop(df.loc[day_text].index).copy()
 
     # remove bad weather data
     if args.bad > 0:
