@@ -65,11 +65,24 @@ class PVregression(torch.nn.Module):
 # regp class
 
 class RegP(nn.Module):
-    def __init__(self):
+    def __init__(self, set_weights=False):
         super().__init__()
         self.linear1 = nn.Linear(4, 1)
         self.bilinear1 = nn.Bilinear(1, 1, 1)
         self.act1 = nn.LeakyReLU() 
+        # print out initial weights
+        print(self.bilinear1.weight.data)
+        print(self.bilinear1.bias.data)
+        print(self.linear1.weight.data)
+        print(self.linear1.bias.data)
+        # Setting these initial weight values seems to make it more likely
+        # to converge.
+        if set_weights:
+            print('SETTING Weights')
+            self.bilinear1.weight.data.fill_(-1.0)
+            self.bilinear1.bias.data.fill_(0.6)
+            print(self.bilinear1.weight.data)
+            print(self.bilinear1.bias.data)
 
     # Perform the computation
     def forward(self, x):
@@ -236,7 +249,7 @@ def forecast_r2(df, forecast, day):
 
 # reg - regression
 
-def forecast_reg(df, forecast, day, method, seed, num_epochs):
+def forecast_reg(df, forecast, day, method, seed, num_epochs, set_weights):
     # don't try to predict pv at night!
     day_df = df[df['zenith'] < 87]
     # set up inputs
@@ -295,7 +308,7 @@ def forecast_reg(df, forecast, day, method, seed, num_epochs):
     if method == 'regp':
     # custom function converges but gives negative power
 #       model = PVregression()
-        model = RegP()
+        model = RegP(set_weights)
 
 #   opt = torch.optim.SGD(model.parameters(), lr=1e-6)
 #   opt = torch.optim.SGD(model.parameters(), lr=1e-5)
@@ -312,6 +325,8 @@ def forecast_reg(df, forecast, day, method, seed, num_epochs):
     print('Starting loss: ', loss_fn(model(inputs), targets))
     losses = fit(num_epochs, model, loss_fn, opt, train_dl)
     print('Training loss: ', loss_fn(model(inputs), targets))
+    print(model.bilinear1.weight.data)
+    print(model.bilinear1.bias.data)
     preds = model(inputs)
 #   print(preds)
     # prediction
@@ -462,6 +477,8 @@ parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagn
 parser.add_argument('--bad', action="store", dest="bad", help='Fraction of bad weather to remove, default=0.0', type=float, default=0.0)
 parser.add_argument('--seed', action="store", dest="seed", help='Random seed, default=1.0', type=float, default=1.0)
 parser.add_argument('--epochs', action="store", dest="epochs", help='Number of epochs', type=int, default=100)
+parser.add_argument('--step', action="store", dest="step", help='If using days=all or step only do every step days', type=int, default=1)
+parser.add_argument('--sw', action="store_true", dest="sw", help='Set weights to values that seem to work', default=False)
 
 args = parser.parse_args()
 method = args.method
@@ -504,63 +521,69 @@ if args.day != 'set':
 
 # for each day to be forecast ...
 fdays = pd.Series(forecast.index.date).unique()
-for day in fdays:
+#for day in fdays:
+for id in range(len(fdays)):
+    day = fdays[id]
     print('Method {} day {}'.format(method, day) )
     day_text = day.strftime("%Y-%m-%d")
     day_start = day_text + ' 00:00:00'
     day_end = day_text + ' 23:30:00'
-    # drop this day from main data
-    # the .copy() is so we don't keep removing bad data in a loop!
-    if args.day == 'set':
-        history = df.copy()
+    if id%args.step != 0:
+        print('SKIPPING due to step')
+        forecast.drop(forecast.loc[day_text].index, inplace=True)
     else:
-        history = df.drop(df.loc[day_text].index).copy()
+        # drop this day from main data
+        # the .copy() is so we don't keep removing bad data in a loop!
+        if args.day == 'set':
+            history = df.copy()
+        else:
+            history = df.drop(df.loc[day_text].index).copy()
 
-    # remove bad weather data
-    if args.bad > 0:
-        print('Removing bad weather values')
-        remove_bad_weather(history, args.bad)
+        # remove bad weather data
+        if args.bad > 0:
+            print('Removing bad weather values')
+            remove_bad_weather(history, args.bad)
 
-    # Naive PV forecast based on same as last week
-    if method == 'naive':
-        forecast_naive(history, forecast, day)
+        # Naive PV forecast based on same as last week
+        if method == 'naive':
+            forecast_naive(history, forecast, day)
     
-    # closest weather day method
-    if method == 'hours':
-        forecast_similar_hours(history, forecast, day)
+        # closest weather day method
+        if method == 'hours':
+            forecast_similar_hours(history, forecast, day)
 
-    # closest weather day method
-    if method == 'sday':
-        forecast_closest_day(history, forecast, day)
+        # closest weather day method
+        if method == 'sday':
+            forecast_closest_day(history, forecast, day)
+    
+        # closest weather day method using several days
+        if method == 'sdays':
+            forecast_closest_days(history, forecast, day)
 
-    # closest weather day method using several days
-    if method == 'sdays':
-        forecast_closest_days(history, forecast, day)
+        # closest weather hours method using several hours
+        if method == 'shours':
+            forecast_closest_hours(history, forecast, day)
 
-    # closest weather hours method using several hours
-    if method == 'shours':
-        forecast_closest_hours(history, forecast, day)
+        if method == 'r2':
+            forecast_r2(history, forecast, day)
 
-    if method == 'r2':
-        forecast_r2(history, forecast, day)
+        if method[0:3] == 'reg':
+            losses = forecast_reg(history, forecast, day, method, args.seed, args.epochs, args.sw)
+            if args.plot:
+                plt.plot(losses)
+                plt.title('PV Regression convergence')
+                plt.xlabel('Epochs', fontsize=15)
+                plt.ylabel('Loss', fontsize=15)
+                plt.show()
 
-    if method[0:3] == 'reg':
-        losses = forecast_reg(history, forecast, day, method, args.seed, args.epochs)
-        if args.plot:
-            plt.plot(losses)
-            plt.title('PV Regression convergence')
-            plt.xlabel('Epochs', fontsize=15)
-            plt.ylabel('Loss', fontsize=15)
-            plt.show()
-
-    if method == 'ann':
-        losses = forecast_ann(history, forecast, day, args.seed, args.epochs)
-        if args.plot:
-            plt.plot(losses)
-            plt.title('pv ann convergence')
-            plt.xlabel('Epochs', fontsize=15)
-            plt.ylabel('Loss', fontsize=15)
-            plt.show()
+        if method == 'ann':
+            losses = forecast_ann(history, forecast, day, args.seed, args.epochs)
+            if args.plot:
+                plt.plot(losses)
+                plt.title('pv ann convergence')
+                plt.xlabel('Epochs', fontsize=15)
+                plt.ylabel('Loss', fontsize=15)
+                plt.show()
 
 #print(forecast)
 
