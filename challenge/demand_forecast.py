@@ -18,13 +18,19 @@ import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 # Import nn.functional
 import torch.nn.functional as F
+import sklearn
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
 
 # custom code
 import utils
 
 # custom loss function
 def loss_max1(X,Y):
-    return abs( X.max() - Y.max() )
+#   lossn = abs( X.max().item() - Y.max().item() )
+#   print(X.max().item(), Y.max().item(), lossn)
+    lossn =  torch.abs(X.max() - Y.max())
+    return lossn
 
 # class for custom regression
 
@@ -32,24 +38,26 @@ class Demandregression(torch.nn.Module):
     def __init__(self):
 
         super().__init__()
-        # weights
-        self.a = torch.nn.Parameter(torch.randn(()))
-        self.b = torch.nn.Parameter(torch.randn(()))
-#       self.c = torch.nn.Parameter(torch.randn(()))
-#       self.d = torch.nn.Parameter(torch.randn(()))
-#       self.e = torch.nn.Parameter(torch.randn(()))
-#       self.act1 = nn.ReLU() 
+        self.linear1 = nn.Linear(3, 1)
+        self.bilinear1 = nn.Bilinear(1, 1, 1)
+        self.act1 = nn.LeakyReLU()
 
     # x is a tensor of input data
+    # x[0] is mean temperature
+    # x[1] is holiday
     def forward(self, x):
-#       demand = (self.a + self.b * x[:,0] + ( self.c * x[:,0] * x[:,0] ) ) * ( self.d * x[:,1] + self.e )
-        demand = (self.a + self.b * x[:,0] )
-#       return demand.clamp(min=0.0)
-#       print(x[:,0])
-#       print(x[:,1])
-#       print(demand)
+        t = x[:,0].view(-1,1)
+#       print(t)
+        h = x[:,1].view(-1,1)
+#       print(h)
+        tsq = self.bilinear1(t, t)
+#       print(tsq)
+        xx = torch.cat([tsq, t, h], 1)
+#       print(xx)
+        y = self.linear1(xx)
+#       demand = self.act1(y).clamp(min=0.0)
+        demand = self.act1(y)
         return demand
-#       return self.act1(demand)
 
     def string(self):
         return 'y = {self.a.item()} + {self.b.item()} x + {self.c.item()} x^2 + {self.d.item()} x^3'
@@ -60,12 +68,6 @@ class Demandregression2(torch.nn.Module):
     def __init__(self):
 
         super().__init__()
-        # weights
-        self.a = torch.nn.Parameter(torch.randn(()))
-        self.b = torch.nn.Parameter(torch.randn(()))
-        self.c = torch.nn.Parameter(torch.randn(()))
-        self.d = torch.nn.Parameter(torch.randn(()))
-#       self.e = torch.nn.Parameter(torch.randn(()))
 #       self.act1 = nn.ReLU() 
 
     # x is a tensor of input data
@@ -108,23 +110,16 @@ class SimpleNet(nn.Module):
 def fit(num_epochs, model, loss_fn, opt, train_dl):
     loss_history=[]
     for epoch in range(num_epochs):
+        # each batch in the training ds
         for xb,yb in train_dl:
             # Generate predictions
             pred = model(xb)
             loss = loss_fn(pred, yb)
             # Perform gradient descent
             loss.backward()
-#           print('BACKWARD', loss.item(), model.linear1.bias.grad, model.linear2.bias.grad)
-#           print(xb,yb)
-#           if math.isnan(loss.item()):
-#               print("Stopped because loss is nan")
-#               print(xb,yb)
-#               print('Loss and grad', loss.item(), model.linear1.bias.grad, model.linear2.bias.grad)
-#               quit()
             opt.step()
             opt.zero_grad()
-#           print('TRAIN:')
-#           print(loss.item(), model.linear1.bias.grad)
+        # report at each epoc
         print('epoch {}, loss {}'.format(epoch, loss.item()))
         loss_history.append(loss.item() )
     return loss_history
@@ -133,55 +128,128 @@ def fit(num_epochs, model, loss_fn, opt, train_dl):
 
 # naive forecast based on the previous week
 def forecast_naive(df, forecast, day):
-    if day == df.index[0].date:
-        copy_day = df.last_valid_index().date.strftime('%Y-%m-%d')
-    else:
-        copy_day = (day - pd.Timedelta(days=1) ).strftime('%Y-%m-%d')
-    print(day, copy_day)
+    copy_day = (day - pd.Timedelta(days=7) ).strftime('%Y-%m-%d')
+    # if the previous day doesn't exist (because its the first day) then
+    # use the last day instead
+    if copy_day not in df.index:
+        print('{} NOT FOUND using last day instead'.format(copy_day))
+        copy_day = df.last_valid_index().date().strftime('%Y-%m-%d')
+    if len(df.loc[copy_day, 'demand' ].values) == 0:
+        print('{} has no demand values, using last day instead'.format(copy_day))
+        copy_day = df.last_valid_index().date().strftime('%Y-%m-%d')
     forecast['probability'] = 0.9
+    print('For day {} use day {} len {}'.format(day, copy_day, len(df.loc[copy_day, 'demand' ].values) ) )
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = df.loc[copy_day, 'demand' ].values
 
 # closest day
 
 def forecast_closest_day(df, forecast, day):
     days = pd.Series(df.index.date).unique()
-    demand_range = forecast['tempm'].max() - forecast['sun2'].min()
-    print("Testing {}".format(day))
-    closest_day, closeness = utils.find_closest_day(day, days, forecast, df, 'sunw')
+    demand_range = forecast['tempm'].max() - forecast['tempm'].min()
+    closest_day, closeness = utils.find_closest_day(day, days, forecast, df, 'tempm')
     print(closest_day)
     rows = df.loc[closest_day.strftime('%Y-%m-%d')]
 #       print(rows)
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = rows['demand'].values
-    probability = (sun_range - closeness) / sun_range
+    probability = (demand_range - closeness) / demand_range
     forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
-    print(forecast)
+#   print(forecast)
 
 # closest 10 days from each weather grid, then weighted average
 
 def forecast_closest_days(df, forecast, day):
     days = pd.Series(df.index.date).unique()
-    closest_days = utils.find_closest_days(day, days, forecast, df, 'sun1', 10)
-    new_day1 = utils.create_day(closest_days.index, df, 'demand')
-    new_day1.columns = ['pv1']
-    closest_days = utils.find_closest_days(day, days, forecast, df, 'sun2', 10)
-    new_day2 = utils.create_day(closest_days.index, df, 'demand')
-    new_day2.columns = ['pv2']
-    closest_days = utils.find_closest_days(day, days, forecast, df, 'sun5', 10)
-    new_day5 = utils.create_day(closest_days.index, df, 'demand')
-    new_day5.columns = ['pv5']
-    closest_days = utils.find_closest_days(day, days, forecast, df, 'sun6', 10)
-    new_day6 = utils.create_day(closest_days.index, df, 'demand')
-    new_day6.columns = ['pv6']
-    new_days = pd.concat([new_day1, new_day2, new_day5, new_day6], axis=1)
-    new_days.index=forecast.loc[day.strftime('%Y-%m-%d')].index
-    utils.add_weighted(new_days, 'pv', 'demand')
-    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = new_days['demand'].values
+    closest_days = utils.find_closest_days(day, days, forecast, df, 'tempm', 10)
+    new_day = utils.create_day(closest_days.index, df, 'demand')
+    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = new_day['demand'].values
     probability = 0.8
     forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
 
-# nreg - new regression - actually converges to something !!
-def forecast_nreg(df, forecast, day):
+# skt
+def forecast_skt(df, forecast, day):
     input_columns = ['tempm', 'dsk']
+    input_df = df[input_columns].copy()
+    # set up output
+    output_column = 'demand'
+    output = df[output_column].copy()
+
+    x = input_df.values
+    y = output.values
+
+    # Step 2b: Transform input data
+    x_ = PolynomialFeatures(degree=2, include_bias=False).fit_transform(x)
+
+    # Step 3: Create a model and fit it
+    model = LinearRegression().fit(x_, y)
+
+    # Step 4: Get results
+    r_sq = model.score(x_, y)
+    intercept, coefficients = model.intercept_, model.coef_
+
+    # Step 5: Predict
+    forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
+    x_f = forecast_day[input_columns].copy().values
+    xf = PolynomialFeatures(degree=2, include_bias=False).fit_transform(x_f)
+    y_pred = model.predict(xf)
+    print(y_pred)
+    print(len(y_pred))
+
+    print(forecast_day)
+    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = y_pred
+
+# numpy
+def forecast_numpy(df, forecast, day):
+    tempm = df['tempm'].values
+    dsk = df['dsk'].values
+    output_column = 'demand'
+    output = df[output_column].values
+
+    # Randomly initialize weights
+    a = np.random.randn()
+    b = np.random.randn()
+    c = np.random.randn()
+    d = np.random.randn()
+    e = np.random.randn()
+
+    losses=[]
+    learning_rate = 1e-6
+    for t in range(2000):
+        # Forward pass: compute predicted y
+        y_pred = a + b * tempm + c * np.sin(dsk * d + e )
+
+        # Compute and print loss
+        loss = np.square(y_pred - output).sum()
+        if t % 100 == 99:
+            print(t, loss)
+            losses.append(loss)
+
+        # Backprop to compute gradients of a, b, c, d with respect to loss
+        grad_y_pred = 2.0 * (y_pred - output)
+        grad_a = grad_y_pred.sum()
+        grad_b = (grad_y_pred * tempm).sum()
+        grad_c = grad_y_pred.sum()
+        grad_d = (grad_y_pred * dsk).sum()
+        grad_e = grad_y_pred.sum()
+        # Update weights
+        a -= learning_rate * grad_a
+        b -= learning_rate * grad_b
+        c -= learning_rate * grad_c
+        d -= learning_rate * grad_d
+        e -= learning_rate * grad_e
+
+    forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
+    f_tempm = forecast_day['tempm'].values
+    f_dsk = forecast_day['dsk'].values
+    y_pred = a + b * f_tempm + c * numpy.sine(f_dsk * d + e )
+    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = y_pred
+
+    return losses
+
+# nreg - new regression - actually converges to something !!
+def forecast_nreg(df, forecast, day, seed, num_epochs):
+    df['dskd'] = df['dsk'] - 37
+    forecast['dskd'] = forecast['dsk'] - 37
+    input_columns = ['tempm', 'dskd']
     input_df = df[input_columns].copy()
     # set up output
     output_column = 'demand'
@@ -205,12 +273,12 @@ def forecast_nreg(df, forecast, day):
         print("ERROR NaN in output")
         quit()
     inputs = torch.tensor(input_df.values.astype(np.float32))
-    print("inputs")
-    print(inputs)
+#   print("inputs")
+#   print(inputs)
     targets = torch.tensor(output.values.astype(np.float32)).view(-1,1)
-    print("targets")
-    print(targets)
-    torch.manual_seed(1)    # reproducible
+#   print("targets")
+#   print(targets)
+    torch.manual_seed(seed)    # reproducible
     train_ds = TensorDataset(inputs, targets)
 
     batch_size = 48
@@ -219,18 +287,20 @@ def forecast_nreg(df, forecast, day):
 
     num_inputs = len(input_df.columns)
     # custom function didn't converge
-    model = Demandregression2()
+#   model = Demandregression2()
+    model = nn.Linear(2, 1)
 
     opt = torch.optim.SGD(model.parameters(), lr=1e-5)
 
-    # Define loss function
+    # Define loss function - mse_loss converges but doesn't look good
     loss_fn = F.mse_loss
+#   loss_fn = loss_max1
 #   loss_fn = F.l1_loss
 
     loss = loss_fn(model(inputs), targets)
     print(loss)
     # Train the model for 100 epochs
-    num_epochs=300
+#   num_epochs=200
     losses = fit(num_epochs, model, loss_fn, opt, train_dl)
     print('Training loss: ', loss_fn(model(inputs), targets))
     preds = model(inputs)
@@ -259,126 +329,141 @@ def forecast_nreg(df, forecast, day):
 
 # reg - regression
 
-def forecast_reg(df, forecast, day, method, plot):
+def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period):
     pred_values=[]
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
-    # for each k period, train a seperate model ...
-    for index, row in forecast_day.iterrows():
-        dsk = row['dsk']
+    if period == all:
+        # for each k period, train a seperate model ...
+        for index, row in forecast_day.iterrows():
+            dsk = row['dsk']
+            print('Period {}'.format(dsk) )
+            dsk_df = df[df['dsk'] == dsk]
+            dsk_f = forecast_day[forecast_day['dsk'] == dsk]
+            prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk)
+            pred_values.append(prediction_values)
+        forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = pd.Series(pred_values, index=forecast_day.index)
+    else:
+        dsk = int(period)
         dsk_df = df[df['dsk'] == dsk]
-        # set up inputs
-        if method == 'regl':
-            input_columns = ['sun2', 'sun1', 'sun5', 'sun6']
-        if method == 'regd':
-            input_columns = ['tempm', 'holiday']
-        input_df = dsk_df[input_columns].copy()
-
-        # set up output
-        output_column = 'demand'
-        output = dsk_df[output_column].copy()
-
-        # store maximum values
-        input_max = {}
-        # normalise the inputs
-        for column in input_df.columns:
-            input_max[column] = input_df[column].max()
-            input_df[column] = input_df[column] / input_df[column].max()
-        # normalise the output (Y)
-        output_max = output.max()
-        output = output / output_max
-
-        # santity check
-        for column in input_df.columns:
-            if input_df[column].isna().sum() >0:
-                print("ERROR NaN in {}".format(column))
-                quit()
-        if output.isna().sum() >0:
-            print("ERROR NaN in output")
-            quit()
-
-        inputs = torch.tensor(input_df.values.astype(np.float32))
-        print("inputs")
-        print(inputs)
-#   The .view seems to tell it what shape the data is
-        targets = torch.tensor(output.values.astype(np.float32)).view(-1,1)
-        print("targets")
-        print(targets)
-        torch.manual_seed(1)    # reproducible
-        train_ds = TensorDataset(inputs, targets)
-
-        batch_size = 48
-        train_dl = DataLoader(train_ds, batch_size, shuffle=True)
-        next(iter(train_dl))
-
-        num_inputs = len(input_df.columns)
-    
-        if method == 'regl':
-        # model using regression
-            model = nn.Linear(num_inputs,1)
-            loss_fn = F.mse_loss
-        if method == 'regd':
-        # custom function didn't converge
-            model = Demandregression()
-            loss_fn = F.l1_loss
-#           loss_fn = loss_max1
-
-        opt = torch.optim.SGD(model.parameters(), lr=1e-5)
-
-        # Define loss function
-#       loss_fn = F.mse_loss
-#       loss_fn = F.l1_loss
-
-        loss = loss_fn(model(inputs), targets)
-        print(loss)
-        # Train the model for 100 epochs
-        num_epochs=50
-        losses = fit(num_epochs, model, loss_fn, opt, train_dl)
-        print('Training loss: ', loss_fn(model(inputs), targets))
-        preds = model(inputs)
-        print(preds)
-        # prediction
-        forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
-        print(forecast_day)
         dsk_f = forecast_day[forecast_day['dsk'] == dsk]
-        input_f = dsk_f[input_columns].copy()
-        print(input_f)
-        # normalise the inputs (using same max as for the model)
-        for column in input_f.columns:
-            input_f[column] = input_f[column] / input_max[column]
-        f_inputs = torch.tensor(input_f.values.astype(np.float32))
-        print('f_inputs')
-        print(f_inputs)
-        preds = model(f_inputs)
-        print(preds)
-        # denormalize using df for the original model
-        prediction_values = preds.detach().numpy() * output_max
-        print(prediction_values)
-        pred_values.append(prediction_values[0])
+        prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk)
+        print('Predicted value {} for period {}'.format(prediction_values, period))
+        quit()
 
-        if args.plot and dsk==36:
-            plt.plot(losses)
-            plt.title('Demand Regression convergence')
-            plt.xlabel('Epochs', fontsize=15)
-            plt.ylabel('Loss', fontsize=15)
-            plt.show()
+def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk):
+    # set up inputs
+    if method == 'regl':
+#       input_columns = ['tempm', 'zenith']
+        input_columns = ['tempm', 'zenith', 'holiday', 'nothol']
+        batch_size = 1
+        rate = 1e-4
+    if method == 'regd':
+        input_columns = ['tempm', 'holiday']
+        # could more than 1 mean trying to assess holiday=1 and holiday=0
+        # at the same time?
+        batch_size = 1
+        rate = 1e-7
+    input_df = dsk_df[input_columns].copy()
 
-    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = pd.Series(pred_values, index=forecast_day.index)
+    # set up output
+    output_column = 'demand'
+    output = dsk_df[output_column].copy()
+
+    # store maximum values
+    input_max = {}
+    # normalise the inputs
+    for column in input_df.columns:
+        input_max[column] = input_df[column].max()
+        input_df[column] = input_df[column] / input_df[column].max()
+    # normalise the output (Y)
+    output_max = output.max()
+    output = output / output_max
+
+    # santity check
+    for column in input_df.columns:
+        if input_df[column].isna().sum() >0:
+            print("ERROR NaN in {}".format(column))
+            quit()
+    if output.isna().sum() >0:
+        print("ERROR NaN in output")
+        quit()
+
+    inputs = torch.tensor(input_df.values.astype(np.float32))
+#   print("inputs")
+#   print(inputs)
+#   The .view seems to tell it what shape the data is
+    targets = torch.tensor(output.values.astype(np.float32)).view(-1,1)
+#   print("targets")
+#   print(targets)
+    torch.manual_seed(seed)    # reproducible
+    train_ds = TensorDataset(inputs, targets)
+
+    train_dl = DataLoader(train_ds, batch_size, shuffle=True)
+    next(iter(train_dl))
+
+    num_inputs = len(input_df.columns)
+
+    if method == 'regl':
+    # model using regression
+        model = nn.Linear(num_inputs,1)
+        loss_fn = F.mse_loss
+    if method == 'regd':
+    # custom function didn't converge
+        model = Demandregression()
+        loss_fn = F.l1_loss
+#       loss_fn = loss_max1
+
+    opt = torch.optim.SGD(model.parameters(), lr=rate)
+
+    # Define loss function
+#   loss_fn = F.mse_loss
+#   loss_fn = F.l1_loss
+
+    loss = loss_fn(model(inputs), targets)
+#   print(loss)
+    losses = fit(num_epochs, model, loss_fn, opt, train_dl)
+    print('Training loss: ', loss_fn(model(inputs), targets))
+    preds = model(inputs)
+#   print(preds)
+    # prediction
+    #forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
+    #print(forecast_day)
+    #dsk_f = forecast_day[forecast_day['dsk'] == dsk]
+    input_f = dsk_f[input_columns].copy()
+#   print(input_f)
+    # normalise the inputs (using same max as for the model)
+    for column in input_f.columns:
+        input_f[column] = input_f[column] / input_max[column]
+    f_inputs = torch.tensor(input_f.values.astype(np.float32))
+#   print('f_inputs')
+#   print(f_inputs)
+    preds = model(f_inputs)
+#   print(preds)
+    # denormalize using df for the original model
+    prediction_values = preds.detach().numpy() * output_max
+#   print(prediction_values)
+
+    if args.plot:
+        plt.plot(losses)
+        plt.title('Demand Regression convergence. period {}'.format(dsk))
+        plt.xlabel('Epochs', fontsize=15)
+        plt.ylabel('Loss', fontsize=15)
+        plt.show()
+
+    return prediction_values[0][0]
 
 
 # ann - artificial neural network.
 
-def forecast_ann(df, forecast, day):
-    # don't try to predict pv at night!
-    day_df = df[df['zenith'] < 87]
+def forecast_ann(df, forecast, day, seed, num_epochs):
     # set up inputs
-#   input_columns = ['zenith', 'sunw', 'tempw']
-    input_columns = ['sun1', 'sun2', 'sun5', 'sun6']
-    input_df = day_df[input_columns].copy()
+    input_columns = ['zenith', 'tempm', 'dsk', 'holiday']
+    input_df = df[input_columns].copy()
     print(input_df)
 
     # set up output
     output_column = 'demand'
-    output = day_df[output_column]
+    output = df[output_column]
     # normalise the output (Y)
     output_max = output.max()
     output = output / output_max
@@ -406,8 +491,7 @@ def forecast_ann(df, forecast, day):
     targets = torch.tensor(output.values.astype(np.float32)).view(-1,1)
     print("targets")
     print(targets)
-    torch.manual_seed(1)    # reproducible
-#   torch.manual_seed(8)    # reproducible
+    torch.manual_seed(seed)    # reproducible
     train_ds = TensorDataset(inputs, targets)
 #   train_ds[0:3]
 
@@ -434,8 +518,6 @@ def forecast_ann(df, forecast, day):
 
     loss = loss_fn(model(inputs), targets)
     print(loss)
-    # Train the model for 100 epochs
-    num_epochs=100
     losses = fit(num_epochs, model, loss_fn, opt, train_dl)
     print('Training loss: ', loss_fn(model(inputs), targets))
     # prediction
@@ -484,6 +566,9 @@ parser.add_argument('set', help='input data eg set0')
 parser.add_argument('--method', action="store", dest="method", help='Forecasting method: reg2, reg, ann, sday' , default='simple' )
 parser.add_argument('--day', action="store", dest="day", help='Day to forecast: set=read the set forecast file, first= first day, last=last day, all=loop to forecast all days based on the others, otherwise integer day' , default='set' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--seed', action="store", dest="seed", help='Random seed, default=1.0', type=float, default=1.0)
+parser.add_argument('--epochs', action="store", dest="epochs", help='Number of epochs', type=int, default=100)
+parser.add_argument('--period', action="store", dest="period", help='Period k to forecast', type=float, default=all)
 
 args = parser.parse_args()
 method = args.method
@@ -498,6 +583,8 @@ df = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=
 
 df['holiday'] = 0
 df.loc[(df['wd']>4) | (df['ph']==1), 'holiday' ] = 1
+df['nothol'] = 0
+df.loc[(df['wd']<2) | (df['ph']==0), 'nothol' ] = 1
 
 print(df)
 
@@ -507,6 +594,8 @@ forecast = pd.read_csv(forecast_filename, header=0, sep=',', parse_dates=[0], in
 
 forecast['holiday'] = 0
 forecast.loc[(forecast['wd']>4) | (forecast['ph']==1), 'holiday' ] = 1
+forecast['nothol'] = 0
+forecast.loc[(forecast['wd']<2) | (forecast['ph']==0), 'nothol' ] = 1
 
 if args.day != 'set':
     columns = forecast.columns.append(pd.Index(['demand']))
@@ -520,7 +609,7 @@ if args.day != 'set':
            if args.day == 'last':
                day=len(days)-1
            else:
-               day = int(day)
+               day = int(args.day)
         day_text = days[day].strftime("%Y-%m-%d")
         day_start = day_text + ' 00:00:00'
         day_end = day_text + ' 23:30:00'
@@ -531,8 +620,12 @@ print(forecast)
 
 # for each day to be forecast ...
 fdays = pd.Series(forecast.index.date).unique()
+num_fdays = len(fdays)
+count=0
+print('Forecasting {} days'.format(len(fdays)) )
 for day in fdays:
-    print('Method {} day {}'.format(method, day) )
+    count+=1
+    print('Method {} day {} of {} date {}'.format(method, count, num_fdays, day) )
     day_text = day.strftime("%Y-%m-%d")
     day_start = day_text + ' 00:00:00'
     day_end = day_text + ' 23:30:00'
@@ -555,10 +648,12 @@ for day in fdays:
         forecast_closest_days(history, forecast, day)
 
     if method[0:3] == 'reg':
-        forecast_reg(history, forecast, day, method, args.plot)
+        forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period)
 
+    if method == 'skt':
+        forecast_skt(df, forecast, day)
     if method == 'nreg':
-        losses = forecast_nreg(history, forecast, day)
+        losses = forecast_nreg(history, forecast, day, args.seed, args.epochs)
         if args.plot:
             plt.plot(losses)
             plt.title('demand nreg convergence')
@@ -566,8 +661,17 @@ for day in fdays:
             plt.ylabel('Loss', fontsize=15)
             plt.show()
 
+    if method == 'numpy':
+        losses = forecast_numpy(history, forecast, day)
+        if args.plot:
+            plt.plot(losses)
+            plt.title('demand numpy convergence')
+            plt.xlabel('Epochs', fontsize=15)
+            plt.ylabel('Loss', fontsize=15)
+            plt.show()
+
     if method == 'ann':
-        losses = forecast_ann(history, forecast, day)
+        losses = forecast_ann(history, forecast, day, args.seed, args.epochs)
         if args.plot:
             plt.plot(losses)
             plt.title('demand ann convergence')
@@ -580,6 +684,9 @@ print(forecast)
 # metrics
 if 'demand' in forecast.columns:
     utils.print_metrics(forecast['demand'], forecast['prediction'], args.plot)
+    fpeak = forecast.loc[(forecast['k']>31) & (forecast['k']<43)]
+    peak = (fpeak['demand'].max() - fpeak['prediction'].max() ) / fpeak['demand'].max()
+    print('Peak prediction {} '.format(peak) )
     if args.plot:
         forecast['demand'].plot(label='actual power', color='blue')
         forecast['prediction'].plot(label='predicted power', color='red')
