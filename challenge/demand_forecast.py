@@ -160,8 +160,17 @@ def forecast_closest_day(df, forecast, day):
 
 # closest 10 days from each weather grid, then weighted average
 
-def forecast_closest_days(df, forecast, day):
-    days = pd.Series(df.index.date).unique()
+def forecast_closest_days(df, forecast, day, method):
+    if method=='sdays':
+        days = pd.Series(df.index.date).unique()
+    else:
+        if forecast.loc[day.strftime('%Y-%m-%d'),'holiday'][0] == 1:
+            print('Looking for Holiday')
+            days = pd.Series(df[df['holiday']==1].index.date).unique()
+        else:
+            print('Looking for a non Holiday')
+            days = pd.Series(df[df['holiday']==0].index.date).unique()
+
     closest_days = utils.find_closest_days(day, days, forecast, df, 'tempm', 10, True)
     new_day = utils.create_day(closest_days.index, df, 'demand')
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = new_day['demand'].values
@@ -695,8 +704,8 @@ for id in range(len(fdays)):
             forecast_closest_day(history, forecast, day)
 
         # closest weather day method using several days
-        if method == 'sdays':
-            forecast_closest_days(history, forecast, day)
+        if method == 'sdays' or method == 'sdaysh':
+            forecast_closest_days(history, forecast, day, method)
 
         if method[0:3] == 'reg':
             forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ki)
