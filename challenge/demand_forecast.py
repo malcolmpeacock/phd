@@ -162,7 +162,7 @@ def forecast_closest_day(df, forecast, day):
 
 def forecast_closest_days(df, forecast, day):
     days = pd.Series(df.index.date).unique()
-    closest_days = utils.find_closest_days(day, days, forecast, df, 'tempm', 10)
+    closest_days = utils.find_closest_days(day, days, forecast, df, 'tempm', 10, True)
     new_day = utils.create_day(closest_days.index, df, 'demand')
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = new_day['demand'].values
     probability = 0.8
@@ -366,14 +366,14 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki):
     # set up inputs
     if method == 'regl':
 #       input_columns = ['tempm', 'zenith']
-        input_columns = ['tempm', 'zenith', 'holiday']
-#       input_columns = ['tempm', 'zenith', 'holiday', 'nothol']
+#       input_columns = ['tempm', 'zenith', 'holiday']
+        input_columns = ['tempm', 'zenith', 'holiday', 'nothol']
         batch_size = 1
         rate = 1e-4
     if method == 'regm':
 # sunw causes nans in predicition?
-        input_columns = ['tempm', 'zenith', 'holiday', 'nothol', 'tsqd', 'th', 'tnh', 'sunw', 'sh']
-#       input_columns = ['tempm', 'zenith', 'holiday', 'nothol', 'tsqd', 'th', 'tnh']
+#       input_columns = ['tempm', 'zenith', 'holiday', 'nothol', 'tsqd', 'th', 'tnh', 'sunw', 'sh']
+        input_columns = ['tempm', 'zenith', 'holiday', 'nothol', 'tsqd', 'th', 'tnh']
         batch_size = 1
         rate = 1e-4
     if method == 'regd':
@@ -682,9 +682,9 @@ for id in range(len(fdays)):
 
         # drop this day from main data
         if args.day == 'set':
-            history = forecast
+            history = df.copy()
         else:
-            history = df.drop(df.loc[day_text].index)
+            history = df.drop(df.loc[day_text].index).copy()
 
         # Naive Demand forecast based on same as last week
         if method == 'naive':

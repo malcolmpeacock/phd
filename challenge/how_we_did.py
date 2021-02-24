@@ -22,6 +22,7 @@ import utils
 parser = argparse.ArgumentParser(description='Create charging strategy.')
 parser.add_argument('set', help='eg 0 for set 0 ', type=int)
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--sf', action="store_true", dest="sf", help='Read from set file not u_cvml', default=False)
 
 args = parser.parse_args()
 set1 = args.set
@@ -53,6 +54,9 @@ pv_forecast = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index
 print(pv_forecast)
 
 solution_filename = output_dir + 'u_cvml_set{}.csv'.format(set1)
+if args.sf:
+    solution_filename = output_dir + 'solution_set{}.csv'.format(set1)
+   
 solution = pd.read_csv(solution_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
 print(solution)
