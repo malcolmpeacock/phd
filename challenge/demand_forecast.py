@@ -634,8 +634,17 @@ forecast['tnh'] = forecast['tempm'] * forecast['nothol']
 
 if args.day != 'set':
     columns = forecast.columns.append(pd.Index(['demand']))
-    if args.day == 'all':
+    if args.day == 'all' or args.day == 'sh' or args.day == 'ph' or args.day == 'hol':
         forecast = df[columns].copy()
+        if args.day == 'sh':
+            print('School holidays only')
+            forecast.drop( forecast[ forecast['sh']==0].index, inplace=True)
+        if args.day == 'ph':
+            print('Public holidays only')
+            forecast.drop( forecast[ forecast['ph']==0].index, inplace=True)
+        if args.day == 'hol':
+            print('Public holidays and weekends')
+            forecast.drop( forecast[ forecast['holiday']==0].index, inplace=True)
     else:
         days = pd.Series(df.index.date).unique()
         if args.day == 'first':
