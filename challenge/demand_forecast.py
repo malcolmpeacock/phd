@@ -675,10 +675,9 @@ print(forecast)
 fdays = pd.Series(forecast.index.date).unique()
 num_fdays = len(fdays)
 count=0
-print('Forecasting {} days'.format(len(fdays)) )
+print('Forecasting {} days in steps of {}'.format(len(fdays), args.step) )
 for id in range(len(fdays)):
     day = fdays[id]
-#for day in fdays:
     count+=1
     print('Method {} day {} of {} date {}'.format(method, count, num_fdays, day) )
     day_text = day.strftime("%Y-%m-%d")

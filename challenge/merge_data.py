@@ -19,6 +19,7 @@
 # sh         school holiday =1, 0 otherwise
 # ph         public holiday =1, 0 otherwise
 # wd         day of the week
+# week       week number with 1 as the newest
 
 # contrib code
 import sys
@@ -63,6 +64,10 @@ def sethols(df):
     df['dsk'] = df['k'] + 2 * (df.index.hour - df.index.tz_localize('UTC').tz_convert(tz=pytz.timezone('Europe/London')).hour + 1)
     df.loc[df['dsk']==95, 'dsk'] = 47
     df.loc[df['dsk']==96, 'dsk'] = 48
+
+    # week counter
+    df['week'] = np.floor( np.arange(len(df),0,-1) / ( 48 * 7 ) )
+    df['week'] = df['week'].astype(int)
 
 def get_zenith(site_location, index):
     solar_position = site_location.get_solarposition(times=index)

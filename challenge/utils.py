@@ -376,3 +376,25 @@ def find_closest_periods(needle, haystack, tparm, n):
                     closest_hours.drop(idmax, inplace=True)
                     closest_hours[index] = closest_score
     return closest_hours
+    
+# function to find the k nearest neighbours to a given period
+def find_knn(needle, haystack, tparms, n):
+    row = haystack.iloc[0]
+# Calulate the Euclidean distance between the points based on
+# all parameters in the list
+    closest_score = np.linalg.norm(row[tparms].values - needle[tparms].values, axis=0)
+    closest_hours=pd.Series([closest_score], index=[haystack.index[0]], name='shours')
+    for index, row in haystack.iterrows():
+#       print(row[tparms].values)
+#       print(needle[tparms].values)
+        closest_score = np.linalg.norm(row[tparms].values - needle[tparms].values, axis=0)
+#       print(closest_score)
+        # if not got enough hours yet, just add the new one.
+        if len(closest_hours) < n:
+            closest_hours[index] = closest_score
+        else:
+            if closest_score < closest_hours.max():
+                idmax = closest_hours.idxmax()
+                closest_hours.drop(idmax, inplace=True)
+                closest_hours[index] = closest_score
+    return closest_hours

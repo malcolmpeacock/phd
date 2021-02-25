@@ -461,14 +461,34 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
 # closest 10 hours from each weather grid, then weighted average
 
 def forecast_closest_hours(df, forecast, day):
+    forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     # for each hour of the day ...
     new_values=[]
-    for index, row in forecast.iterrows():
+    for index, row in forecast_day.iterrows():
         print(index)
         closest_periods = utils.find_closest_periods(row, df, 'sun2', 10)
         new_values.append( utils.create_half_hour(closest_periods.index, df['pv_power']) )
 
     new_series = pd.Series(new_values, forecast.index)
+    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = new_series.values
+    probability = 0.8
+    forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
+
+def forecast_knn(df, forecast, day):
+    forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
+    # Input columns
+    cols = ['sun1', 'sun2', 'sun5', 'sun6', 'zenith']
+    # Normalize the inputs - seems to make it worse!
+#   for col in cols:
+#       df[col] = df[col] / ( df[col].max() - df[col].min() )
+    # for each hour of the day ...
+    new_values=[]
+    for index, row in forecast_day.iterrows():
+        print(index)
+        closest_periods = utils.find_knn(row, df, cols, 10)
+        new_values.append( utils.create_half_hour(closest_periods.index, df['pv_power']) )
+
+    new_series = pd.Series(new_values, forecast_day.index)
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = new_series.values
     probability = 0.8
     forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
@@ -529,10 +549,13 @@ if args.day != 'set':
 
 # for each day to be forecast ...
 fdays = pd.Series(forecast.index.date).unique()
-#for day in fdays:
+num_fdays = len(fdays)
+count=0
+print('Forecasting {} days in steps of {}'.format(len(fdays), args.step) )
 for id in range(len(fdays)):
     day = fdays[id]
-    print('Method {} day {}'.format(method, day) )
+    count+=1
+    print('Method {} day {} of {} date {}'.format(method, count, num_fdays, day) )
     day_text = day.strftime("%Y-%m-%d")
     day_start = day_text + ' 00:00:00'
     day_end = day_text + ' 23:30:00'
@@ -571,6 +594,10 @@ for id in range(len(fdays)):
         # closest weather hours method using several hours
         if method == 'shours':
             forecast_closest_hours(history, forecast, day)
+
+        # knn 
+        if method == 'knn':
+            forecast_knn(history, forecast, day)
 
         if method == 'r2':
             forecast_r2(history, forecast, day)
