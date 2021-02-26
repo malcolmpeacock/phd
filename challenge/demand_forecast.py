@@ -95,9 +95,10 @@ class SimpleNet(nn.Module):
         super().__init__()
         self.linear1 = nn.Linear(num_inputs, num_inputs)
         # Activation function
-        self.act1 = nn.LeakyReLU() 
+#       self.act1 = nn.LeakyReLU() 
+        self.act1 = nn.Sigmoid() 
+        self.act2 = nn.LeakyReLU() 
 #       self.act1 = nn.ReLU() 
-#       self.act1 = nn.Sigmoid() 
 #       Layer 1
         self.linear2 = nn.Linear(num_inputs, num_outputs)
 
@@ -106,7 +107,8 @@ class SimpleNet(nn.Module):
         x = self.linear1(x)
         x = self.act1(x)
 #       x = self.linear2(x)
-        x = self.linear2(x).clamp(min=0.0)
+        x = self.linear2(x)
+        x = self.act2(x)
         return x
 
 # Define a utility function to train the model
@@ -257,39 +259,57 @@ def forecast_numpy(df, forecast, day):
 
     return losses
 
-# nreg - new regression - actually converges to something !!
-def forecast_nreg(df, forecast, day, seed, num_epochs):
-    df['dskd'] = df['dsk'] - 37
-    forecast['dskd'] = forecast['dsk'] - 37
-    input_columns = ['tempm', 'dskd']
-    input_df = df[input_columns].copy()
-    # set up output
-    output_column = 'demand'
-    output = df[output_column].copy()
+def reg_inputs(df):
+    # temperatures for a range of dsks
+    dsk_data={}
+    for dsk in range(32,44):
+        dsk_df = df[ df['dsk'] == dsk]
+        dsk_data['tk{}'.format(dsk)] = dsk_df['tempm'].values
+    input_df = pd.DataFrame(dsk_data)
+    # other columns
+    dsk_df = df[ df['dsk'] == 32]
+    base_columns = ['holiday', 'week', 'wd', 'sh', 'ph', 'season']
+    for col in base_columns:
+        input_df[col] = dsk_df[col].values
+#   print(input_df)
+    return input_df
 
+# nreg - new regression - with all 11 periods of interest as seperate 
+#        inputs and outputs
+def forecast_nreg(df, forecast, day, seed, num_epochs):
+
+    input_df = reg_inputs(df)
+
+    # outputs - demand for the k periods of interest
+    k_demand={}
+    for k in range(32,44):
+        k_df = df[ df['k'] == k]
+        k_demand['demand{}'.format(k)] = k_df['demand'].values
+    output_df = pd.DataFrame(k_demand)
+        
     # store maximum values
     input_max = {}
+    output_max = {}
     # normalise the inputs
     for column in input_df.columns:
         input_max[column] = input_df[column].max()
         input_df[column] = input_df[column] / input_df[column].max()
-    # normalise the output (Y)
-    output_max = output.max()
-    output = output / output_max
+    # normalise the outputs
+    for column in output_df.columns:
+        output_max[column] = output_df[column].max()
+        output_df[column] = output_df[column] / output_df[column].max()
     # santity check
     for column in input_df.columns:
         if input_df[column].isna().sum() >0:
             print("ERROR NaN in {}".format(column))
             quit()
-    if output.isna().sum() >0:
-        print("ERROR NaN in output")
-        quit()
+    for column in output_df.columns:
+        if output_df[column].isna().sum() >0:
+            print("ERROR NaN in {}".format(column))
+            quit()
+
     inputs = torch.tensor(input_df.values.astype(np.float32))
-#   print("inputs")
-#   print(inputs)
-    targets = torch.tensor(output.values.astype(np.float32)).view(-1,1)
-#   print("targets")
-#   print(targets)
+    targets = torch.tensor(output_df.values.astype(np.float32))
     torch.manual_seed(seed)    # reproducible
     train_ds = TensorDataset(inputs, targets)
 
@@ -298,43 +318,54 @@ def forecast_nreg(df, forecast, day, seed, num_epochs):
     next(iter(train_dl))
 
     num_inputs = len(input_df.columns)
-    # custom function didn't converge
-#   model = Demandregression2()
-    model = nn.Linear(2, 1)
+    num_outputs = len(output_df.columns)
+    model = nn.Linear(num_inputs, num_outputs)
+#   model = SimpleNet(num_inputs, num_outputs)
 
-    opt = torch.optim.SGD(model.parameters(), lr=1e-5)
+#   opt = torch.optim.SGD(model.parameters(), lr=1e-5)
+    opt = torch.optim.SGD(model.parameters(), lr=1e-3)
 
-    # Define loss function - mse_loss converges but doesn't look good
-    loss_fn = F.mse_loss
+    # Define loss function
+#   loss_fn = F.mse_loss
 #   loss_fn = loss_max1
-#   loss_fn = F.l1_loss
+    loss_fn = F.l1_loss
 
     loss = loss_fn(model(inputs), targets)
-    print(loss)
-    # Train the model for 100 epochs
-#   num_epochs=200
+#   print(loss)
+    # Train the model
     losses = fit(num_epochs, model, loss_fn, opt, train_dl)
     print('Training loss: ', loss_fn(model(inputs), targets))
     preds = model(inputs)
-    print(preds)
+#   print(preds)
     # prediction
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
-    print(forecast_day)
-    day_f = forecast_day
-    input_f = day_f[input_columns].copy()
-    print(input_f)
+#   print(forecast_day)
+    # set up the values to forecast
+    input_f = reg_inputs(forecast_day)
+#   print(input_f)
     # normalise the inputs (using same max as for the model)
     for column in input_f.columns:
         input_f[column] = input_f[column] / input_max[column]
     f_inputs = torch.tensor(input_f.values.astype(np.float32))
-    print('f_inputs')
-    print(f_inputs)
+#   print('f_inputs')
+#   print(f_inputs)
     preds = model(f_inputs)
-    print(preds)
+#   print(preds)
     # denormalize using df for the original model
-    prediction_values = preds.detach().numpy() * output_max
-    print(prediction_values)
-    # set forecast for zentih angle for daylight and denormalize using
+    vals = preds.detach().numpy()[0]
+#   print(vals)
+#   print(type(vals))
+    count=0
+    for column in output_max:
+        vals[count] = vals[count] * output_max[column]
+        count+=1
+    count=0
+    prediction_values = np.zeros(48)
+#   print(prediction_values)
+#   print(type(prediction_values))
+    for k in range(32,44):
+        prediction_values[k-1] = vals[count]
+        count+=1
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = prediction_values
 
     return losses
@@ -746,14 +777,16 @@ if 'demand' in forecast.columns:
         kf = forecast[ (forecast['k'] > 31) & (forecast['k'] < 43)]
         print(kf['demand'])
         print(kf['prediction'])
-        utils.print_metrics(kf['demand'], kf['prediction'], False)
-    utils.print_metrics(forecast['demand'], forecast['prediction'], args.plot)
+        utils.print_metrics(kf['demand'], kf['prediction'], args.plot)
+        utils.print_metrics(forecast['demand'], forecast['prediction'], False)
+    else:
+        utils.print_metrics(forecast['demand'], forecast['prediction'], args.plot)
     fpeak = forecast.loc[(forecast['k']>31) & (forecast['k']<43)]
     peak = (fpeak['demand'].max() - fpeak['prediction'].max() ) / fpeak['demand'].max()
     print('Peak prediction {} '.format(peak) )
     if args.plot:
-        forecast['demand'].plot(label='actual power', color='blue')
-        forecast['prediction'].plot(label='predicted power', color='red')
+        forecast['demand'].plot(label='actual demand', color='blue')
+        forecast['prediction'].plot(label='predicted demand', color='red')
         plt.title('demand prediction : '+method)
         plt.xlabel('Hour of the year', fontsize=15)
         plt.ylabel('Demand (MW)', fontsize=15)

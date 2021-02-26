@@ -469,7 +469,7 @@ def forecast_closest_hours(df, forecast, day):
         closest_periods = utils.find_closest_periods(row, df, 'sun2', 10)
         new_values.append( utils.create_half_hour(closest_periods.index, df['pv_power']) )
 
-    new_series = pd.Series(new_values, forecast.index)
+    new_series = pd.Series(new_values, forecast_day.index)
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = new_series.values
     probability = 0.8
     forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
