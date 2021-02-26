@@ -62,6 +62,7 @@ if dataset[0:3]=='set':
     # drop because of large values
     demand.drop(demand['2018-05-10'].index, inplace=True)
     demand.drop(demand['2018-05-11'].index, inplace=True)
+    demand.drop(demand['2018-11-04'].index, inplace=True)
 print('Low demand values')
 low = demand[demand < 0.1]
 print(low)

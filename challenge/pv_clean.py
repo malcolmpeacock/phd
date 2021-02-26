@@ -50,6 +50,10 @@ if dataset[0:3] == 'set':
 #   utils.replace_day(pv, '2018-03-04', '2018-03-01')
     print('Dropping 2018-03-04 lot of missing values')
     pv.drop(pv.loc['2018-03-04'].index, inplace=True)
+    print('Dropping 2019-01-23, 24, 25 missing irradiance values')
+    pv.drop(pv.loc['2019-01-23'].index, inplace=True)
+    pv.drop(pv.loc['2019-01-24'].index, inplace=True)
+    pv.drop(pv.loc['2019-01-25'].index, inplace=True)
     # 2017-12-26 14:30:00 - Zero power value
     pv['pv_power_mw']['2017-12-26 14:30:00'] = pv['pv_power_mw']['2017-12-26 14:00:00']
     # replace a suspect days with different ones.
@@ -68,6 +72,8 @@ if dataset[0:3] == 'set':
     pv.drop(pv.loc['2018-06-15'].index, inplace=True)
 #   2018-08-12  - no power for several hours but irradiance
     pv.drop(pv.loc['2018-08-12'].index, inplace=True)
+#   2019-02-11  - no power for several hours but irradiance
+    pv.drop(pv.loc['2019-02-11'].index, inplace=True)
 
 # ERROR CHECKS:
 

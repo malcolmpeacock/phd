@@ -20,6 +20,7 @@
 # ph         public holiday =1, 0 otherwise
 # wd         day of the week
 # week       week number with 1 as the newest
+# season     0=winter, 1=spring, 2=summer, 3=autumn
 
 # contrib code
 import sys
@@ -52,13 +53,29 @@ def sethols(df):
         df.loc[holiday+' 00:00:00' : holiday+' 23:30:00','ph'] = 1
     df['ph'] = df['ph'].astype(int)
 
-    # day of the week
+    # day of the week and season
     df['wd'] = 0
+    # default to winter = 0
+    df['season'] = 0
+    # "day of year" ranges for the northern hemisphere
+    spring = range(80, 172)
+    summer = range(172, 264)
+    autumn = range(264, 355)
     days = df.resample('D', axis=0).mean().index.date
     for day in days:
         day_str = day.strftime('%Y-%m-%d')
         df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','wd'] = day.weekday()
+        doy = day.timetuple().tm_yday
+        print(doy)
+        if doy in spring:
+            df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','season'] = 1
+        if doy in summer:
+            df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','season'] = 2
+        if doy in autumn:
+            df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','season'] = 3
+            
     df['wd'] = df['wd'].astype(int)
+    df['season'] = df['season'].astype(int)
 
     # dst indicator
     df['dsk'] = df['k'] + 2 * (df.index.hour - df.index.tz_localize('UTC').tz_convert(tz=pytz.timezone('Europe/London')).hour + 1)
@@ -68,6 +85,7 @@ def sethols(df):
     # week counter
     df['week'] = np.floor( np.arange(len(df),0,-1) / ( 48 * 7 ) )
     df['week'] = df['week'].astype(int)
+
 
 def get_zenith(site_location, index):
     solar_position = site_location.get_solarposition(times=index)
