@@ -71,21 +71,18 @@ pv['average'] = gf
 solution = pv.copy()
 solution['charge_MW'] = 0.0
 solution['k'] = utils.index2ks(solution.index)
-print(solution)
-print(solution.columns)
+#print(solution)
+#print(solution.columns)
 
 # For each day ...
 days = solution.resample('D', axis=0).mean().index
 for day in days:
-    print(day)
+    print('Creating solution for day: {}'.format(day) )
     pv_day = pv[day : day + pd.Timedelta(hours=23,minutes=30)].copy()
 #   print(pv_day)
 
     # get charging pattern
     cpoints = utils.charge_points(pv_day)
-    print(cpoints)
-    print(type(cpoints))
-    print(cpoints.sum())
 
     tolerance = 0.001
 
@@ -93,13 +90,23 @@ for day in days:
     # this is 12 rather than 6 to avoid multiplying by 0.5 all the time
     # ( so its 6 half MWhs )
     capacity = 12 - tolerance
+
+    # if the charge pattern didn't fully charge, then top up a bit
+    points_sum = cpoints.sum()
+    remaining = capacity - points_sum
+
+
     # for each point in the charge strategy ...
     for index, value in cpoints.iteritems():
+        if remaining > 0 and value + remaining < 2.5:
+            print('Topping up {}'.format(remaining) )
+            value = value + remaining
+            remaining = 0
         k = utils.index2k(index)
-        print('Charging k {} battery {} index {} pv {}'.format(k, battery, index, value) )
+#       print('Charging k {} battery {} index {} pv {}'.format(k, battery, index, value) )
         # double check on not exceeding the battery
         charge_output = min(value, capacity-battery)
-        print('Adding Charge {}'.format(charge_output) )
+#       print('Adding Charge {}'.format(charge_output) )
             # don't overfill the battery
         if charge_output>0:
             solution['charge_MW'][index] = charge_output
@@ -123,7 +130,8 @@ for day in days:
 # descreasing ftol seems to improve the result
     res = minimize(peak, x0, method='SLSQP', options={'disp': True, 'maxiter':200, 'ftol':1e-11}, constraints=cons, bounds=Bounds(-2.5,0.0) )
 #   res = minimize(peak, x0, method='SLSQP', options={'disp': True, 'maxiter':200, finite_diff_rel_step: None}, constraints=cons, bounds=Bounds(-2.5,0.0), jac='2-point' )
-    print(res.x)
+#   print(res.x)
+    print('Battery: {} Sum of Charges {}'.format(battery, np.sum(res.x)) )
     solution.loc[solution_krange.index, 'charge_MW'] = res.x
 
 final_score, new_demand = utils.solution_score(solution['charge_MW'], pv['prediction'], demand['prediction'])
@@ -149,7 +157,8 @@ output_filename = '{}solution_{}.csv'.format(output_dir,dataset)
 solution = solution['charge_MW']
 solution = solution.squeeze()
 solution.index.rename('datetime', inplace=True)
-solution.to_csv(output_filename, float_format='%g')
+#solution.to_csv(output_filename, float_format='%g')
+solution.to_csv(output_filename)
 
 output_filename = output_dir + 'modified_demand.csv'
 new_demand.to_csv(output_filename, float_format='%g')

@@ -261,7 +261,7 @@ def solution_score(solution, pv, demand):
         P1 = sum(P) / sum(B)
         P2 = 1 - P1
         Rp = 100 * ( peak_old - peak_new ) / peak_old
-        print('P1 {} P2 {} peak_old {} peak_new {} Rp {}'.format(P1, P2, peak_old, peak_new, Rp) )
+#       print('P1 {} P2 {} peak_old {} peak_new {} Rp {}'.format(P1, P2, peak_old, peak_new, Rp) )
         Sd.append(Rp * ( P1 * C1 + P2 * C2 ) )
         Rpd.append(Rp)
         P1d.append(P1)
@@ -309,7 +309,7 @@ def charge_points(df):
     # whilst difference between sum of generation for demand and capacity
     # is less than limit ...
     while abs(csum - capacity) > limit:
-        print('csum {} threshold {} move_amount {} '.format(csum, threshold, move_amount) )
+#       print('csum {} threshold {} move_amount {} '.format(csum, threshold, move_amount) )
         # move up or down a smaller and smaller bit
         if csum > capacity:
             threshold += move_amount
@@ -317,7 +317,7 @@ def charge_points(df):
             threshold -= move_amount
         csum, points = charge_sum(df, threshold)
         move_amount = move_amount * 0.5
-        print('csum {} threshold {} move_amount {} '.format(csum, threshold, move_amount) )
+#       print('csum {} threshold {} move_amount {} '.format(csum, threshold, move_amount) )
 
     # return the points and the ( demand - threshold )
     return points

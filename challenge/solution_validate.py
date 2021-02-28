@@ -47,6 +47,7 @@ if len(s) != 48 * 7:
 count=0
 store=0.0
 errors=0
+tol=0.0001
 
 daily_charge = {}
 daily_discharge = {}
@@ -63,7 +64,7 @@ for day in days:
     for index, value in s_day.items():
         count+=1
         # -2.5 <= B <= 2.5
-        if value<-2.5 or value>2.5:
+        if value<-(2.5 + tol) or value> (2.5 + tol):
             print('Value {} out of range at line {}'.format(value, count) )
             errors+=1
         # period
@@ -78,7 +79,7 @@ for day in days:
             errors+=1
         # battery storage
         store = store + (0.5 * value)
-        if store <0 or store >6:
+        if store <0 -tol or store >6+tol:
             print('Store out of range: store {} day {} period {} at line {}'.format(store, day, k, count) )
             errors+=1
         # daily summary
