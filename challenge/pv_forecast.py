@@ -14,6 +14,7 @@ import numpy as np
 import math
 import torch
 import torch.nn as nn
+import gpytorch
 # Import tensor dataset & data loader
 from torch.utils.data import TensorDataset, DataLoader
 # Import nn.functional
@@ -493,6 +494,83 @@ def forecast_knn(df, forecast, day):
     probability = 0.8
     forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
 
+# Gaussian Process Regression.
+def forecast_gpr(df, forecast, day, seed, num_epochs):
+
+    day_df = df[df['zenith'] < 87]
+    # set up inputs
+    input_df = day_df['poa_ghi'].copy()
+    print(input_df)
+    inputs = torch.tensor(input_df.values.astype(np.float32))
+#   print("inputs")
+#   print(inputs)
+#   The .view seems to tell it what shape the data is
+    # set up output
+    output_column = 'pv_power'
+    output = day_df[output_column]
+    targets = torch.tensor(output.values.astype(np.float32)).view(-1,1)
+
+    print(inputs)
+    print(targets)
+
+    # initialize likelihood and model
+    likelihood = gpytorch.likelihoods.GaussianLikelihood()
+    model = ExactGPModel(inputs, targets, likelihood)
+
+    # Find optimal model hyperparameters
+    model.train()
+    likelihood.train()
+
+    # Use the adam optimizer
+    optimizer = torch.optim.Adam([
+    {'params': model.parameters()},  # Includes GaussianLikelihood parameters
+], lr=0.1)
+    # "Loss" for GPs - the marginal log likelihood
+    mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
+
+    for i in range(num_epochs):
+        # Zero gradients from previous iteration
+        optimizer.zero_grad()
+        # Output from model
+        output = model(inputs)
+        print(output)
+        print(targets)
+        # Calc loss and backprop gradients
+        loss = -mll(output, targets)
+        loss.backward()
+        print('Iter %d/%d - Loss: %.3f   lengthscale: %.3f   noise: %.3f' % (
+            i + 1, training_iter, loss.item(),
+            model.covar_module.base_kernel.lengthscale.item(),
+            model.likelihood.noise.item()
+        ))
+        optimizer.step()
+
+    # Get into evaluation (predictive posterior) mode
+    model.eval()
+    likelihood.eval()
+    # prediction
+    forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
+    # set up the values to forecast
+    input_f = reg_inputs(forecast_day)
+    # normalise the inputs (using same max as for the model)
+    for column in input_f.columns:
+        input_f[column] = input_f[column] / input_max[column]
+    # Test points are regularly spaced along [0,1]
+    # Make predictions by feeding model through likelihood
+    with torch.no_grad(), gpytorch.settings.fast_pred_var():
+        test_x = torch.tensor(input_f.values.astype(np.float32))
+        print(test_x)
+        observed_pred = likelihood(model(test_x))
+        print(observed_pred)
+
+        # Get upper and lower confidence bounds
+        lower, upper = observed_pred.confidence_region()
+
+    print(lower)
+    print(upper)
+    quit()
+
+
 # main program
 
 # process command line
@@ -532,18 +610,35 @@ if args.day != 'set':
         forecast = df[columns]
     else:
         days = pd.Series(df.index.date).unique()
-        if args.day == 'first':
-           day=0
-        else: 
-           if args.day == 'last':
-               day=len(days)-1
-           else:
-               day = int(args.day)
-        day_text = days[day].strftime("%Y-%m-%d")
-        day_start = day_text + ' 00:00:00'
-        day_end = day_text + ' 23:30:00'
-        forecast = df.loc[day_start : day_end]
-        forecast = forecast[columns]
+        if args.day[0:4] == 'near' :
+            forecast = df[columns].copy()
+            near_date = args.day[4:]
+            print('Day of the year near to {}'.format(near_date))
+            near_date_doy = date(2018, int(near_date[0:2]), int(near_date[2:4]) ).timetuple().tm_yday
+            near_range = 10
+            # in case we are close to the end of the year
+            if near_date_doy > 366-near_range:
+                near_date_doy = near_date_doy - 366
+            print(near_date_doy)
+            for day in days:
+                day_str = day.strftime('%Y-%m-%d')
+                doy = day.timetuple().tm_yday
+                if abs(near_date_doy - doy) > near_range:
+                    forecast.drop(forecast.loc[day_str].index, inplace=True)
+        else:
+
+            if args.day == 'first':
+               day=0
+            else: 
+               if args.day == 'last':
+                   day=len(days)-1
+               else:
+                   day = int(args.day)
+            day_text = days[day].strftime("%Y-%m-%d")
+            day_start = day_text + ' 00:00:00'
+            day_end = day_text + ' 23:30:00'
+            forecast = df.loc[day_start : day_end]
+            forecast = forecast[columns]
 
 #print(forecast)
 

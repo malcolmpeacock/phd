@@ -48,7 +48,7 @@ pv_new = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=
 
 print(pv_new)
 
-pv_filename = output_dir + 'pv_forecast_set{}_sdays.csv'.format(set1)
+pv_filename = output_dir + 'pv_forecast_set{}.csv'.format(set1)
 pv_forecast = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
 print(pv_forecast)
@@ -91,5 +91,6 @@ if args.plot:
     plt.title('How we did set {}'.format(set1) )
     plt.xlabel('Hour of the year', fontsize=15)
     plt.ylabel('MWh', fontsize=15)
-    plt.legend(loc='upper right', fontsize=15)
+#   plt.legend(loc='upper right', fontsize=15, bbox_to_anchor=(0.9,1.5) )
+    plt.legend(loc='lower right', fontsize=13 )
     plt.show()
