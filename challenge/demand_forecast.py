@@ -6,6 +6,7 @@ import sys
 import pandas as pd
 from datetime import datetime
 from datetime import timedelta
+from datetime import date
 import pytz
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
@@ -14,6 +15,7 @@ import numpy as np
 import math
 import torch
 import torch.nn as nn
+import gpytorch
 # Import tensor dataset & data loader
 from torch.utils.data import TensorDataset, DataLoader
 # Import nn.functional
@@ -265,6 +267,13 @@ def reg_inputs(df):
     for dsk in range(32,44):
         dsk_df = df[ df['dsk'] == dsk]
         dsk_data['tk{}'.format(dsk)] = dsk_df['tempm'].values
+#       Temperature Squared
+#       dsk_data['tsqdk{}'.format(dsk)] = dsk_df['tsqd'].values
+#       TH  - temperature * holiday 
+#       dsk_data['thdk{}'.format(dsk)] = dsk_df['th'].values
+#       dsk_data['tnhdk{}'.format(dsk)] = dsk_df['tnh'].values
+#       Irradiance (sun light? )
+#       dsk_data['sk{}'.format(dsk)] = dsk_df['sunw'].values
     input_df = pd.DataFrame(dsk_data)
     # other columns
     dsk_df = df[ df['dsk'] == 32]
@@ -370,7 +379,141 @@ def forecast_nreg(df, forecast, day, seed, num_epochs):
 
     return losses
 
-# reg - regression
+def sanity_check(df):
+    for column in df.columns:
+        if df[column].isna().sum() >0:
+            print("ERROR NaN in {}".format(column))
+            quit()
+
+def normalise_df(df):
+    df_max = {}
+    # normalise the inputs
+    for column in df.columns:
+        df_max[column] = df[column].max()
+        df[column] = df[column] / df[column].max()
+    return df_max
+
+# We will use the simplest form of GP model, exact inference
+class ExactGPModel(gpytorch.models.ExactGP):
+    def __init__(self, train_x, train_y, likelihood):
+        super(ExactGPModel, self).__init__(train_x, train_y, likelihood)
+        self.mean_module = gpytorch.means.ConstantMean()
+        self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
+
+    def forward(self, x):
+        mean_x = self.mean_module(x)
+        covar_x = self.covar_module(x)
+        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+
+
+# Gaussian Process Regression.
+def forecast_gpr(df, forecast, day, seed, num_epochs):
+
+    input_df = reg_inputs(df)
+    print(input_df)
+
+    # outputs - demand for the k periods of interest
+    k_demand={}
+    for k in range(32,44):
+        k_df = df[ df['k'] == k]
+        k_demand['demand{}'.format(k)] = k_df['demand'].values
+    output_df = pd.DataFrame(k_demand)
+    print(output_df)
+        
+    # store maximum values and normalise
+    input_max = normalise_df(input_df)
+    output_max = normalise_df(output_df)
+    # santity check
+    sanity_check(input_df)
+    sanity_check(output_df)
+
+    inputs = torch.tensor(input_df.values.astype(np.float32))
+    print(inputs)
+    targets = torch.tensor(output_df.values.astype(np.float32))
+    print(targets)
+
+    # initialize likelihood and model
+    likelihood = gpytorch.likelihoods.GaussianLikelihood()
+    model = ExactGPModel(inputs, targets, likelihood)
+
+    # Find optimal model hyperparameters
+    model.train()
+    likelihood.train()
+
+    # Use the adam optimizer
+    optimizer = torch.optim.Adam([
+    {'params': model.parameters()},  # Includes GaussianLikelihood parameters
+], lr=0.1)
+
+    # "Loss" for GPs - the marginal log likelihood
+    mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
+
+    for i in range(num_epochs):
+        # Zero gradients from previous iteration
+        optimizer.zero_grad()
+        # Output from model
+        output = model(inputs)
+        print(output)
+        print(targets)
+        # Calc loss and backprop gradients
+        loss = -mll(output, targets)
+        loss.backward()
+        print('Iter %d/%d - Loss: %.3f   lengthscale: %.3f   noise: %.3f' % (
+            i + 1, training_iter, loss.item(),
+            model.covar_module.base_kernel.lengthscale.item(),
+            model.likelihood.noise.item()
+        ))
+        optimizer.step()
+
+    # Get into evaluation (predictive posterior) mode
+    model.eval()
+    likelihood.eval()
+    # prediction
+    forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
+    # set up the values to forecast
+    input_f = reg_inputs(forecast_day)
+    # normalise the inputs (using same max as for the model)
+    for column in input_f.columns:
+        input_f[column] = input_f[column] / input_max[column]
+    # Test points are regularly spaced along [0,1]
+    # Make predictions by feeding model through likelihood
+    with torch.no_grad(), gpytorch.settings.fast_pred_var():
+        test_x = torch.tensor(input_f.values.astype(np.float32))
+        print(test_x)
+        observed_pred = likelihood(model(test_x))
+        print(observed_pred)
+
+        # Get upper and lower confidence bounds
+        lower, upper = observed_pred.confidence_region()
+
+    print(lower)
+    print(upper)
+    quit()
+
+#   print('f_inputs')
+#   print(f_inputs)
+    preds = model(f_inputs)
+#   print(preds)
+    # denormalize using df for the original model
+    vals = preds.detach().numpy()[0]
+#   print(vals)
+#   print(type(vals))
+    count=0
+    for column in output_max:
+        vals[count] = vals[count] * output_max[column]
+        count+=1
+    count=0
+    prediction_values = np.zeros(48)
+#   print(prediction_values)
+#   print(type(prediction_values))
+    for k in range(32,44):
+        prediction_values[k-1] = vals[count]
+        count+=1
+    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = prediction_values
+
+    return losses
+
+# reg - regression - with different models for each k=32,42
 
 def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki):
     pred_values=[]
@@ -382,7 +525,7 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki):
             if ki and (row['k'] < 32 or row['k'] > 42):
                 prediction_values = 1.0
             else:
-                print('Period {}'.format(dsk) )
+                print('Period k {} dsk {}'.format(row['k'],dsk) )
                 dsk_df = df[df['dsk'] == dsk]
                 dsk_f = forecast_day[forecast_day['dsk'] == dsk]
                 prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki)
@@ -407,13 +550,15 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki):
     if method == 'regl':
 #       input_columns = ['tempm', 'zenith']
 #       input_columns = ['tempm', 'zenith', 'holiday']
+#       input_columns = ['tempm', 'sun2', 'holiday', 'nothol']
         input_columns = ['tempm', 'zenith', 'holiday', 'nothol']
         batch_size = 1
         rate = 1e-4
     if method == 'regm':
 # sunw causes nans in predicition?
 #       input_columns = ['tempm', 'zenith', 'holiday', 'nothol', 'tsqd', 'th', 'tnh', 'sunw', 'sh']
-        input_columns = ['tempm', 'zenith', 'holiday', 'nothol', 'tsqd', 'th', 'tnh']
+        input_columns = ['tempm', 'zenith', 'holiday', 'nothol', 'tsqd', 'th', 'tnh', 'sunw']
+#       input_columns = ['tempm', 'zenith', 'holiday', 'nothol', 'tsqd', 'th', 'tnh']
         batch_size = 1
         rate = 1e-4
     if method == 'regd':
@@ -632,6 +777,7 @@ parser.add_argument('set', help='input data eg set0')
 parser.add_argument('--method', action="store", dest="method", help='Forecasting method: reg2, reg, ann, sday' , default='simple' )
 parser.add_argument('--day', action="store", dest="day", help='Day to forecast: set=read the set forecast file, first= first day, last=last day, all=loop to forecast all days based on the others, otherwise integer day' , default='set' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--mname', action="store_true", dest="mname", help='Name the output file using the method', default=False)
 parser.add_argument('--seed', action="store", dest="seed", help='Random seed, default=1.0', type=float, default=1.0)
 parser.add_argument('--epochs', action="store", dest="epochs", help='Number of epochs', type=int, default=100)
 parser.add_argument('--period', action="store", dest="period", help='Period k to forecast', type=float, default=all)
@@ -687,18 +833,34 @@ if args.day != 'set':
             forecast.drop( forecast[ forecast['holiday']==0].index, inplace=True)
     else:
         days = pd.Series(df.index.date).unique()
-        if args.day == 'first':
-           day=0
-        else: 
-           if args.day == 'last':
-               day=len(days)-1
-           else:
-               day = int(args.day)
-        day_text = days[day].strftime("%Y-%m-%d")
-        day_start = day_text + ' 00:00:00'
-        day_end = day_text + ' 23:30:00'
-        forecast = df.loc[day_start : day_end]
-        forecast = forecast[columns]
+        if args.day[0:4] == 'near' :
+            forecast = df[columns].copy()
+            near_date = args.day[4:]
+            print('Day of the year near to {}'.format(near_date))
+            near_date_doy = date(2018, int(near_date[0:2]), int(near_date[2:4]) ).timetuple().tm_yday
+            near_range = 10
+            # in case we are close to the end of the year
+            if near_date_doy > 366-near_range:
+                near_date_doy = near_date_doy - 366
+            print(near_date_doy)
+            for day in days:
+                day_str = day.strftime('%Y-%m-%d')
+                doy = day.timetuple().tm_yday
+                if abs(near_date_doy - doy) > near_range:
+                    forecast.drop(forecast.loc[day_str].index, inplace=True)
+        else:
+            if args.day == 'first':
+               day=0
+            else: 
+               if args.day == 'last':
+                   day=len(days)-1
+               else:
+                   day = int(args.day)
+            day_text = days[day].strftime("%Y-%m-%d")
+            day_start = day_text + ' 00:00:00'
+            day_end = day_text + ' 23:30:00'
+            forecast = df.loc[day_start : day_end]
+            forecast = forecast[columns]
 
 print(forecast)
 
@@ -751,6 +913,15 @@ for id in range(len(fdays)):
                 plt.ylabel('Loss', fontsize=15)
                 plt.show()
 
+        if method == 'gpr':
+            losses = forecast_gpr(history, forecast, day, args.seed, args.epochs)
+            if args.plot:
+                plt.plot(losses)
+                plt.title('demand nreg convergence')
+                plt.xlabel('Epochs', fontsize=15)
+                plt.ylabel('Loss', fontsize=15)
+                plt.show()
+
         if method == 'numpy':
             losses = forecast_numpy(history, forecast, day)
             if args.plot:
@@ -795,6 +966,8 @@ if 'demand' in forecast.columns:
 
 output_dir = "/home/malcolm/uclan/challenge/output/"
 output_filename = '{}demand_forecast_{}.csv'.format(output_dir, dataset)
+if args.mname:
+    output_filename = '{}demand_forecast_{}_{}.csv'.format(output_dir, method, dataset)
 forecast.to_csv(output_filename, float_format='%.2f')
 
 # only demand for bogdan
