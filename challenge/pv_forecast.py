@@ -494,6 +494,18 @@ def forecast_knn(df, forecast, day):
     probability = 0.8
     forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
 
+# We will use the simplest form of GP model, exact inference
+class ExactGPModel(gpytorch.models.ExactGP):
+    def __init__(self, train_x, train_y, likelihood):
+        super(ExactGPModel, self).__init__(train_x, train_y, likelihood)
+        self.mean_module = gpytorch.means.ConstantMean()
+        self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
+
+    def forward(self, x):
+        mean_x = self.mean_module(x)
+        covar_x = self.covar_module(x)
+        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+
 # Gaussian Process Regression.
 def forecast_gpr(df, forecast, day, seed, num_epochs):
 
@@ -711,6 +723,15 @@ for id in range(len(fdays)):
             if args.plot:
                 plt.plot(losses)
                 plt.title('pv ann convergence')
+                plt.xlabel('Epochs', fontsize=15)
+                plt.ylabel('Loss', fontsize=15)
+                plt.show()
+
+        if method == 'gpr':
+            losses = forecast_gpr(history, forecast, day, args.seed, args.epochs)
+            if args.plot:
+                plt.plot(losses)
+                plt.title('pv gpr convergence')
                 plt.xlabel('Epochs', fontsize=15)
                 plt.ylabel('Loss', fontsize=15)
                 plt.show()
