@@ -89,7 +89,8 @@ for day in days:
     battery = 0.0
     # this is 12 rather than 6 to avoid multiplying by 0.5 all the time
     # ( so its 6 half MWhs )
-    capacity = 12 - tolerance
+#   capacity = 12 - tolerance
+    capacity = 12
 
     # if the charge pattern didn't fully charge, then top up a bit
     points_sum = cpoints.sum()
