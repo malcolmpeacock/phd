@@ -615,8 +615,12 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki):
 #       input_columns = ['tempm', 'zenith', 'holiday', 'nothol', 'tsqd', 'th', 'tnh', 'sunw', 'sh']
 # this is ok, but a bit worse
 #       input_columns = ['tempm', 'zenith', 'holiday', 'nothol', 'tsqd', 'th', 'tnh', 'sunw']
-        input_columns = ['tempm', 'sun2', 'holiday', 'nothol', 'season', 'wd', 'zenith']
-#       input_columns = ['tempm', 'zenith', 'holiday', 'nothol', 'tsqd', 'th', 'tnh']
+        input_columns = ['tempm', 'sun2', 'holiday', 'nothol', 'season', 'zenith']
+        # days of the week 1-0 flags
+        for wd in range(7):
+            wd_key = 'wd{}'.format(wd)
+            input_columns.append(wd_key)
+
         batch_size = 1
         rate = 1e-4
     if method == 'regd':
@@ -714,7 +718,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki):
     prediction_values = preds.detach().numpy() * output_max
 #   print(prediction_values)
 
-    if args.plot:
+    if args.ploss:
         plt.plot(losses)
         plt.title('Demand Regression convergence. period {}'.format(dsk))
         plt.xlabel('Epochs', fontsize=15)
@@ -983,7 +987,7 @@ for id in range(len(fdays)):
             forecast_skt(df, forecast, day)
         if method == 'nreg':
             losses = forecast_nreg(history, forecast, day, args.seed, args.epochs)
-            if args.plot:
+            if args.ploss:
                 plt.plot(losses)
                 plt.title('demand nreg convergence')
                 plt.xlabel('Epochs', fontsize=15)
@@ -992,7 +996,7 @@ for id in range(len(fdays)):
 
         if method == 'gpr':
             losses = forecast_gpr(history, forecast, day, args.seed, args.epochs)
-            if args.plot:
+            if args.ploss:
                 plt.plot(losses)
                 plt.title('demand gpr convergence')
                 plt.xlabel('Epochs', fontsize=15)
@@ -1001,7 +1005,7 @@ for id in range(len(fdays)):
 
         if method == 'ann':
             losses = forecast_ann(history, forecast, day, args.seed, args.epochs)
-            if args.plot:
+            if args.ploss:
                 plt.plot(losses)
                 plt.title('demand ann convergence')
                 plt.xlabel('Epochs', fontsize=15)
