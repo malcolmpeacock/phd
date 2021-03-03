@@ -23,6 +23,8 @@ import torch.nn.functional as F
 import sklearn
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
+from scipy.signal import gaussian
+from scipy.ndimage import filters
 
 # custom code
 import utils
@@ -208,22 +210,28 @@ def forecast_skt(df, forecast, day):
     print(forecast_day)
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = y_pred
 
-def reg_inputs(df):
+def reg_inputs(df_nw1, df_nwn):
+    # dropping the first week
     # temperatures for a range of dsks
     dsk_data={}
     for dsk in range(32,44):
-        dsk_df = df[ df['dsk'] == dsk]
+        dsk_df = df_nw1[ df_nw1['dsk'] == dsk]
         dsk_data['tk{}'.format(dsk)] = dsk_df['tempm'].values
-#       Temperature Squared
+        # Temperature Squared
         dsk_data['tsqdk{}'.format(dsk)] = dsk_df['tsqd'].values
-#       TH  - temperature * holiday 
+        # TH  - temperature * holiday 
         dsk_data['thdk{}'.format(dsk)] = dsk_df['th'].values
         dsk_data['tnhdk{}'.format(dsk)] = dsk_df['tnh'].values
-#       Irradiance (sun light? ) sunw has nans so has sun2?!
+        # Irradiance (sun light? ) 
         dsk_data['sk{}'.format(dsk)] = dsk_df['sun2'].values
+        # data from last week
+        dsk_dfl = df_nwn[ df_nwn['dsk'] == dsk]
+        dsk_data['tlk{}'.format(dsk)] = dsk_dfl['tempm'].values
+        dsk_data['dmk{}'.format(dsk)] = dsk_dfl['demand'].values
+        
     input_df = pd.DataFrame(dsk_data)
     # other columns
-    dsk_df = df[ df['dsk'] == 32]
+    dsk_df = df_nw1[ df_nw1['dsk'] == 32]
     base_columns = ['holiday', 'week', 'sh', 'ph', 'season']
     for col in base_columns:
         input_df[col] = dsk_df[col].values
@@ -231,7 +239,7 @@ def reg_inputs(df):
     for wd in range(7):
         wd_key = 'wd{}'.format(wd)
         input_df[wd_key] = dsk_df[wd_key].values
-#   print(input_df)
+    print(input_df)
     return input_df
 
 def forecast_new_inputs(df):
@@ -331,15 +339,19 @@ def forecast_new(df, forecast, day, seed, num_epochs, ann):
     return losses, vals[0], original_peak
 
 # nreg - new regression - with all 11 periods of interest as seperate 
-#        inputs and outputs
+#        inputs and outputs as per bogdan
 def forecast_nreg(df, forecast, day, seed, num_epochs):
 
-    input_df = reg_inputs(df)
+    # drop the first week so we can use data from last week
+    df_nw1 = df.drop(df.head(48*7).index)
+    # drop the last week so we can use data from last week
+    df_nwn = df.drop(df.tail(48*7).index)
+    input_df = reg_inputs(df_nw1, df_nwn)
 
     # outputs - demand for the k periods of interest
     k_demand={}
     for k in range(32,44):
-        k_df = df[ df['k'] == k]
+        k_df = df_nw1[ df_nw1['k'] == k]
         k_demand['demand{}'.format(k)] = k_df['demand'].values
     output_df = pd.DataFrame(k_demand)
         
@@ -399,8 +411,10 @@ def forecast_nreg(df, forecast, day, seed, num_epochs):
     # prediction
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
 #   print(forecast_day)
+    day_last_week  = day - pd.Timedelta(days=7)
+    previous_day = df.loc[day_last_week.strftime('%Y-%m-%d')].copy()
     # set up the values to forecast
-    input_f = reg_inputs(forecast_day)
+    input_f = reg_inputs(forecast_day, previous_day)
 #   print(input_f)
     # normalise the inputs (using same max as for the model)
     for column in input_f.columns:
@@ -419,6 +433,10 @@ def forecast_nreg(df, forecast, day, seed, num_epochs):
     for column in output_max:
         vals[count] = vals[count] * output_max[column]
         count+=1
+    # smooth the output
+    b = gaussian(39, 1)
+    vals = filters.convolve1d(vals, b/b.sum())
+
     count=0
     prediction_values = np.zeros(48)
 #   print(prediction_values)
@@ -1035,9 +1053,9 @@ for id in range(len(fdays)):
 
 # metrics
 if 'demand' in forecast.columns:
-    peak_actual = pd.Series(peak_pred['peak_actual'])
-    peak_predict = pd.Series(peak_pred['peak_predict'])
-    if len(peak_actual) >2:
+    if len(peak_pred['peak_actual']) >2:
+        peak_actual = pd.Series(peak_pred['peak_actual'])
+        peak_predict = pd.Series(peak_pred['peak_predict'])
         print('Prediction of peak demand')
         utils.print_metrics(peak_actual, peak_predict, args.plot)
     if args.ki:
