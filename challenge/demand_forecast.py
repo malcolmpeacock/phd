@@ -224,14 +224,23 @@ def reg_inputs(df):
     input_df = pd.DataFrame(dsk_data)
     # other columns
     dsk_df = df[ df['dsk'] == 32]
-    base_columns = ['holiday', 'week', 'wd', 'sh', 'ph', 'season']
+    base_columns = ['holiday', 'week', 'sh', 'ph', 'season']
     for col in base_columns:
         input_df[col] = dsk_df[col].values
+    # days of the week 1-0 flags
+    for wd in range(7):
+        wd_key = 'wd{}'.format(wd)
+        input_df[wd_key] = dsk_df[wd_key].values
 #   print(input_df)
     return input_df
 
 def forecast_new_inputs(df):
-    input_df = df[['holiday', 'wd', 'sh', 'ph', 'season']].resample('D', axis=0).first().dropna()
+    columns = ['holiday', 'week', 'sh', 'ph', 'season']
+    # days of the week 1-0 flags
+    for wd in range(7):
+        wd_key = 'wd{}'.format(wd)
+        columns.append(wd_key)
+    input_df = df[columns].resample('D', axis=0).first().dropna()
     input_df['avtemp'] = df['tempm'].resample('D', axis=0).mean().dropna()
     input_df['maxtemp'] = df['tempm'].resample('D', axis=0).max().dropna()
 #   print(input_df)
@@ -248,7 +257,7 @@ def forecast_new(df, forecast, day, seed, num_epochs, ann):
     # outputs - demand for the k periods of interest
     data = {}
     data['peak'] = df_k['demand'].resample('D', axis=0).max().dropna()
-    data['sum'] = df_k['demand'].resample('D', axis=0).sum().dropna()
+#   data['sum'] = df_k['demand'].resample('D', axis=0).sum().dropna()
     output_df = pd.DataFrame(data).dropna()
 #   print(output_df)
         
@@ -271,7 +280,8 @@ def forecast_new(df, forecast, day, seed, num_epochs, ann):
     num_inputs = len(input_df.columns)
     num_outputs = len(output_df.columns)
     if ann:
-        model = SimpleNet(num_inputs, num_outputs, num_inputs)
+#       model = SimpleNet(num_inputs, num_outputs, num_inputs)
+        model = SimpleNet(num_inputs, num_outputs, 40)
     else:
         model = nn.Linear(num_inputs, num_outputs)
 
@@ -847,6 +857,7 @@ output_dir = "/home/malcolm/uclan/challenge/output/"
 merged_filename = '{}merged_{}.csv'.format(output_dir, dataset)
 df = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
+# additional values
 df['holiday'] = 0
 df.loc[(df['wd']>4) | (df['ph']==1), 'holiday' ] = 1
 df['nothol'] = 0
@@ -855,6 +866,12 @@ df.loc[(df['wd']<2) | (df['ph']==0), 'nothol' ] = 1
 df['tsqd'] = df['tempm'] * df['tempm']
 df['th'] = df['tempm'] * df['holiday']
 df['tnh'] = df['tempm'] * df['nothol']
+
+# days of the week 1-0 flags
+for wd in range(7):
+    wd_key = 'wd{}'.format(wd)
+    df[wd_key] = 0
+    df.loc[df['wd']==wd, wd_key] = 1
 
 print(df)
 
@@ -869,6 +886,12 @@ forecast.loc[(forecast['wd']<2) | (forecast['ph']==0), 'nothol' ] = 1
 forecast['tsqd'] = forecast['tempm'] * forecast['tempm']
 forecast['th'] = forecast['tempm'] * forecast['holiday']
 forecast['tnh'] = forecast['tempm'] * forecast['nothol']
+
+# days of the week 1-0 flags
+for wd in range(7):
+    wd_key = 'wd{}'.format(wd)
+    forecast[wd_key] = 0
+    forecast.loc[forecast['wd']==wd, wd_key] = 1
 
 if args.day != 'set':
     columns = forecast.columns.append(pd.Index(['demand']))
