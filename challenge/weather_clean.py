@@ -37,6 +37,10 @@ weather = pd.read_csv(weather_filename, header=0, sep=',', parse_dates=[0], inde
 
 # up sample to 30 mins (with interpolation)
 weather = weather.resample('30min').interpolate(method='cubic')
+# note the cubic causes some negative irradiance values on half hour periods
+# where one of them was zero, so we set the negative ones to zero.
+for col in ['solar_location1', 'solar_location2', 'solar_location3', 'solar_location4','solar_location5', 'solar_location6']:
+    weather.loc[weather[col]<0.0, col] = 0.0
 
 print(weather)
 

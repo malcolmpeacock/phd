@@ -164,6 +164,18 @@ def forecast_closest_days(df, forecast, day, method):
     probability = 0.8
     forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
 
+def find_closest_peak_days(df, forecast, day, peak):
+    days = pd.Series(df.index.date).unique()
+    df_k = df[ (df['k'] > 31) & (df['k'] < 43)]
+    f_k = forecast[ (forecast['k'] > 31) & (forecast['k'] < 43)]
+    closest_peak_days = utils.find_closest_days_max(days, df_k, 'demand', peak, 30)
+#   print(closest_peak_days)
+    closest_days = utils.find_closest_days(day, closest_peak_days, f_k, df_k, 'tempm', 10, True, False)
+    new_day = utils.create_day(closest_days.index, df, 'demand')
+    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = new_day['demand'].values
+    probability = 0.8
+    forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
+
 # skt
 def forecast_skt(df, forecast, day):
     input_columns = ['tempm', 'dsk']
@@ -231,14 +243,14 @@ def forecast_new(df, forecast, day, seed, num_epochs, ann):
 
     df_k = df[ (df['k'] > 31) & (df['k'] < 43)]
     input_df = forecast_new_inputs(df_k)
-    print(input_df)
+#   print(input_df)
 
     # outputs - demand for the k periods of interest
     data = {}
     data['peak'] = df_k['demand'].resample('D', axis=0).max().dropna()
     data['sum'] = df_k['demand'].resample('D', axis=0).sum().dropna()
     output_df = pd.DataFrame(data).dropna()
-    print(output_df)
+#   print(output_df)
         
     # store maximum values
     input_max = utils.df_normalise(input_df)
@@ -289,21 +301,24 @@ def forecast_new(df, forecast, day, seed, num_epochs, ann):
 #   print('f_inputs')
 #   print(f_inputs)
     preds = model(f_inputs)
-    print(preds)
+#   print(preds)
     # denormalize using df for the original model
     vals = preds.detach().numpy()[0]
-    print(vals)
-    print(type(vals))
+#   print(vals)
     count=0
     for column in output_max:
         vals[count] = vals[count] * output_max[column]
         count+=1
   
-    f_k = forecast_day[ (forecast_day['k'] > 31) & (forecast_day['k'] < 43)]
-    original_peak = f_k['demand'].resample('D', axis=0).max()
-    original_sum = f_k['demand'].resample('D', axis=0).sum()
-#   return losses, vals[0], vals[1], original_peak.values[0], original_sum.values[0]
-    return losses, vals[0], original_peak.values[0]
+    # if we have demand, then get the original
+    if 'demand' in forecast_day.columns:
+        f_k = forecast_day[ (forecast_day['k'] > 31) & (forecast_day['k'] < 43)]
+        original_peak = f_k['demand'].resample('D', axis=0).max().values[0]
+        original_sum = f_k['demand'].resample('D', axis=0).sum().values[0]
+    else:
+        original_peak = 0.0
+#   return losses, vals[0], vals[1], original_peak, original_sum
+    return losses, vals[0], original_peak
 
 # nreg - new regression - with all 11 periods of interest as seperate 
 #        inputs and outputs
@@ -986,32 +1001,25 @@ for id in range(len(fdays)):
             peak_pred['peak_predict'].append(pred_peak)
 #           peak_pred['sum_actual'].append(ac_sum)
 #           peak_pred['sum_predict'].append(pred_sum)
-  ## TODO - compare vals : peak and sum with actuals
-  # use these in a call to a more complex sdays method
+            # find closest days with this peak demand with similar temp patterns
+            find_closest_peak_days(history, forecast, day, pred_peak)
 
 #print(forecast)
-peak_actual = pd.Series(peak_pred['peak_actual'])
-peak_predict = pd.Series(peak_pred['peak_predict'])
-#sum_actual = pd.Series(peak_pred['sum_actual'])
-#sum_predict = pd.Series(peak_pred['sum_predict'])
-print('Peak prediction')
-print(peak_actual)
-print(peak_predict)
-if len(peak_actual) >2:
-    utils.print_metrics(peak_actual, peak_predict, args.plot)
-#print('Sum prediction')
-#print(sum_actual)
-#print(sum_predict)
-#if len(sum_actual) >2:
-#    utils.print_metrics(sum_actual, sum_predict, args.plot)
 
 # metrics
 if 'demand' in forecast.columns:
+    peak_actual = pd.Series(peak_pred['peak_actual'])
+    peak_predict = pd.Series(peak_pred['peak_predict'])
+    if len(peak_actual) >2:
+        print('Prediction of peak demand')
+        utils.print_metrics(peak_actual, peak_predict, args.plot)
     if args.ki:
         kf = forecast[ (forecast['k'] > 31) & (forecast['k'] < 43)]
 #       print(kf['demand'])
 #       print(kf['prediction'])
+        print('Metrics for k>31 and k<43')
         utils.print_metrics(kf['demand'], kf['prediction'], args.plot)
+        print('Metrics for whole day')
         utils.print_metrics(forecast['demand'], forecast['prediction'], False)
     else:
         utils.print_metrics(forecast['demand'], forecast['prediction'], args.plot)

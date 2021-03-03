@@ -39,6 +39,8 @@ def krange(df):
     return output
 
 def print_metrics(s1,s2, plot=False):
+    # Mean Error (ME)
+    me = ( s1 - s2 ).mean()
     # Mean Absolute Error (MAE)
     mae = ( s1 - s2 ).abs().mean()
     # Root Mean Square Error (RMSE)
@@ -55,8 +57,8 @@ def print_metrics(s1,s2, plot=False):
     gradient = p[0]
     rsquared = results.rsquared
     # output results
-    print("MAE   Correlation nRMSE rsquared ")
-    print('{0:.2f}  {1:.2f}        {2:.2f}  {3:.3f} '.format(mae, corr, nrmse, rsquared) )
+    print("MAE   Correlation nRMSE rsquared   ME ")
+    print('{0:.2f}  {1:.2f}        {2:.2f}  {3:.3f}   {4:.3f} '.format(mae, corr, nrmse, rsquared, me) )
     # plots
     if plot:
         x = np.array([s2.min(),s2.max()])
@@ -185,6 +187,28 @@ def find_closest_days(given_day, days, df1, df2, parm, n, dst=False, season=Fals
                     closest_days.drop(idmax, inplace=True)
                     closest_days[day] = day_diff_score
     return closest_days
+
+def day_peak_diff(day, df, parm, value):
+    day_data = df.loc[day.strftime('%Y-%m-%d')]
+    diff = abs( day_data[parm].max() - value )
+    return diff
+
+# find n closest peak days to a given value
+def find_closest_days_max(days, df, parm, value, n):
+    closest_day = days[0]
+    closest_day_score = day_peak_diff(closest_day, df, parm, value)
+    closest_days=pd.Series([closest_day_score], index=[days[0]], name='sdays')
+    for day in days:
+        day_diff_score = day_peak_diff(closest_day, df, parm, value)
+        # if not got enough days yet, just add the new one.
+        if len(closest_days) < n:
+            closest_days[day] = day_diff_score
+        else:
+            if day_diff_score < closest_days.max():
+                idmax = closest_days.idxmax()
+                closest_days.drop(idmax, inplace=True)
+                closest_days[day] = day_diff_score
+    return closest_days.keys()
 
 # function to create a new day from a set of others by interpolation
 def create_day(days, df, parm):
