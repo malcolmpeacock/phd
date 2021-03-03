@@ -158,12 +158,23 @@ def find_closest_day(given_day, days, df1, df2, parm, dst=False):
                 closest_day_score = day_diff_score
     return closest_day, closest_day_score
 
+# check day to be included
+def valid_find_day(day, given_day, season, df1, df2):
+    if day==given_day:
+        return False
+    day_data = df1.loc[day.strftime('%Y-%m-%d')]
+    given_day_data = df2.loc[given_day.strftime('%Y-%m-%d')]
+    if season:
+        return day_data.iloc[0]['season'] == given_day_data.iloc[0]['season']
+    else:
+        return True
+
 # find n closest weather days to a given day
-def find_closest_days(given_day, days, df1, df2, parm, n, dst=False):
+def find_closest_days(given_day, days, df1, df2, parm, n, dst=False, season=False):
     closest_day_score = day_diff(given_day, days[0], df1, df2, parm, dst)
     closest_days=pd.Series([closest_day_score], index=[days[0]], name='sdays')
     for day in days:
-        if day!=given_day:
+        if valid_find_day(given_day, day, season, df1, df2):
             day_diff_score = day_diff(given_day, day, df1, df2, parm, dst)
             # if not got enough days yet, just add the new one.
             if len(closest_days) < n:
@@ -398,3 +409,27 @@ def find_knn(needle, haystack, tparms, n):
                 closest_hours.drop(idmax, inplace=True)
                 closest_hours[index] = closest_score
     return closest_hours
+
+def df_normalise(df):
+    df_max = {}
+    # normalise the inputs
+    for column in df.columns:
+        df_max[column] = df[column].max()
+        if df_max[column] > 0:
+            df[column] = df[column] / df_max[column]
+    return df_max
+
+def df_normalise_by(df,df_max):
+    # normalise the inputs
+    for column in df.columns:
+        if df_max[column] > 0:
+            df[column] = df[column] / df_max[column]
+
+def sanity_check(df):
+    for column in df.columns:
+        if df[column].isna().sum() >0:
+            print("ERROR {} NaN in {}".format(df[column].isna().sum(),column))
+            print(df[df[column].isna()][column])
+            quit()
+
+
