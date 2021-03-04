@@ -411,8 +411,21 @@ def forecast_nreg(df, forecast, day, seed, num_epochs):
     # prediction
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
 #   print(forecast_day)
-    day_last_week  = day - pd.Timedelta(days=7)
-    previous_day = df.loc[day_last_week.strftime('%Y-%m-%d')].copy()
+    # we need a previous day to get demand from, but in assessing the method
+    # there might not be one if it was removed due to bad data. So we then 
+    # look further back
+    dl = 0
+    day_last_week  = day
+    while dl == 0:
+        day_last_week  = day_last_week - pd.Timedelta(days=7)
+        print('Looking to base demand of previous week on {}'.format(day_last_week))
+        previous_day = df.loc[day_last_week.strftime('%Y-%m-%d')].copy()
+        dl = len(previous_day)
+    if dl==0:
+        print('ERROR could not find previous day')
+    else:
+        print('OK {} values, using {}'.format(dl,day_last_week))
+#   print(previous_day)
     # set up the values to forecast
     input_f = reg_inputs(forecast_day, previous_day)
 #   print(input_f)
@@ -599,9 +612,9 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki):
                 dsk_f = forecast_day[forecast_day['dsk'] == dsk]
                 prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki)
                 if math.isnan(prediction_values):
-                    print('WARNING NaN set to Zero at period {}'.format(row['k']))
+                    print('WARNING NaN replaced by interpolation at period {}'.format(row['k']))
                 if not math.isfinite(prediction_values):
-                    print('WARNING Inf set to Zero at period {}'.format(row['k']))
+                    print('WARNING Inf replaced by interpolation at period {}'.format(row['k']))
                     prediction_values = float("NaN")
             pred_values.append(prediction_values)
         pred_series = pd.Series(pred_values, index=forecast_day.index)
@@ -664,7 +677,8 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki):
             input_df[column] = 0.0
     # normalise the output (Y)
     output_max = output.max()
-    output = output / output_max
+    if output_max>0:
+        output = output / output_max
 
     # santity check
     for column in input_df.columns:
@@ -726,7 +740,8 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki):
 #   print(input_f)
     # normalise the inputs (using same max as for the model)
     for column in input_f.columns:
-        input_f[column] = input_f[column] / input_max[column]
+        if input_max[column]>0:
+            input_f[column] = input_f[column] / input_max[column]
     f_inputs = torch.tensor(input_f.values.astype(np.float32))
 #   print('f_inputs')
 #   print(f_inputs)

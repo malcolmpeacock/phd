@@ -39,6 +39,8 @@ def krange(df):
     return output
 
 def print_metrics(s1,s2, plot=False):
+    # peak difference
+    pd = s1.max() - s2.max()
     # Mean Error (ME)
     me = ( s1 - s2 ).mean()
     # Mean Absolute Error (MAE)
@@ -57,8 +59,8 @@ def print_metrics(s1,s2, plot=False):
     gradient = p[0]
     rsquared = results.rsquared
     # output results
-    print("MAE   Correlation nRMSE rsquared   ME ")
-    print('{0:.2f}  {1:.2f}        {2:.2f}  {3:.3f}   {4:.3f} '.format(mae, corr, nrmse, rsquared, me) )
+    print("MAE   Correlation nRMSE rsquared   ME   Peak Difference")
+    print('{0:.2f}  {1:.2f}        {2:.2f}  {3:.3f}   {4:.3f} {5:.3f} '.format(mae, corr, nrmse, rsquared, me, pd) )
     # plots
     if plot:
         x = np.array([s2.min(),s2.max()])

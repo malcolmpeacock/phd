@@ -95,6 +95,8 @@ for day in days:
     points_sum = cpoints.sum()
     remaining = capacity - points_sum
 
+    # sort so that any remaining charge gets put in at the peak first
+    cpoints = cpoints.sort_values(ascending=False)
 
     # for each point in the charge strategy ...
     for index, value in cpoints.iteritems():
@@ -140,6 +142,9 @@ print('Final Score {}'.format(final_score) )
 if args.plot:
     pv['prediction'].plot(label='PV Generation Forecast', color='red')
     pv['average'].plot(label='PV Generation Forecast', color='red', linestyle = 'dotted')
+    # theorectical max? PR=0.8, 5.0MwP of plant, 2 because of half hour periods
+    pv['pv_max'] = (pv['cs_ghi'] * 0.8 * 5.0 ) * 0.002
+    pv['pv_max'].plot(label='Max PV from clear sky ghi', color='orange', linestyle = 'dotted')
     new_demand.plot(label='Modified demand', color='yellow')
     demand['prediction'].plot(label='Demand Forecast', color='blue')
     solution['charge_MW'].plot(label='Battery Charge', color='green')
