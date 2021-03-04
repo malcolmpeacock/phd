@@ -864,6 +864,7 @@ parser.add_argument('--ann', action="store_true", dest="ann", help='Replace regr
 parser.add_argument('--mname', action="store_true", dest="mname", help='Name the output file using the method', default=False)
 parser.add_argument('--seed', action="store", dest="seed", help='Random seed, default=1.0', type=float, default=1.0)
 parser.add_argument('--epochs', action="store", dest="epochs", help='Number of epochs', type=int, default=100)
+parser.add_argument('--nnear', action="store", dest="nnear", help='Number of days when using the --day near option', type=int, default=10)
 parser.add_argument('--period', action="store", dest="period", help='Period k to forecast', type=float, default=all)
 parser.add_argument('--step', action="store", dest="step", help='If using days=all or step only do every step days', type=int, default=1)
 parser.add_argument('--ki', action="store_true", dest="ki", help='Only forecast K of interest.', default=False)
@@ -930,34 +931,45 @@ if args.day != 'set':
             forecast.drop( forecast[ forecast['holiday']==0].index, inplace=True)
     else:
         days = pd.Series(df.index.date).unique()
-        if args.day[0:4] == 'near' :
-            forecast = df[columns].copy()
-            near_date = args.day[4:]
-            print('Day of the year near to {}'.format(near_date))
-            near_date_doy = date(2018, int(near_date[0:2]), int(near_date[2:4]) ).timetuple().tm_yday
-            near_range = 10
-            # in case we are close to the end of the year
-            if near_date_doy > 366-near_range:
-                near_date_doy = near_date_doy - 366
-            print(near_date_doy)
-            for day in days:
-                day_str = day.strftime('%Y-%m-%d')
-                doy = day.timetuple().tm_yday
-                if abs(near_date_doy - doy) > near_range:
-                    forecast.drop(forecast.loc[day_str].index, inplace=True)
-        else:
-            if args.day == 'first':
-               day=0
-            else: 
-               if args.day == 'last':
-                   day=len(days)-1
-               else:
-                   day = int(args.day)
-            day_text = days[day].strftime("%Y-%m-%d")
+        if args.day[0:4] == 'week' :
+            start_date = args.day[4:]
+            print('Week starting {}'.format(start_date))
+            start_date = date(int(start_date[0:4]), int(start_date[4:6]), int(start_date[6:8]) )
+            end_date = start_date + pd.Timedelta(days=6)
+            day_text = start_date.strftime("%Y-%m-%d")
             day_start = day_text + ' 00:00:00'
-            day_end = day_text + ' 23:30:00'
+            day_end = end_date.strftime("%Y-%m-%d") + ' 23:30:00'
             forecast = df.loc[day_start : day_end]
             forecast = forecast[columns]
+        else:
+            if args.day[0:4] == 'near' :
+                forecast = df[columns].copy()
+                near_date = args.day[4:]
+                print('Day of the year near to {}'.format(near_date))
+                near_date_doy = date(2018, int(near_date[0:2]), int(near_date[2:4]) ).timetuple().tm_yday
+                near_range = args.nnear
+                # in case we are close to the end of the year
+                if near_date_doy > 366-near_range:
+                    near_date_doy = near_date_doy - 366
+                print(near_date_doy)
+                for day in days:
+                    day_str = day.strftime('%Y-%m-%d')
+                    doy = day.timetuple().tm_yday
+                    if abs(near_date_doy - doy) > near_range:
+                        forecast.drop(forecast.loc[day_str].index, inplace=True)
+            else:
+                if args.day == 'first':
+                   day=0
+                else: 
+                   if args.day == 'last':
+                       day=len(days)-1
+                   else:
+                       day = int(args.day)
+                day_text = days[day].strftime("%Y-%m-%d")
+                day_start = day_text + ' 00:00:00'
+                day_end = day_text + ' 23:30:00'
+                forecast = df.loc[day_start : day_end]
+                forecast = forecast[columns]
 
 #print(forecast)
 

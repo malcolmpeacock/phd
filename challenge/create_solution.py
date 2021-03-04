@@ -49,7 +49,7 @@ print('Reading demand from {}'.format(demand_filename) )
 demand = pd.read_csv(demand_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 demand['k'] = utils.index2ks(demand.index)
 
-print(demand)
+#print(demand)
 
 # pv data
 pv_filename = '{}pv_forecast_{}.csv'.format(input_dir, dataset)
@@ -60,9 +60,8 @@ pv = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, s
 #pv['average'] = pv['prediction'].rolling(window=7, center=True).mean()
 #pv['average'].fillna(0.0)
 
-#b = gaussian(39, 10)
-b = gaussian(39, 7)
-#b = gaussian(10, 5)
+#b = gaussian(39, 7)
+b = gaussian(39, 3)
 gf = filters.convolve1d(pv['prediction'].values, b/b.sum())
 pv['average'] = gf
 
@@ -99,11 +98,11 @@ for day in days:
 
     # for each point in the charge strategy ...
     for index, value in cpoints.iteritems():
+        k = utils.index2k(index)
         if remaining > 0 and value + remaining < 2.5:
-            print('Topping up {}'.format(remaining) )
+            print('Topping up {} at k {}'.format(remaining, k) )
             value = value + remaining
             remaining = 0
-        k = utils.index2k(index)
 #       print('Charging k {} battery {} index {} pv {}'.format(k, battery, index, value) )
         # double check on not exceeding the battery
         charge_output = min(value, capacity-battery)
