@@ -46,6 +46,21 @@ if dataset[0:3] == 'set':
     # 2018-02-28 11:00:00 - no power but irradiance.
     #   - irradiance is pretty low here as well
     pv['panel_temp_C']['2018-02-28 11:00:00'] = pv['panel_temp_C']['2018-02-28 10:30:00']
+    # no power irradiance or temp
+    pv['pv_power_mw']['2019-07-19 14:00:00'] = pv['pv_power_mw']['2019-07-19 13:30:00']
+    pv['pv_power_mw']['2019-07-19 14:30:00'] = pv['pv_power_mw']['2019-07-19 13:30:00']
+    pv['pv_power_mw']['2019-07-19 15:00:00'] = pv['pv_power_mw']['2019-07-19 16:00:00']
+    pv['pv_power_mw']['2019-07-19 15:30:00'] = pv['pv_power_mw']['2019-07-19 16:00:00']
+
+    pv['irradiance_Wm-2']['2019-07-19 14:00:00'] = pv['irradiance_Wm-2']['2019-07-19 13:30:00']
+    pv['irradiance_Wm-2']['2019-07-19 14:30:00'] = pv['irradiance_Wm-2']['2019-07-19 13:30:00']
+    pv['irradiance_Wm-2']['2019-07-19 15:00:00'] = pv['irradiance_Wm-2']['2019-07-19 16:00:00']
+    pv['irradiance_Wm-2']['2019-07-19 15:30:00'] = pv['irradiance_Wm-2']['2019-07-19 16:00:00']
+
+    pv['panel_temp_C']['2019-07-19 14:00:00'] = pv['panel_temp_C']['2019-07-19 13:30:00']
+    pv['panel_temp_C']['2019-07-19 14:30:00'] = pv['panel_temp_C']['2019-07-19 13:30:00']
+    pv['panel_temp_C']['2019-07-19 15:00:00'] = pv['panel_temp_C']['2019-07-19 16:00:00']
+    pv['panel_temp_C']['2019-07-19 15:30:00'] = pv['panel_temp_C']['2019-07-19 16:00:00']
     # replace a suspect days with different ones.
 #   utils.replace_day(pv, '2018-03-04', '2018-03-01')
     print('Dropping 2018-03-04 lot of missing values')
@@ -54,6 +69,11 @@ if dataset[0:3] == 'set':
     pv.drop(pv.loc['2019-01-23'].index, inplace=True)
     pv.drop(pv.loc['2019-01-24'].index, inplace=True)
     pv.drop(pv.loc['2019-01-25'].index, inplace=True)
+    print('Dropping 2019-07-29, 2019-10-08, 2019-11-02 zero power values')
+    pv.drop(pv.loc['2018-12-13'].index, inplace=True)
+    pv.drop(pv.loc['2019-07-29'].index, inplace=True)
+    pv.drop(pv.loc['2019-10-08'].index, inplace=True)
+    pv.drop(pv.loc['2019-11-02'].index, inplace=True)
     # 2017-12-26 14:30:00 - Zero power value
     pv['pv_power_mw']['2017-12-26 14:30:00'] = pv['pv_power_mw']['2017-12-26 14:00:00']
     # replace a suspect days with different ones.
