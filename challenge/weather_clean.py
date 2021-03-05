@@ -87,6 +87,9 @@ weather['sunw'] = weather['sunw'].fillna(0)
 # calculate mean temperature over all 6 
 weather['tempm'] = ( weather['temp_location1'] + weather['temp_location2'] + weather['temp_location3'] + weather['temp_location4'] + weather['temp_location5'] + weather['temp_location6'] ) / 6.0
 
+# calculate mean irradiance over all 6 
+weather['sunm'] = ( weather['solar_location1'] + weather['solar_location2'] + weather['solar_location3'] + weather['solar_location4'] + weather['solar_location5'] + weather['solar_location6'] ) / 6.0
+
 # plot weather
 if args.plot:
     weather['temp_location1'].plot(label='temperature 1', color='red')
@@ -112,7 +115,7 @@ if args.plot:
 
 
 print(weather.columns)
-weather.columns = ['temp3', 'temp6', 'temp2', 'temp4', 'temp5', 'temp1', 'sun3', 'sun6', 'sun2', 'sun4', 'sun5', 'sun1', 'tempw', 'sunw', 'tempm']
+weather.columns = ['temp3', 'temp6', 'temp2', 'temp4', 'temp5', 'temp1', 'sun3', 'sun6', 'sun2', 'sun4', 'sun5', 'sun1', 'tempw', 'sunw', 'tempm', 'sunm']
 
 output_dir = "/home/malcolm/uclan/challenge/output/"
 

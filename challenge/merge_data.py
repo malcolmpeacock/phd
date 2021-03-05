@@ -10,6 +10,7 @@
 # tempw      temperature at pv location weighted average of 4 surrounding weather
 # sunw       irradiance at pv location weighted average of 4 surrounding weather
 # tempm      mean temperature from all 6 weather locations
+# sunm       mean irradiance from all 6 weather locations
 # k          half hour period of the day  ( based on UTC)
 # dsk        half hour period of the day  ( accounting for clocks changing)
 # zenith     solar zenith angle ( its getting dark if > 87 )

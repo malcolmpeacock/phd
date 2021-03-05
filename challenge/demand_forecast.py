@@ -29,6 +29,11 @@ from scipy.ndimage import filters
 # custom code
 import utils
 
+# loss function for weighted L1
+def loss_wl1(X,Y,W):
+    lossn =  torch.mean(torch.abs(X - Y) * W)
+    return lossn
+
 # custom loss function
 def loss_max1(X,Y):
 #   lossn = abs( X.max().item() - Y.max().item() )
@@ -219,11 +224,10 @@ def reg_inputs(df_nw1, df_nwn):
         dsk_data['tk{}'.format(dsk)] = dsk_df['tempm'].values
         # Temperature Squared
         dsk_data['tsqdk{}'.format(dsk)] = dsk_df['tsqd'].values
-        # TH  - temperature * holiday 
-        dsk_data['thdk{}'.format(dsk)] = dsk_df['th'].values
-        dsk_data['tnhdk{}'.format(dsk)] = dsk_df['tnh'].values
+        # TH  - temperature * irradiance 
+        dsk_data['tsdk{}'.format(dsk)] = dsk_df['ts'].values
         # Irradiance (sun light? ) 
-        dsk_data['sk{}'.format(dsk)] = dsk_df['sun2'].values
+        dsk_data['sk{}'.format(dsk)] = dsk_df['sunw'].values
         # data from last week
         dsk_dfl = df_nwn[ df_nwn['dsk'] == dsk]
         dsk_data['tlk{}'.format(dsk)] = dsk_dfl['tempm'].values
@@ -232,13 +236,9 @@ def reg_inputs(df_nw1, df_nwn):
     input_df = pd.DataFrame(dsk_data)
     # other columns
     dsk_df = df_nw1[ df_nw1['dsk'] == 32]
-    base_columns = ['holiday', 'week', 'sh', 'ph', 'season']
+    base_columns = ['season']
     for col in base_columns:
         input_df[col] = dsk_df[col].values
-    # days of the week 1-0 flags
-    for wd in range(7):
-        wd_key = 'wd{}'.format(wd)
-        input_df[wd_key] = dsk_df[wd_key].values
     print(input_df)
     return input_df
 
@@ -341,11 +341,13 @@ def forecast_new(df, forecast, day, seed, num_epochs, ann):
 # nreg - new regression - with all 11 periods of interest as seperate 
 #        inputs and outputs as per bogdan
 def forecast_nreg(df, forecast, day, seed, num_epochs):
-
+    # only use days of the same type
+    forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
+    dfd = df[df['dtype'] == forecast_day['dtype'].iloc[0]]
     # drop the first week so we can use data from last week
-    df_nw1 = df.drop(df.head(48*7).index)
+    df_nw1 = dfd.drop(dfd.head(48*7).index)
     # drop the last week so we can use data from last week
-    df_nwn = df.drop(df.tail(48*7).index)
+    df_nwn = dfd.drop(dfd.tail(48*7).index)
     input_df = reg_inputs(df_nw1, df_nwn)
 
     # outputs - demand for the k periods of interest
@@ -354,31 +356,14 @@ def forecast_nreg(df, forecast, day, seed, num_epochs):
         k_df = df_nw1[ df_nw1['k'] == k]
         k_demand['demand{}'.format(k)] = k_df['demand'].values
     output_df = pd.DataFrame(k_demand)
-        
-    # store maximum values
-    input_max = {}
-    output_max = {}
-    # normalise the inputs
-    for column in input_df.columns:
-        input_max[column] = input_df[column].max()
-        if input_max[column] > 0:
-            input_df[column] = input_df[column] / input_df[column].max()
-    # normalise the outputs
-    for column in output_df.columns:
-        output_max[column] = output_df[column].max()
-        if output_max[column] > 0:
-            output_df[column] = output_df[column] / output_df[column].max()
-    # santity check
-    for column in input_df.columns:
-        if input_df[column].isna().sum() >0:
-            print("ERROR {} NaN in {}".format(input_df[column].isna().sum(),column))
-            print(input_df[input_df[column].isna()][column])
-            quit()
-    for column in output_df.columns:
-        if output_df[column].isna().sum() >0:
-            print("ERROR NaN in {}".format(column))
-            quit()
 
+    # store maximum values
+    input_max = utils.df_normalise(input_df)
+    output_max = utils.df_normalise(output_df)
+    # santity check
+    utils.sanity_check(input_df)
+    utils.sanity_check(output_df)
+        
     inputs = torch.tensor(input_df.values.astype(np.float32))
     targets = torch.tensor(output_df.values.astype(np.float32))
     torch.manual_seed(seed)    # reproducible
@@ -409,22 +394,27 @@ def forecast_nreg(df, forecast, day, seed, num_epochs):
     preds = model(inputs)
 #   print(preds)
     # prediction
-    forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
 #   print(forecast_day)
     # we need a previous day to get demand from, but in assessing the method
     # there might not be one if it was removed due to bad data. So we then 
     # look further back
-    dl = 0
+    first_day = dfd.first_valid_index().date()
+    previous_found = False
     day_last_week  = day
-    while dl == 0:
+    while not previous_found:
         day_last_week  = day_last_week - pd.Timedelta(days=7)
         print('Looking to base demand of previous week on {}'.format(day_last_week))
-        previous_day = df.loc[day_last_week.strftime('%Y-%m-%d')].copy()
-        dl = len(previous_day)
-    if dl==0:
-        print('ERROR could not find previous day')
-    else:
-        print('OK {} values, using {}'.format(dl,day_last_week))
+        if day_last_week < first_day:
+            print('Previous day for demand before start of data!!!!')
+            quit()
+        if day_last_week.strftime('%Y-%m-%d') in dfd.index:
+            print('Found using {}'.format(day_last_week))
+            previous_day = dfd.loc[day_last_week.strftime('%Y-%m-%d')].copy()
+            if len(previous_day) > 0:
+                previous_found = True
+        else:
+            print('Not Found')
+
 #   print(previous_day)
     # set up the values to forecast
     input_f = reg_inputs(forecast_day, previous_day)
@@ -438,7 +428,6 @@ def forecast_nreg(df, forecast, day, seed, num_epochs):
 #   print(f_inputs)
     preds = model(f_inputs)
 #   print(preds)
-    # denormalize using df for the original model
     vals = preds.detach().numpy()[0]
 #   print(vals)
 #   print(type(vals))
@@ -447,8 +436,8 @@ def forecast_nreg(df, forecast, day, seed, num_epochs):
         vals[count] = vals[count] * output_max[column]
         count+=1
     # smooth the output
-    b = gaussian(39, 1)
-    vals = filters.convolve1d(vals, b/b.sum())
+#   b = gaussian(39, 1)
+#   vals = filters.convolve1d(vals, b/b.sum())
 
     count=0
     prediction_values = np.zeros(48)
@@ -596,10 +585,17 @@ def forecast_gpr(df, forecast, day, seed, num_epochs):
     return losses
 
 # reg - regression - with different models for each k=32,42
+#        regl  - first 
+#        regm  - as submitted for set2
+#        regd  - only look at same day type
 
 def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki):
     pred_values=[]
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
+    if method == 'regd':
+        dfd = df[df['dtype'] == forecast_day['dtype'].iloc[0]]
+    else:
+        dfd = df
     if period == all:
         # for each k period, train a seperate model ...
         for index, row in forecast_day.iterrows():
@@ -608,7 +604,7 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki):
                 prediction_values = 1.0
             else:
                 print('Period k {} dsk {}'.format(row['k'],dsk) )
-                dsk_df = df[df['dsk'] == dsk]
+                dsk_df = dfd[dfd['dsk'] == dsk]
                 dsk_f = forecast_day[forecast_day['dsk'] == dsk]
                 prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki)
                 if math.isnan(prediction_values):
@@ -626,7 +622,7 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki):
         forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = pred_series
     else:
         dsk = int(period)
-        dsk_df = df[df['dsk'] == dsk]
+        dsk_df = dfd[dfd['dsk'] == dsk]
         dsk_f = forecast_day[forecast_day['dsk'] == dsk]
         prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki)
         print('Predicted value {} for period {}'.format(prediction_values, period))
@@ -634,6 +630,13 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki):
 
 def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki):
     # set up inputs
+    if method == 'regd':
+        input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts']
+#       converges better with batch size=1
+#       batch_size = 48
+        batch_size = 1
+        rate = 1e-3
+
     if method == 'regl':
 #       input_columns = ['tempm', 'zenith']
 #       input_columns = ['tempm', 'zenith', 'holiday']
@@ -641,6 +644,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki):
         input_columns = ['tempm', 'zenith', 'holiday', 'nothol']
         batch_size = 1
         rate = 1e-4
+
     if method == 'regm':
 # sunw causes nans in predicition? 
 #       input_columns = ['tempm', 'zenith', 'holiday', 'nothol', 'tsqd', 'th', 'tnh', 'sunw', 'sh']
@@ -654,12 +658,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki):
 
         batch_size = 1
         rate = 1e-4
-    if method == 'regd':
-        input_columns = ['tempm', 'holiday']
-        # could more than 1 mean trying to assess holiday=1 and holiday=0
-        # at the same time?
-        batch_size = 1
-        rate = 1e-7
+
     input_df = dsk_df[input_columns].copy()
 
     # set up output
@@ -667,24 +666,25 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki):
     output = dsk_df[output_column].copy()
 
     # store maximum values
-    input_max = {}
+    input_max = utils.df_normalise(input_df)
+    # santity check
+    utils.sanity_check(input_df)
+
+    # store maximum values
+#   input_max = {}
     # normalise the inputs
-    for column in input_df.columns:
-        input_max[column] = input_df[column].max()
-        if input_df[column].max() > 0.0:
-            input_df[column] = input_df[column] / input_df[column].max()
-        else:
-            input_df[column] = 0.0
+#   for column in input_df.columns:
+#       input_max[column] = input_df[column].max()
+#       if input_df[column].max() > 0.0:
+#           input_df[column] = input_df[column] / input_df[column].max()
+#       else:
+#           input_df[column] = 0.0
     # normalise the output (Y)
     output_max = output.max()
     if output_max>0:
         output = output / output_max
 
     # santity check
-    for column in input_df.columns:
-        if input_df[column].isna().sum() >0:
-            print("ERROR NaN in {}".format(column))
-            quit()
     if output.isna().sum() >0:
         print("ERROR NaN in output")
         quit()
@@ -715,16 +715,11 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki):
 #       loss_fn = F.mse_loss
         loss_fn = F.l1_loss
     if method == 'regd':
-    # custom function didn't converge
-        model = Demandregression()
+        model = nn.Linear(num_inputs,1)
         loss_fn = F.l1_loss
 #       loss_fn = loss_max1
 
     opt = torch.optim.SGD(model.parameters(), lr=rate)
-
-    # Define loss function
-#   loss_fn = F.mse_loss
-#   loss_fn = F.l1_loss
 
     loss = loss_fn(model(inputs), targets)
 #   print(loss)
@@ -865,6 +860,29 @@ def forecast_closest_hours(df, forecast, day):
     probability = 0.8
     forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
 
+def additional_values(df):
+
+    # holiday
+    df['holiday'] = 0
+    df.loc[(df['wd']>4) | (df['ph']==1), 'holiday' ] = 1
+    # not holiday
+    df['nothol'] = 0
+    df.loc[(df['wd']<2) | (df['ph']==0), 'nothol' ] = 1
+
+    # day type, public hols like sundays
+    df['dtype'] = df['wd']
+    df.loc[(df['ph']==1), 'dtype' ] = 6
+
+    df['tsqd'] = df['tempm'] * df['tempm']
+    df['th'] = df['tempm'] * df['holiday']
+    df['ts'] = df['tempm'] * df['sunm']
+    df['tnh'] = df['tempm'] * df['nothol']
+
+    # days of the week 1-0 flags
+    for wd in range(7):
+        wd_key = 'wd{}'.format(wd)
+        df[wd_key] = 0
+        df.loc[df['wd']==wd, wd_key] = 1
 # main program
 
 # process command line
@@ -896,20 +914,7 @@ merged_filename = '{}merged_{}.csv'.format(output_dir, dataset)
 df = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
 # additional values
-df['holiday'] = 0
-df.loc[(df['wd']>4) | (df['ph']==1), 'holiday' ] = 1
-df['nothol'] = 0
-df.loc[(df['wd']<2) | (df['ph']==0), 'nothol' ] = 1
-
-df['tsqd'] = df['tempm'] * df['tempm']
-df['th'] = df['tempm'] * df['holiday']
-df['tnh'] = df['tempm'] * df['nothol']
-
-# days of the week 1-0 flags
-for wd in range(7):
-    wd_key = 'wd{}'.format(wd)
-    df[wd_key] = 0
-    df.loc[df['wd']==wd, wd_key] = 1
+additional_values(df)
 
 print(df)
 
@@ -917,13 +922,7 @@ print(df)
 forecast_filename = '{}forecast_{}.csv'.format(output_dir, dataset)
 forecast = pd.read_csv(forecast_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
-forecast['holiday'] = 0
-forecast.loc[(forecast['wd']>4) | (forecast['ph']==1), 'holiday' ] = 1
-forecast['nothol'] = 0
-forecast.loc[(forecast['wd']<2) | (forecast['ph']==0), 'nothol' ] = 1
-forecast['tsqd'] = forecast['tempm'] * forecast['tempm']
-forecast['th'] = forecast['tempm'] * forecast['holiday']
-forecast['tnh'] = forecast['tempm'] * forecast['nothol']
+additional_values(forecast)
 
 # days of the week 1-0 flags
 for wd in range(7):
