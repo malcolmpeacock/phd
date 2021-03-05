@@ -54,10 +54,12 @@ def sethols(df):
         df.loc[holiday+' 00:00:00' : holiday+' 23:30:00','ph'] = 1
     df['ph'] = df['ph'].astype(int)
 
-    # day of the week and season
+    # day of the week
     df['wd'] = 0
-    # default to winter = 0
+    # season default to winter = 0
     df['season'] = 0
+    # day of year
+    df['doy'] = 0
     # "day of year" ranges for the northern hemisphere
     spring = range(80, 172)
     summer = range(172, 264)
@@ -67,6 +69,8 @@ def sethols(df):
         day_str = day.strftime('%Y-%m-%d')
         df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','wd'] = day.weekday()
         doy = day.timetuple().tm_yday
+        df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','doy'] = doy
+
         if doy in spring:
             df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','season'] = 1
         if doy in summer:

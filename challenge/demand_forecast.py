@@ -117,6 +117,24 @@ def fit(num_epochs, model, loss_fn, opt, train_dl):
         loss_history.append(loss.item() )
     return loss_history
 
+# train the model using weighted loss
+def wfit(num_epochs, model, loss_fn, opt, train_dl, w):
+    loss_history=[]
+    for epoch in range(num_epochs):
+        # each batch in the training ds
+        for xb,yb in train_dl:
+            # Generate predictions
+            pred = model(xb)
+            loss = loss_fn(pred, yb, w)
+            # Perform gradient descent
+            loss.backward()
+            opt.step()
+            opt.zero_grad()
+        # report at each epoc
+        print('epoch {}, loss {}'.format(epoch, loss.item()))
+        loss_history.append(loss.item() )
+    return loss_history
+
 # FORECASTING METHODS:
 
 # naive forecast based on the previous week
@@ -596,6 +614,21 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki):
         dfd = df[df['dtype'] == forecast_day['dtype'].iloc[0]]
     else:
         dfd = df
+
+    # set weight based on closeness to day of year.
+    # closer days should have a greater weight.
+
+    # difference between day of year and that of the forecast day
+    doy_diff = np.abs(dfd['doy'].values - forecast_day['doy'].iloc[0])
+    # to cope with days at the end of one year being close to those at the
+    # start of the next
+    weight = np.minimum( doy_diff, np.abs(doy_diff - 365) )
+    dfd['weight'] = weight
+    # normalise
+    dfd['weight'] = dfd['weight'] / dfd['weight'].max()
+    # subtract from 1 so that closer days have more impact on the loss
+    dfd['weight'] = 1.0 - dfd['weight']
+
     if period == all:
         # for each k period, train a seperate model ...
         for index, row in forecast_day.iterrows():
@@ -714,17 +747,20 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki):
         model = nn.Linear(num_inputs,1)
 #       loss_fn = F.mse_loss
         loss_fn = F.l1_loss
+
     if method == 'regd':
         model = nn.Linear(num_inputs,1)
-        loss_fn = F.l1_loss
-#       loss_fn = loss_max1
+#       loss_fn = F.l1_loss
+        loss_fn = loss_wl1
+        weights = torch.tensor(dsk_df['weight'].values.astype(np.float32)).view(-1,1)
+        opt = torch.optim.SGD(model.parameters(), lr=rate)
+        loss = loss_fn(model(inputs), targets, weights)
+        losses = wfit(num_epochs, model, loss_fn, opt, train_dl, weights)
+    else:
+        opt = torch.optim.SGD(model.parameters(), lr=rate)
+        loss = loss_fn(model(inputs), targets)
+        losses = fit(num_epochs, model, loss_fn, opt, train_dl)
 
-    opt = torch.optim.SGD(model.parameters(), lr=rate)
-
-    loss = loss_fn(model(inputs), targets)
-#   print(loss)
-    losses = fit(num_epochs, model, loss_fn, opt, train_dl)
-    print('Training loss: ', loss_fn(model(inputs), targets))
     preds = model(inputs)
 #   print(preds)
     # prediction
