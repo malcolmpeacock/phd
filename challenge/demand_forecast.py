@@ -626,8 +626,10 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki):
     dfd['weight'] = weight
     # normalise
     dfd['weight'] = dfd['weight'] / dfd['weight'].max()
-    # subtract from 1 so that closer days have more impact on the loss
-    dfd['weight'] = 1.0 - dfd['weight']
+    # subtract from 1 so that closer days have more impact on the loss.
+    # multiply by ww so that the further off days have some impact not zero.
+    ww = 0.5
+    dfd['weight'] = 1.0 - ( dfd['weight'] * ww)
 
     if period == all:
         # for each k period, train a seperate model ...
