@@ -261,11 +261,7 @@ def reg_inputs(df_nw1, df_nwn):
     return input_df
 
 def forecast_new_inputs(df):
-    columns = ['sh', 'season', 'dtype', 'week']
-    # days of the week 1-0 flags
-    for wd in range(7):
-        wd_key = 'wd{}'.format(wd)
-        columns.append(wd_key)
+    columns = ['sh', 'season', 'week']
     input_df = df[columns].resample('D', axis=0).first().dropna()
     input_df['avtemp'] = df['tempm'].resample('D', axis=0).mean().dropna()
     input_df['maxtemp'] = df['tempm'].resample('D', axis=0).max().dropna()
@@ -276,14 +272,17 @@ def forecast_new_inputs(df):
 #       days with this peak and sum with matching temperature profile
 def forecast_new(df, forecast, day, seed, num_epochs, ann):
 
-    df_k = df[ (df['k'] > 31) & (df['k'] < 43)]
+    forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
+    # days with the same dtype
+    dfd = df[df['dtype'] == forecast_day['dtype'].iloc[0]]
+    # periods of interest
+    df_k = dfd[ (dfd['k'] > 31) & (dfd['k'] < 43)]
     input_df = forecast_new_inputs(df_k)
 #   print(input_df)
 
     # outputs - demand for the k periods of interest
     data = {}
     data['peak'] = df_k['demand'].resample('D', axis=0).max().dropna()
-#   data['sum'] = df_k['demand'].resample('D', axis=0).sum().dropna()
     output_df = pd.DataFrame(data).dropna()
 #   print(output_df)
         
@@ -315,8 +314,8 @@ def forecast_new(df, forecast, day, seed, num_epochs, ann):
     opt = torch.optim.SGD(model.parameters(), lr=1e-3)
 
     # Define loss function
-    loss_fn = F.mse_loss
-#   loss_fn = F.l1_loss
+#   loss_fn = F.mse_loss
+    loss_fn = F.l1_loss
 
     loss = loss_fn(model(inputs), targets)
 #   print(loss)
@@ -326,7 +325,6 @@ def forecast_new(df, forecast, day, seed, num_epochs, ann):
 #   preds = model(inputs)
 #   print(preds)
     # prediction
-    forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
 #   print(forecast_day)
     # set up the values to forecast
     input_f = forecast_new_inputs(forecast_day)
@@ -350,10 +348,8 @@ def forecast_new(df, forecast, day, seed, num_epochs, ann):
     if 'demand' in forecast_day.columns:
         f_k = forecast_day[ (forecast_day['k'] > 31) & (forecast_day['k'] < 43)]
         original_peak = f_k['demand'].resample('D', axis=0).max().values[0]
-        original_sum = f_k['demand'].resample('D', axis=0).sum().values[0]
     else:
         original_peak = 0.0
-#   return losses, vals[0], vals[1], original_peak, original_sum
     return losses, vals[0], original_peak
 
 # nreg - new regression - with all 11 periods of interest as seperate 
@@ -629,14 +625,21 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
     # weight = np.minimum( doy_diff, np.abs(doy_diff - 365) )
 
     # set weight based on the week counter in the data
-    dfd['weight'] = dfd['week']
+    # ( how far away the week we are forecasting is away )
+    weight = np.abs(dfd['week'].values - forecast_day['week'].iloc[0])
+#   dfd['weight'] = weight
+#   dfd.loc['weight'] = weight
     # normalise
-    dfd['weight'] = dfd['weight'] / dfd['weight'].max()
+    weight = weight / np.max(weight)
+    #dfd['weight'] = dfd['weight'] / dfd['weight'].max()
+#   dfd.loc['weight'] = dfd['weight'] / dfd['weight'].max()
 
     # subtract from 1 so that higher values have less impact on the loss.
     # multiply by ww so that the further off days have some impact not zero.
     ww = 0.5
-    dfd['weight'] = 1.0 - ( dfd['weight'] * ww)
+    weight = 1.0 - ( weight * ww)
+    dfd['weight'] = weight
+    print(dfd['weight'])
 
     if period == all:
         # for each k period, train a seperate model ...
