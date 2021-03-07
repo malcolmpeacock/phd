@@ -85,54 +85,62 @@ for day in days:
 
     tolerance = 0.001
 
-    battery = 0.0
     # this is 12 rather than 6 to avoid multiplying by 0.5 all the time
     # ( so its 6 half MWhs )
 #   capacity = 12 - tolerance
     capacity = 12
-
 
     # take off anything exceeding the max pv we could have
     cs_ghi = pv_day[pv_day['k'] < 32]['cs_ghi']
     pv_max = cs_ghi * 0.8 * 5.0 * 0.002
     print(pv_max)
     print(cpoints)
-    cpoints.update(np.minimum(cpoints, pv_max))
-    print(cpoints)
+    charge_points = np.minimum(cpoints, pv_max)
+    print('After removing pv_max')
+    print(charge_points)
 
     # if the charge pattern didn't fully charge, then top up a bit
-    points_sum = cpoints.sum()
+    points_sum = np.sum(charge_points)
     remaining = capacity - points_sum
 
-    # sort so that any remaining charge gets put in at the peak first
-    cpoints = cpoints.sort_values(ascending=False)
-
-#   charge_values = []
-    # top charge values from remaining
-    for index, value in cpoints.iteritems():
-        k = utils.index2k(index)
-        charge_value = value
-        pm = pv_max.loc[index]
-#       print('Remaining {} charge_value {} at k {} pv_max {}'.format(remaining, charge_value, k, pm) )
-        if remaining > 0 and charge_value < 2.5 and charge_value < pm:
+    # keep dividing the remaining charge evenlt amongst the points where the
+    # theoretical power genration is greater than zero
+    npoints = len( pv_max[pv_max > 0.0] )
+    while remaining > 0.0001:
+        topup = remaining / npoints
+        print('Day {} Remaining {} topup {} npoints {}'.format(day, remaining, topup, npoints) )
+        # top charge values from remaining for each k period
+        for i in range(len(charge_points)):
+            k = i+1
+            charge_value = charge_points[i]
+            pm = pv_max.values[i]
+            print('{} Remaining {} topup {} charge_value {} at k {} pv_max {}'.format(day, remaining, topup, charge_value, k, pm) )
             # don't exceed battery limit or pv generation limit
             limit = min(2.5,pm)
             old_value = charge_value
-            addition = min(remaining, limit - old_value)
             # incase addition ended up negative.
-            charge_value = old_value + max(addition, 0)
-            print('Topping up from {} to {} with {} remaining at k {}'.format(old_value, charge_value, remaining, k) )
-            remaining = remaining - (charge_value - old_value)
-#       charge_values.append(charge_value)
-#   cpoints.update(charge_values)
+            addition = max(min(topup, limit - old_value), 0.0)
+            charge_value = old_value + addition
+            print('Topping up from {} to {} with {} topup {} remaining {} at k {}'.format(old_value, charge_value, addition, topup, remaining, k) )
+            remaining = remaining - addition
+            charge_points[i] = charge_value
+        print(charge_points)
 
-#       print('Charging k {} battery {} index {} pv {}'.format(k, battery, index, value) )
+#   print(charge_points)
+    cpoints.update(charge_points)
+    print(cpoints)
+
+    # now output stored these points in the solution
+
+    battery = 0.0
+    for index, value in cpoints.iteritems():
         # double check on not exceeding the battery
-        charge_output = min(charge_value, capacity-battery)
+        charge_output = min(value, capacity-battery)
 #       print('Adding Charge {}'.format(charge_output) )
             # don't overfill the battery
         if charge_output>0:
-            solution['charge_MW'][index] = charge_output
+#           solution['charge_MW'][index] = charge_output
+            solution.loc[index, 'charge_MW'] = charge_output
             battery += charge_output
 
     # get the demand for this day and solution
