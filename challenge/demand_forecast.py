@@ -261,7 +261,7 @@ def reg_inputs(df_nw1, df_nwn):
     return input_df
 
 def forecast_new_inputs(df):
-    columns = ['holiday', 'week', 'sh', 'ph', 'season']
+    columns = ['sh', 'season', 'dtype', 'week']
     # days of the week 1-0 flags
     for wd in range(7):
         wd_key = 'wd{}'.format(wd)
@@ -358,7 +358,7 @@ def forecast_new(df, forecast, day, seed, num_epochs, ann):
 
 # nreg - new regression - with all 11 periods of interest as seperate 
 #        inputs and outputs as per bogdan
-def forecast_nreg(df, forecast, day, seed, num_epochs):
+def forecast_nreg(df, forecast, day, seed, num_epochs, ann):
     # only use days of the same type
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     dfd = df[df['dtype'] == forecast_day['dtype'].iloc[0]]
@@ -393,8 +393,10 @@ def forecast_nreg(df, forecast, day, seed, num_epochs):
 
     num_inputs = len(input_df.columns)
     num_outputs = len(output_df.columns)
-    model = nn.Linear(num_inputs, num_outputs)
-#   model = SimpleNet(num_inputs, num_outputs)
+    if ann:
+        model = SimpleNet(num_inputs, num_outputs, 40)
+    else:
+        model = nn.Linear(num_inputs, num_outputs)
 
 #   opt = torch.optim.SGD(model.parameters(), lr=1e-5)
     opt = torch.optim.SGD(model.parameters(), lr=1e-3)
@@ -607,7 +609,7 @@ def forecast_gpr(df, forecast, day, seed, num_epochs):
 #        regm  - as submitted for set2
 #        regd  - only look at same day type
 
-def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki):
+def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, ann):
     pred_values=[]
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     if method == 'regd':
@@ -615,18 +617,23 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki):
     else:
         dfd = df
 
+    # set weight to use in the weighted loss function to give less importance
+    # to some values
+
     # set weight based on closeness to day of year.
     # closer days should have a greater weight.
-
     # difference between day of year and that of the forecast day
-    doy_diff = np.abs(dfd['doy'].values - forecast_day['doy'].iloc[0])
+    # doy_diff = np.abs(dfd['doy'].values - forecast_day['doy'].iloc[0])
     # to cope with days at the end of one year being close to those at the
     # start of the next
-    weight = np.minimum( doy_diff, np.abs(doy_diff - 365) )
-    dfd['weight'] = weight
+    # weight = np.minimum( doy_diff, np.abs(doy_diff - 365) )
+
+    # set weight based on the week counter in the data
+    dfd['weight'] = dfd['week']
     # normalise
     dfd['weight'] = dfd['weight'] / dfd['weight'].max()
-    # subtract from 1 so that closer days have more impact on the loss.
+
+    # subtract from 1 so that higher values have less impact on the loss.
     # multiply by ww so that the further off days have some impact not zero.
     ww = 0.5
     dfd['weight'] = 1.0 - ( dfd['weight'] * ww)
@@ -641,7 +648,7 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki):
                 print('Period k {} dsk {}'.format(row['k'],dsk) )
                 dsk_df = dfd[dfd['dsk'] == dsk]
                 dsk_f = forecast_day[forecast_day['dsk'] == dsk]
-                prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki)
+                prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, ann)
                 if math.isnan(prediction_values):
                     print('WARNING NaN replaced by interpolation at period {}'.format(row['k']))
                 if not math.isfinite(prediction_values):
@@ -659,11 +666,11 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki):
         dsk = int(period)
         dsk_df = dfd[dfd['dsk'] == dsk]
         dsk_f = forecast_day[forecast_day['dsk'] == dsk]
-        prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki)
+        prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, ann)
         print('Predicted value {} for period {}'.format(prediction_values, period))
         quit()
 
-def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki):
+def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, ann):
     # set up inputs
     if method == 'regd':
         input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts']
@@ -738,20 +745,22 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki):
     next(iter(train_dl))
 
     num_inputs = len(input_df.columns)
+    if ann:
+        model = SimpleNet(num_inputs,1,20)
+        loss_fn = F.l1_loss
+    else:
+        model = nn.Linear(num_inputs,1)
 
     if method == 'regl':
     # model using regression
-        model = nn.Linear(num_inputs,1)
 #       loss_fn = F.mse_loss
         loss_fn = F.l1_loss
     if method == 'regm':
     # model using regression
-        model = nn.Linear(num_inputs,1)
 #       loss_fn = F.mse_loss
         loss_fn = F.l1_loss
 
     if method == 'regd':
-        model = nn.Linear(num_inputs,1)
 #       loss_fn = F.l1_loss
         loss_fn = loss_wl1
         weights = torch.tensor(dsk_df['weight'].values.astype(np.float32)).view(-1,1)
@@ -907,9 +916,9 @@ def additional_values(df):
     df['nothol'] = 0
     df.loc[(df['wd']<2) | (df['ph']==0), 'nothol' ] = 1
 
-    # day type, public hols like sundays
-    df['dtype'] = df['wd']
-    df.loc[(df['ph']==1), 'dtype' ] = 6
+    # day type, public hols not like sundays
+#   df['dtype'] = df['wd']
+#   df.loc[(df['ph']==1), 'dtype' ] = 7
 
     df['tsqd'] = df['tempm'] * df['tempm']
     df['th'] = df['tempm'] * df['holiday']
@@ -1063,12 +1072,12 @@ for id in range(len(fdays)):
             forecast_closest_days(history, forecast, day, method)
 
         if method[0:3] == 'reg':
-            forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ki)
+            forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ki, args.ann)
 
         if method == 'skt':
             forecast_skt(df, forecast, day)
         if method == 'nreg':
-            losses = forecast_nreg(history, forecast, day, args.seed, args.epochs)
+            losses = forecast_nreg(history, forecast, day, args.seed, args.epochs, args.ann)
             if args.ploss:
                 plt.plot(losses)
                 plt.title('demand nreg convergence')
@@ -1095,7 +1104,6 @@ for id in range(len(fdays)):
                 plt.show()
 
         if method == 'new':
-#           losses, pred_peak, pred_sum, ac_peak, ac_sum = forecast_new(history, forecast, day, args.seed, args.epochs, args.ann)
             losses, pred_peak, ac_peak = forecast_new(history, forecast, day, args.seed, args.epochs, args.ann)
             if args.ploss:
                 plt.plot(losses)

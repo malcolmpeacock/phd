@@ -22,6 +22,7 @@
 # wd         day of the week
 # week       week number with 1 as the newest
 # season     0=winter, 1=spring, 2=summer, 3=autumn
+# dtype      0,6=day of week, 7=ph, 8=Christmas, 9=December 26th
 
 # contrib code
 import sys
@@ -56,6 +57,8 @@ def sethols(df):
 
     # day of the week
     df['wd'] = 0
+    # day type
+    df['dtype'] = 0
     # season default to winter = 0
     df['season'] = 0
     # day of year
@@ -77,8 +80,18 @@ def sethols(df):
             df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','season'] = 2
         if doy in autumn:
             df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','season'] = 3
+    
+        dtype = day.weekday()
+        if df.loc[day_str+' 00:00:00', 'ph'] == 1:
+            dtype = 7
+        if day_str[5:10] == '12-25':
+            dtype = 8
+        if day_str[5:10] == '12-26':
+            dtype = 9
+        df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','dtype'] = dtype
             
     df['wd'] = df['wd'].astype(int)
+    df['dtype'] = df['dtype'].astype(int)
     df['season'] = df['season'].astype(int)
 
     # dst indicator
