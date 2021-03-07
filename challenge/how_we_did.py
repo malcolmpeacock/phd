@@ -84,6 +84,9 @@ print('Final Score {}'.format(final_score) )
 if args.plot:
     pv_forecast['prediction'].plot(label='PV Generation Forecast', color='red')
     pv_new['pv_power_mw'].plot(label='PV Actual', color='blue')
+    # theorectical max? PR=0.8, 5.0MwP of plant, 2 because of half hour periods
+    pv_forecast['pv_max'] = (pv_forecast['cs_ghi'] * 0.8 * 5.0 ) * 0.002
+    pv_forecast['pv_max'].plot(label='Max PV from clear sky ghi', color='purple', linestyle = 'dotted')
     demand_forecast['prediction'].plot(label='Demand Forecast', color='orange')
     demand_new.plot(label='Actual demand', color='yellow')
     solution.plot(label='Battery Charge', color='green')
