@@ -605,7 +605,7 @@ def forecast_gpr(df, forecast, day, seed, num_epochs):
 #        regm  - as submitted for set2
 #        regd  - only look at same day type
 
-def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, ann):
+def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, ann, ww):
     pred_values=[]
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     if method == 'regd':
@@ -636,7 +636,6 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
 
     # subtract from 1 so that higher values have less impact on the loss.
     # multiply by ww so that the further off days have some impact not zero.
-    ww = 0.5
     weight = 1.0 - ( weight * ww)
     dfd['weight'] = weight
     print(dfd['weight'])
@@ -946,6 +945,7 @@ parser.add_argument('--ploss', action="store_true", dest="ploss", help='Plot the
 parser.add_argument('--ann', action="store_true", dest="ann", help='Replace regression with ANN', default=False)
 parser.add_argument('--mname', action="store_true", dest="mname", help='Name the output file using the method', default=False)
 parser.add_argument('--seed', action="store", dest="seed", help='Random seed, default=1.0', type=float, default=1.0)
+parser.add_argument('--ww', action="store", dest="ww", help='Loss Weight weight=0.5', type=float, default=0.5)
 parser.add_argument('--epochs', action="store", dest="epochs", help='Number of epochs', type=int, default=100)
 parser.add_argument('--nnear', action="store", dest="nnear", help='Number of days when using the --day near option', type=int, default=10)
 parser.add_argument('--period', action="store", dest="period", help='Period k to forecast', type=float, default=all)
@@ -1075,7 +1075,7 @@ for id in range(len(fdays)):
             forecast_closest_days(history, forecast, day, method)
 
         if method[0:3] == 'reg':
-            forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ki, args.ann)
+            forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ki, args.ann, args.ww)
 
         if method == 'skt':
             forecast_skt(df, forecast, day)
