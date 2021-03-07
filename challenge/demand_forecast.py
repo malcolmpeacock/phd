@@ -131,8 +131,10 @@ def wfit(num_epochs, model, loss_fn, opt, train_dl, w):
             opt.step()
             opt.zero_grad()
         # report at each epoc
-        print('epoch {}, loss {}'.format(epoch, loss.item()))
+#       print('epoch {:03d}, loss {:.7f}'.format(epoch, loss.item()))
+        sys.stdout.write('\repoch {:03d}, loss {:.7f} '.format(epoch, loss.item()))
         loss_history.append(loss.item() )
+    sys.stdout.flush()
     return loss_history
 
 # FORECASTING METHODS:
@@ -608,7 +610,10 @@ def forecast_gpr(df, forecast, day, seed, num_epochs):
 def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, ann, ww):
     pred_values=[]
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
-    if method == 'regd':
+    # look for days of similar type, but if its Christmas or boxing day
+    # then don't because there aren't enough of them to predict
+    fd_type = forecast_day['dtype'].iloc[0]
+    if method == 'regd' and fd_type <8 :
         dfd = df[df['dtype'] == forecast_day['dtype'].iloc[0]]
     else:
         dfd = df
