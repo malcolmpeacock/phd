@@ -91,6 +91,15 @@ for day in days:
 #   capacity = 12 - tolerance
     capacity = 12
 
+
+    # take off anything exceeding the max pv we could have
+    cs_ghi = pv_day[pv_day['k'] < 32]['cs_ghi']
+    pv_max = cs_ghi * 0.8 * 5.0 * 0.002
+    print(pv_max)
+    print(cpoints)
+    cpoints.update(np.minimum(cpoints, pv_max))
+    print(cpoints)
+
     # if the charge pattern didn't fully charge, then top up a bit
     points_sum = cpoints.sum()
     remaining = capacity - points_sum
@@ -98,16 +107,28 @@ for day in days:
     # sort so that any remaining charge gets put in at the peak first
     cpoints = cpoints.sort_values(ascending=False)
 
-    # for each point in the charge strategy ...
+#   charge_values = []
+    # top charge values from remaining
     for index, value in cpoints.iteritems():
         k = utils.index2k(index)
-        if remaining > 0 and value + remaining < 2.5:
-            print('Topping up {} at k {}'.format(remaining, k) )
-            value = value + remaining
-            remaining = 0
+        charge_value = value
+        pm = pv_max.loc[index]
+#       print('Remaining {} charge_value {} at k {} pv_max {}'.format(remaining, charge_value, k, pm) )
+        if remaining > 0 and charge_value < 2.5 and charge_value < pm:
+            # don't exceed battery limit or pv generation limit
+            limit = min(2.5,pm)
+            old_value = charge_value
+            addition = min(remaining, limit - old_value)
+            # incase addition ended up negative.
+            charge_value = old_value + max(addition, 0)
+            print('Topping up from {} to {} with {} remaining at k {}'.format(old_value, charge_value, remaining, k) )
+            remaining = remaining - (charge_value - old_value)
+#       charge_values.append(charge_value)
+#   cpoints.update(charge_values)
+
 #       print('Charging k {} battery {} index {} pv {}'.format(k, battery, index, value) )
         # double check on not exceeding the battery
-        charge_output = min(value, capacity-battery)
+        charge_output = min(charge_value, capacity-battery)
 #       print('Adding Charge {}'.format(charge_output) )
             # don't overfill the battery
         if charge_output>0:
