@@ -48,11 +48,17 @@ output_dir = "/home/malcolm/uclan/challenge/output/"
 merged_filename = '{}merged_{}.csv'.format(output_dir, dataset)
 df = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
-tuesdays = ['2017-11-07', '2017-11-14', '2017-11-21', '2017-11-28', '2017-12-05', '2017-12-12', '2017-12-19', '2017-12-26']
 
 k = range(1,49)
 # plot 
 if args.plot:
+    demand_bins = pd.cut(df['demand'], bins=10).value_counts()
+    print(demand_bins)
+    demand_bins.plot()
+    plt.title('Demand distribution')
+    plt.show()
+
+    tuesdays = ['2017-11-07', '2017-11-14', '2017-11-21', '2017-11-28', '2017-12-05', '2017-12-12', '2017-12-19', '2017-12-26']
     for day in tuesdays:
         dft = df[day + ' 00:00:00' : day + ' 23:30:00']
         meantemp = dft['tempm'].mean()
@@ -84,3 +90,4 @@ if args.plot:
     plot_days(df, days, 'Bank holidays and Sundays')
     days = ['2018-05-07', '2018-05-14', '2018-05-21', '2018-05-28', '2018-06-04']
     plot_days(df, days, 'Bank holidays and Mondays')
+

@@ -23,6 +23,7 @@
 # week       week number with 1 as the newest
 # season     0=winter, 1=spring, 2=summer, 3=autumn
 # dtype      0,6=day of week, 7=ph, 8=Christmas, 9=December 26th
+# month      month of the year, january=1,
 
 # contrib code
 import sys
@@ -63,6 +64,8 @@ def sethols(df):
     df['season'] = 0
     # day of year
     df['doy'] = 0
+    # month of year
+    df['month'] = 0
     # "day of year" ranges for the northern hemisphere
     spring = range(80, 172)
     summer = range(172, 264)
@@ -89,10 +92,13 @@ def sethols(df):
         if day_str[5:10] == '12-26':
             dtype = 9
         df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','dtype'] = dtype
+
+        df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','month'] = day.month
             
     df['wd'] = df['wd'].astype(int)
     df['dtype'] = df['dtype'].astype(int)
     df['season'] = df['season'].astype(int)
+    df['month'] = df['month'].astype(int)
 
     # dst indicator
     df['dsk'] = df['k'] + 2 * (df.index.hour - df.index.tz_localize('UTC').tz_convert(tz=pytz.timezone('Europe/London')).hour + 1)

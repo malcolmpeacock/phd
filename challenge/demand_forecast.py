@@ -195,9 +195,11 @@ def find_closest_peak_days(df, forecast, day, peak):
     days = pd.Series(df.index.date).unique()
     df_k = df[ (df['k'] > 31) & (df['k'] < 43)]
     f_k = forecast[ (forecast['k'] > 31) & (forecast['k'] < 43)]
+    # find the 30 days with peak demand closest to peak
     closest_peak_days = utils.find_closest_days_max(days, df_k, 'demand', peak, 30)
-#   print(closest_peak_days)
+    # from those 30 days, find the 10 with the closest temperature pattern
     closest_days = utils.find_closest_days(day, closest_peak_days, f_k, df_k, 'tempm', 10, True, False)
+    # create a new day using the mean demands of those 10
     new_day = utils.create_day(closest_days.index, df, 'demand')
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = new_day['demand'].values
     probability = 0.8
@@ -256,14 +258,14 @@ def reg_inputs(df_nw1, df_nwn):
     input_df = pd.DataFrame(dsk_data)
     # other columns
     dsk_df = df_nw1[ df_nw1['dsk'] == 32]
-    base_columns = ['season']
+    base_columns = ['season', 'week', 'month']
     for col in base_columns:
         input_df[col] = dsk_df[col].values
     print(input_df)
     return input_df
 
 def forecast_new_inputs(df):
-    columns = ['sh', 'season']
+    columns = ['sh', 'season', 'week', 'month']
     input_df = df[columns].resample('D', axis=0).first().dropna()
     input_df['avtemp'] = df['tempm'].resample('D', axis=0).mean().dropna()
     input_df['maxtemp'] = df['tempm'].resample('D', axis=0).max().dropna()
@@ -273,7 +275,7 @@ def forecast_new_inputs(df):
     return input_df
 
 # new - regression to find the peak and sum. Then use sdays to find  
-#       days with this peak and sum with matching temperature profile
+#       days with this peak with matching temperature profile
 def forecast_new(df, forecast, day, seed, num_epochs, ann):
 
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
@@ -310,12 +312,12 @@ def forecast_new(df, forecast, day, seed, num_epochs, ann):
     num_outputs = len(output_df.columns)
     if ann:
 #       model = SimpleNet(num_inputs, num_outputs, num_inputs)
-        model = SimpleNet(num_inputs, num_outputs, 40)
+        model = SimpleNet(num_inputs, num_outputs, 50)
+        opt = torch.optim.SGD(model.parameters(), lr=1e-3)
     else:
         model = nn.Linear(num_inputs, num_outputs)
+        opt = torch.optim.SGD(model.parameters(), lr=1e-3)
 
-#   opt = torch.optim.SGD(model.parameters(), lr=1e-5)
-    opt = torch.optim.SGD(model.parameters(), lr=1e-3)
 
     # Define loss function
 #   loss_fn = F.mse_loss
@@ -604,6 +606,34 @@ def forecast_gpr(df, forecast, day, seed, num_epochs):
 
     return losses
 
+def set_weight(dfd, forecast_day):
+    # set weight to use in the weighted loss function to give less importance
+    # to some values
+
+    # set weight based on closeness to day of year.
+    # closer days should have a greater weight.
+    # difference between day of year and that of the forecast day
+    # doy_diff = np.abs(dfd['doy'].values - forecast_day['doy'].iloc[0])
+    # to cope with days at the end of one year being close to those at the
+    # start of the next
+    # weight = np.minimum( doy_diff, np.abs(doy_diff - 365) )
+
+    # set weight based on the week counter in the data
+    # ( how far away the week we are forecasting is away )
+    weight = np.abs(dfd['week'].values - forecast_day['week'].iloc[0])
+#   dfd['weight'] = weight
+#   dfd.loc['weight'] = weight
+    # normalise
+    weight = weight / np.max(weight)
+    #dfd['weight'] = dfd['weight'] / dfd['weight'].max()
+#   dfd.loc['weight'] = dfd['weight'] / dfd['weight'].max()
+
+    # subtract from 1 so that higher values have less impact on the loss.
+    # multiply by ww so that the further off days have some impact not zero.
+    weight = 1.0 - ( weight * ww)
+    dfd['weight'] = weight
+    print(dfd['weight'])
+
 # reg - regression - with different models for each k=32,42
 #        regl  - first 
 #        regm  - as submitted for set2
@@ -646,6 +676,7 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
     weight = 1.0 - ( weight * ww)
     dfd['weight'] = weight
     print(dfd['weight'])
+    forecast_day['weight'] = 1.0
 
     if period == all:
         # for each k period, train a seperate model ...
@@ -683,7 +714,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
     # set up inputs
     if method == 'regd':
 #       input_columns = ['tempm']
-        input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts']
+        input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight']
 #       With the weighted loss function batch size has to be 1
         batch_size = 1
         rate = 1e-3
@@ -934,6 +965,7 @@ def additional_values(df):
     df['th'] = df['tempm'] * df['holiday']
     df['ts'] = df['tempm'] * df['sunm']
     df['tnh'] = df['tempm'] * df['nothol']
+    df['tm'] = df['tempm'] * df['month']
 
     # days of the week 1-0 flags
     for wd in range(7):
@@ -1119,7 +1151,7 @@ for id in range(len(fdays)):
             losses, pred_peak, ac_peak = forecast_new(history, forecast, day, args.seed, args.epochs, args.ann)
             if args.ploss:
                 plt.plot(losses)
-                plt.title('demand peak and sum convergence')
+                plt.title('demand peak convergence')
                 plt.xlabel('Epochs', fontsize=15)
                 plt.ylabel('Loss', fontsize=15)
                 plt.show()

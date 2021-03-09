@@ -32,7 +32,13 @@ output_dir = "/home/malcolm/uclan/challenge/output/"
 
 # demand data
 
-demand_names = ['w1', 'w0', 'regm']
+demand_names = ['w1', 'w0', 'regm', 'newall', 'new400']
+demand_labels = { 'w0' : 'model per k,day - L1 loss',
+                  'w1' : 'model per k,day - weighted loss',
+                  'regm' : 'regression for set2, binary flags',
+                  'newall' : 'ANN predicts max demand, then similar day',
+                  'new400' : 'As newall, but with only last 400 days data' 
+                }
 demand_dfs={}
 for name in demand_names:
     filename = '{}demand_forecast_{}_{}.csv'.format(output_dir, name, dataset)
@@ -57,7 +63,7 @@ if args.plot:
     plt.title('Comparison of demand forecasts')
     plt.xlabel('Hour of the year', fontsize=15)
     plt.ylabel('Demand (MWh)', fontsize=15)
-    plt.legend(loc='upper right', fontsize=15)
+    plt.legend(loc='lower right', fontsize=15)
     plt.show()
 
 for name, pdf in demand_dfs.items():
