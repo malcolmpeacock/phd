@@ -263,10 +263,12 @@ def reg_inputs(df_nw1, df_nwn):
     return input_df
 
 def forecast_new_inputs(df):
-    columns = ['sh', 'season', 'week']
+    columns = ['sh', 'season']
     input_df = df[columns].resample('D', axis=0).first().dropna()
     input_df['avtemp'] = df['tempm'].resample('D', axis=0).mean().dropna()
     input_df['maxtemp'] = df['tempm'].resample('D', axis=0).max().dropna()
+    input_df['avsus'] = df['sunm'].resample('D', axis=0).mean().dropna()
+    input_df['maxsun'] = df['sunm'].resample('D', axis=0).max().dropna()
 #   print(input_df)
     return input_df
 
@@ -680,9 +682,9 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
 def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, ann):
     # set up inputs
     if method == 'regd':
+#       input_columns = ['tempm']
         input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts']
-#       converges better with batch size=1
-#       batch_size = 48
+#       With the weighted loss function batch size has to be 1
         batch_size = 1
         rate = 1e-3
 
@@ -772,6 +774,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
         loss_fn = loss_wl1
         weights = torch.tensor(dsk_df['weight'].values.astype(np.float32)).view(-1,1)
         opt = torch.optim.SGD(model.parameters(), lr=rate)
+#       opt = torch.optim.Adam(model.parameters(), lr=rate)
         loss = loss_fn(model(inputs), targets, weights)
         losses = wfit(num_epochs, model, loss_fn, opt, train_dl, weights)
     else:
@@ -955,6 +958,7 @@ parser.add_argument('--epochs', action="store", dest="epochs", help='Number of e
 parser.add_argument('--nnear', action="store", dest="nnear", help='Number of days when using the --day near option', type=int, default=10)
 parser.add_argument('--period', action="store", dest="period", help='Period k to forecast', type=float, default=all)
 parser.add_argument('--step', action="store", dest="step", help='If using days=all or step only do every step days', type=int, default=1)
+parser.add_argument('--use', action="store", dest="use", help='Number of days data to use, 0=all', type=int, default=0)
 parser.add_argument('--ki', action="store_true", dest="ki", help='Only forecast K of interest.', default=False)
 
 args = parser.parse_args()
@@ -968,6 +972,10 @@ output_dir = "/home/malcolm/uclan/challenge/output/"
 merged_filename = '{}merged_{}.csv'.format(output_dir, dataset)
 df = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
+# remove some days of data ( 48 half hours per day)
+if args.use > 0:
+    df = df.tail(args.use * 48)
+
 # additional values
 additional_values(df)
 
@@ -979,11 +987,6 @@ forecast = pd.read_csv(forecast_filename, header=0, sep=',', parse_dates=[0], in
 
 additional_values(forecast)
 
-# days of the week 1-0 flags
-for wd in range(7):
-    wd_key = 'wd{}'.format(wd)
-    forecast[wd_key] = 0
-    forecast.loc[forecast['wd']==wd, wd_key] = 1
 
 if args.day != 'set':
     columns = forecast.columns.append(pd.Index(['demand']))
@@ -1000,6 +1003,7 @@ if args.day != 'set':
             forecast.drop( forecast[ forecast['holiday']==0].index, inplace=True)
     else:
         days = pd.Series(df.index.date).unique()
+        print('Number of days in data {}'.format(len(days)) )
         if args.day[0:4] == 'week' :
             start_date = args.day[4:]
             print('Week starting {}'.format(start_date))
