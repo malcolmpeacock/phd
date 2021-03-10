@@ -24,6 +24,7 @@
 # season     0=winter, 1=spring, 2=summer, 3=autumn
 # dtype      0,6=day of week, 7=ph, 8=Christmas, 9=December 26th
 # month      month of the year, january=1,
+# dailytemp  mean daily temperature of the day
 
 # contrib code
 import sys
@@ -40,6 +41,7 @@ import pvlib
 
 # custom code
 import utils
+
 
 def sethols(df):
     # school holidays
@@ -70,9 +72,15 @@ def sethols(df):
     spring = range(80, 172)
     summer = range(172, 264)
     autumn = range(264, 355)
+
+    # daily mean temperature
+    daily_temp = df['tempm'].resample('D', axis=0).mean()
+
+    # loop round each day ...
     days = df.resample('D', axis=0).mean().index.date
     for day in days:
         day_str = day.strftime('%Y-%m-%d')
+        df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','dailytemp'] = daily_temp.loc[day_str+' 00:00:00']
         df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','wd'] = day.weekday()
         doy = day.timetuple().tm_yday
         df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','doy'] = doy
@@ -203,8 +211,6 @@ forecast = weather.loc[forecast_index]
 last_index = forecast.last_valid_index() + pd.Timedelta(minutes=30)
 last_row = pd.DataFrame(forecast[-1:].values, index=[last_index], columns=forecast.columns)
 forecast = forecast.append(last_row)
-# add the holiday flag
-#sethols(forecast)
 forecast.index.rename('datetime', inplace=True)
 
 print(forecast)
@@ -212,7 +218,6 @@ print(forecast)
 # stick it all together
 df = pd.concat([pv, history], axis=1)
 df = df.join(demand, how='inner')
-#sethols(df)
 print(df)
 
 

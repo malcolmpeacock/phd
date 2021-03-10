@@ -750,7 +750,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
     # set up inputs
     if method == 'regd':
 #       input_columns = ['tempm']
-        input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight']
+        input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp']
 #       With the weighted loss function batch size has to be 1
         batch_size = 1
         rate = 1e-3
@@ -1085,7 +1085,7 @@ if args.day != 'set':
         else:
             if args.day[0:4] == 'date' :
                 start_date = args.day[4:]
-                print('Week starting {}'.format(start_date))
+                print('One date to forecast {}'.format(start_date))
                 start_date = date(int(start_date[0:4]), int(start_date[4:6]), int(start_date[6:8]) )
                 day_text = start_date.strftime("%Y-%m-%d")
                 day_start = day_text + ' 00:00:00'
@@ -1239,7 +1239,7 @@ if 'demand' in forecast.columns:
         plt.title('demand prediction : '+method)
         plt.xlabel('Hour of the year', fontsize=15)
         plt.ylabel('Demand (MW)', fontsize=15)
-        plt.legend(loc='upper right', fontsize=15)
+        plt.legend(loc='lower left', fontsize=15)
         plt.show()
 
 output_dir = "/home/malcolm/uclan/challenge/output/"
