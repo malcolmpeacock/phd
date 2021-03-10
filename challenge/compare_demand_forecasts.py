@@ -57,7 +57,7 @@ if args.plot:
         print(pdf)
         if count==0:
             pdf['demand'].plot(label='actual demand')
-        pdf['prediction'].plot(label=name)
+        pdf['prediction'].plot(label=demand_labels[name])
         count+=1
             
     plt.title('Comparison of demand forecasts')
