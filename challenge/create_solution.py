@@ -93,8 +93,9 @@ for day in days:
     # take off anything exceeding the max pv we could have
     cs_ghi = pv_day[pv_day['k'] < 32]['cs_ghi']
     pv_max = cs_ghi * 0.8 * 5.0 * 0.002
-    print(pv_max)
-    print(cpoints)
+    pv_max = pv_max.loc[cpoints.index]
+#   print(pv_max)
+#   print(cpoints)
     charge_points = np.minimum(cpoints, pv_max)
     print('After removing pv_max')
     print(charge_points)
@@ -114,14 +115,14 @@ for day in days:
             k = i+1
             charge_value = charge_points[i]
             pm = pv_max.values[i]
-            print('{} Remaining {} topup {} charge_value {} at k {} pv_max {}'.format(day, remaining, topup, charge_value, k, pm) )
+#           print('{} Remaining {} topup {} charge_value {} at k {} pv_max {}'.format(day, remaining, topup, charge_value, k, pm) )
             # don't exceed battery limit or pv generation limit
             limit = min(2.5,pm)
             old_value = charge_value
             # incase addition ended up negative.
             addition = max(min(topup, limit - old_value), 0.0)
             charge_value = old_value + addition
-            print('Topping up from {} to {} with {} topup {} remaining {} at k {}'.format(old_value, charge_value, addition, topup, remaining, k) )
+#           print('Topping up from {} to {} with {} topup {} remaining {} at k {}'.format(old_value, charge_value, addition, topup, remaining, k) )
             remaining = remaining - addition
             charge_points[i] = charge_value
         print(charge_points)
