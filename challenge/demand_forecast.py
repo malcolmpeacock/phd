@@ -634,19 +634,48 @@ def set_weight(dfd, forecast_day):
     dfd['weight'] = weight
     print(dfd['weight'])
 
+def forecast_pub_hol(dsk_df, dsk_f, plot):
+    demands = dsk_df['demand'].values
+    temps = dsk_df['tempm'].values
+    # Fit line through the points - the add constant bit gives us 
+    # the intercept as well as the gradient of the fit line.
+    rmodel = sm.OLS(demands, sm.add_constant(temps))
+    residual_results = rmodel.fit()
+#   print(residual_results.summary())
+    res_const = residual_results.params[0]
+    res_grad = residual_results.params[1]
+    print('Gradient {} intercept {}'.format(res_grad, res_const) )
+    if plot:
+        # Fit of residuals line
+        x = np.array([min(temps),max(temps)])
+        y = res_const + res_grad * x
+        fig, ax = plt.subplots()
+        ax.scatter(temps, demands)
+        plt.title('Sunday Temp vs demand')
+        plt.xlabel('Temperature ', fontsize=15)
+        plt.ylabel('Demand (MWh)', fontsize=15)
+#       for i in range(len(labels)):
+#           ax.annotate(labels[i], (temps[i], demands[i]))
+        plt.plot(x,y,color='red')
+        plt.show()
+
+    f_temp = dsk_f['tempm'].values
+    print(f_temp)
+    prediction_values = res_const + res_grad * f_temp[0]
+    return prediction_values
+
 # reg - regression - with different models for each k=32,42
 #        regl  - first 
 #        regm  - as submitted for set2
 #        regd  - only look at same day type
 
-def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, ann, ww):
+def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, ann, ww, ploss):
     pred_values=[]
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
-    # look for days of similar type, but if its Christmas or boxing day
-    # then don't because there aren't enough of them to predict
+    # look for days of similar type.
     fd_type = forecast_day['dtype'].iloc[0]
-    if method == 'regd' and fd_type <8 :
-        dfd = df[df['dtype'] == forecast_day['dtype'].iloc[0]]
+    if method == 'regd':
+        dfd = df[df['dtype'] == fd_type]
     else:
         dfd = df
 
@@ -688,7 +717,11 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
                 print('Period k {} dsk {}'.format(row['k'],dsk) )
                 dsk_df = dfd[dfd['dsk'] == dsk]
                 dsk_f = forecast_day[forecast_day['dsk'] == dsk]
-                prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, ann)
+                # if pub hol or christmas then we don't have enough so interp
+                if fd_type >= 7:
+                    prediction_values = forecast_pub_hol(dsk_df, dsk_f, ploss)
+                else:
+                    prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, ann)
                 if math.isnan(prediction_values):
                     print('WARNING NaN replaced by interpolation at period {}'.format(row['k']))
                 if not math.isfinite(prediction_values):
@@ -706,7 +739,10 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
         dsk = int(period)
         dsk_df = dfd[dfd['dsk'] == dsk]
         dsk_f = forecast_day[forecast_day['dsk'] == dsk]
-        prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, ann)
+        if fd_type == 7:
+            prediction_values = forecast_pub_hol(dsk_df, dsk_f, ploss)
+        else:
+            prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, ann)
         print('Predicted value {} for period {}'.format(prediction_values, period))
         quit()
 
@@ -1047,34 +1083,44 @@ if args.day != 'set':
             forecast = df.loc[day_start : day_end]
             forecast = forecast[columns]
         else:
-            if args.day[0:4] == 'near' :
-                forecast = df[columns].copy()
-                near_date = args.day[4:]
-                print('Day of the year near to {}'.format(near_date))
-                near_date_doy = date(2018, int(near_date[0:2]), int(near_date[2:4]) ).timetuple().tm_yday
-                near_range = args.nnear
-                # in case we are close to the end of the year
-                if near_date_doy > 366-near_range:
-                    near_date_doy = near_date_doy - 366
-                print(near_date_doy)
-                for day in days:
-                    day_str = day.strftime('%Y-%m-%d')
-                    doy = day.timetuple().tm_yday
-                    if abs(near_date_doy - doy) > near_range:
-                        forecast.drop(forecast.loc[day_str].index, inplace=True)
-            else:
-                if args.day == 'first':
-                   day=0
-                else: 
-                   if args.day == 'last':
-                       day=len(days)-1
-                   else:
-                       day = int(args.day)
-                day_text = days[day].strftime("%Y-%m-%d")
+            if args.day[0:4] == 'date' :
+                start_date = args.day[4:]
+                print('Week starting {}'.format(start_date))
+                start_date = date(int(start_date[0:4]), int(start_date[4:6]), int(start_date[6:8]) )
+                day_text = start_date.strftime("%Y-%m-%d")
                 day_start = day_text + ' 00:00:00'
                 day_end = day_text + ' 23:30:00'
                 forecast = df.loc[day_start : day_end]
                 forecast = forecast[columns]
+            else:
+                if args.day[0:4] == 'near' :
+                    forecast = df[columns].copy()
+                    near_date = args.day[4:]
+                    print('Day of the year near to {}'.format(near_date))
+                    near_date_doy = date(2018, int(near_date[0:2]), int(near_date[2:4]) ).timetuple().tm_yday
+                    near_range = args.nnear
+                    # in case we are close to the end of the year
+                    if near_date_doy > 366-near_range:
+                        near_date_doy = near_date_doy - 366
+                    print(near_date_doy)
+                    for day in days:
+                        day_str = day.strftime('%Y-%m-%d')
+                        doy = day.timetuple().tm_yday
+                        if abs(near_date_doy - doy) > near_range:
+                            forecast.drop(forecast.loc[day_str].index, inplace=True)
+                else:
+                    if args.day == 'first':
+                       day=0
+                    else: 
+                       if args.day == 'last':
+                           day=len(days)-1
+                       else:
+                           day = int(args.day)
+                    day_text = days[day].strftime("%Y-%m-%d")
+                    day_start = day_text + ' 00:00:00'
+                    day_end = day_text + ' 23:30:00'
+                    forecast = df.loc[day_start : day_end]
+                    forecast = forecast[columns]
 
 #print(forecast)
 
@@ -1116,7 +1162,7 @@ for id in range(len(fdays)):
             forecast_closest_days(history, forecast, day, method)
 
         if method[0:3] == 'reg':
-            forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ki, args.ann, args.ww)
+            forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ki, args.ann, args.ww, args.ploss)
 
         if method == 'skt':
             forecast_skt(df, forecast, day)
