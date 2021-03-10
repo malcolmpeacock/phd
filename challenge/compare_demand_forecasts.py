@@ -51,11 +51,15 @@ for name in demand_names:
 
 # plot 
 if args.plot:
+
     count=0
     for name, pdf in demand_dfs.items():
         print(name)
         print(pdf)
         if count==0:
+            ax = pdf['tempm'].plot(label='temp')
+            plt.ylabel('Mean Temperature', fontsize=15, color='red')
+            ax2 = ax.twinx()
             pdf['demand'].plot(label='actual demand')
         pdf['prediction'].plot(label=demand_labels[name])
         count+=1
