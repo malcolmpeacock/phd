@@ -21,8 +21,8 @@ from torch.utils.data import TensorDataset, DataLoader
 # Import nn.functional
 import torch.nn.functional as F
 import sklearn
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVR
 from scipy.signal import gaussian
 from scipy.ndimage import filters
 
@@ -113,8 +113,9 @@ def fit(num_epochs, model, loss_fn, opt, train_dl):
             opt.step()
             opt.zero_grad()
         # report at each epoc
-        print('epoch {}, loss {}'.format(epoch, loss.item()))
+        sys.stdout.write('\repoch {:03d}, loss {:.7f} '.format(epoch, loss.item()))
         loss_history.append(loss.item() )
+    sys.stdout.flush()
     return loss_history
 
 # train the model using weighted loss
@@ -131,7 +132,6 @@ def wfit(num_epochs, model, loss_fn, opt, train_dl, w):
             opt.step()
             opt.zero_grad()
         # report at each epoc
-#       print('epoch {:03d}, loss {:.7f}'.format(epoch, loss.item()))
         sys.stdout.write('\repoch {:03d}, loss {:.7f} '.format(epoch, loss.item()))
         loss_history.append(loss.item() )
     sys.stdout.flush()
@@ -205,8 +205,8 @@ def find_closest_peak_days(df, forecast, day, peak):
     probability = 0.8
     forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
 
-# skt
-def forecast_skt(df, forecast, day):
+# svr
+def forecast_svr(df, forecast, day):
     input_columns = ['tempm', 'dsk']
     input_df = df[input_columns].copy()
     # set up output
@@ -214,23 +214,22 @@ def forecast_skt(df, forecast, day):
     output = df[output_column].copy()
 
     x = input_df.values
-    y = output.values
+#   y = output.values.reshape(-1, 1)
+    y = output.values.reshape(len(output), 1)
+    # normalise
+    sc_x = StandardScaler()
+    sc_y = StandardScaler()
+    x = sc_x.fit_transform(x)
+    y = sc_y.fit_transform(y)
 
-    # Step 2b: Transform input data
-    x_ = PolynomialFeatures(degree=2, include_bias=False).fit_transform(x)
-
-    # Step 3: Create a model and fit it
-    model = LinearRegression().fit(x_, y)
-
-    # Step 4: Get results
-    r_sq = model.score(x_, y)
-    intercept, coefficients = model.intercept_, model.coef_
+    regressor = SVR(kernel = 'rbf')
+    regressor.fit(x, y)
 
     # Step 5: Predict
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     x_f = forecast_day[input_columns].copy().values
-    xf = PolynomialFeatures(degree=2, include_bias=False).fit_transform(x_f)
-    y_pred = model.predict(xf)
+    y_pred = regressor.predict(x_f)
+    y_pred = sc_y.inverse_transform(y_pred) 
     print(y_pred)
     print(len(y_pred))
 
@@ -669,6 +668,7 @@ def forecast_pub_hol(dsk_df, dsk_f, plot):
 #        regl  - first 
 #        regm  - as submitted for set2
 #        regd  - only look at same day type
+#        regs  - model per season, dtype as a flag
 
 def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, ann, ww, ploss):
     pred_values=[]
@@ -678,7 +678,14 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
     if method == 'regd':
         dfd = df[df['dtype'] == fd_type]
     else:
-        dfd = df
+        # look for days in the same season
+        if method == 'regs':
+            s_type = forecast_day['season'].iloc[0]
+            dfd = df[df['season'] == s_type]
+            # exclude public holidays as these are treated differently
+            dfd = dfd[dfd['dtype'] < 7]
+        else:
+            dfd = df
 
     # set weight to use in the weighted loss function to give less importance
     # to some values
@@ -705,7 +712,7 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
     # multiply by ww so that the further off days have some impact not zero.
     weight = 1.0 - ( weight * ww)
     dfd['weight'] = weight
-    print(dfd['weight'])
+#   print(dfd['weight'])
     forecast_day['weight'] = 1.0
 
     if period == all:
@@ -716,12 +723,14 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
                 prediction_values = 1.0
             else:
                 print('Period k {} dsk {}'.format(row['k'],dsk) )
-                dsk_df = dfd[dfd['dsk'] == dsk]
                 dsk_f = forecast_day[forecast_day['dsk'] == dsk]
                 # if pub hol or christmas then we don't have enough so interp
                 if fd_type >= 7:
+                    dfd = df[df['dtype'] == fd_type]
+                    dsk_df = dfd[dfd['dsk'] == dsk]
                     prediction_values = forecast_pub_hol(dsk_df, dsk_f, ploss)
                 else:
+                    dsk_df = dfd[dfd['dsk'] == dsk]
                     prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, ann)
                 if math.isnan(prediction_values):
                     print('WARNING NaN replaced by interpolation at period {}'.format(row['k']))
@@ -738,11 +747,13 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
         forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = pred_series
     else:
         dsk = int(period)
-        dsk_df = dfd[dfd['dsk'] == dsk]
         dsk_f = forecast_day[forecast_day['dsk'] == dsk]
-        if fd_type == 7:
+        if fd_type >= 7:
+            dfd = df[df['dtype'] == fd_type]
+            dsk_df = dfd[dfd['dsk'] == dsk]
             prediction_values = forecast_pub_hol(dsk_df, dsk_f, ploss)
         else:
+            dsk_df = dfd[dfd['dsk'] == dsk]
             prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, ann)
         print('Predicted value {} for period {}'.format(prediction_values, period))
         quit()
@@ -750,8 +761,9 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
 def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, ann):
     # set up inputs
     if method == 'regd':
-#       input_columns = ['tempm']
-        input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'sfactor']
+        # sfactor seems to make set 1 worse
+#       input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp']
+        input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp']
 #       With the weighted loss function batch size has to be 1
         batch_size = 1
         rate = 1e-3
@@ -777,6 +789,17 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
 
         batch_size = 1
         rate = 1e-4
+
+    if method == 'regs':
+        input_columns = ['tempm', 'sun2', 'holiday', 'nothol', 'season', 'zenith']
+        input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp']
+        # days of the week 1-0 flags
+        for wd in range(7):
+            wd_key = 'wd{}'.format(wd)
+            input_columns.append(wd_key)
+
+        batch_size = 1
+        rate = 1e-3
 
     input_df = dsk_df[input_columns].copy()
 
@@ -832,7 +855,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
     # model using regression
 #       loss_fn = F.mse_loss
         loss_fn = F.l1_loss
-    if method == 'regm':
+    if method == 'regm' or method == 'regs':
     # model using regression
 #       loss_fn = F.mse_loss
         loss_fn = F.l1_loss
@@ -1167,8 +1190,8 @@ for id in range(len(fdays)):
         if method[0:3] == 'reg':
             forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ki, args.ann, args.ww, args.ploss)
 
-        if method == 'skt':
-            forecast_skt(df, forecast, day)
+        if method == 'svr':
+            forecast_svr(df, forecast, day)
         if method == 'nreg':
             losses = forecast_nreg(history, forecast, day, args.seed, args.epochs, args.ann)
             if args.ploss:
