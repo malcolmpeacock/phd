@@ -664,6 +664,7 @@ def forecast_pub_hol(dsk_df, dsk_f, plot):
     prediction_values = res_const + res_grad * f_temp[0]
     return prediction_values
 
+
 # reg - regression - with different models for each k=32,42
 #        regl  - first 
 #        regm  - as submitted for set2
@@ -750,7 +751,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
     # set up inputs
     if method == 'regd':
 #       input_columns = ['tempm']
-        input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp']
+        input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'sfactor']
 #       With the weighted loss function batch size has to be 1
         batch_size = 1
         rate = 1e-3
@@ -993,9 +994,11 @@ def additional_values(df):
     df['nothol'] = 0
     df.loc[(df['wd']<2) | (df['ph']==0), 'nothol' ] = 1
 
-    # day type, public hols not like sundays
-#   df['dtype'] = df['wd']
-#   df.loc[(df['ph']==1), 'dtype' ] = 7
+    # seasonal factor:
+    #  summer =1, autumn or spring=2, winter=3
+    df['sfactor'] = 1
+    df.loc[(df['season']==3) | (df['season']==1), 'sfactor' ] = 2
+    df.loc[(df['season']==0) , 'sfactor' ] = 3
 
     df['tsqd'] = df['tempm'] * df['tempm']
     df['th'] = df['tempm'] * df['holiday']
