@@ -686,9 +686,9 @@ count=0
 print('Forecasting {} days in steps of {}'.format(len(fdays), args.step) )
 for id in range(len(fdays)):
     day = fdays[id]
+    day_text = day.strftime("%Y-%m-%d")
     count+=1
     print('Method {} day {} of {} date {}'.format(method, count, num_fdays, day) )
-    day_text = day.strftime("%Y-%m-%d")
     day_start = day_text + ' 00:00:00'
     day_end = day_text + ' 23:30:00'
     if id%args.step != 0:
@@ -744,13 +744,17 @@ for id in range(len(fdays)):
                 plt.show()
 
         if method == 'ann':
-            losses = forecast_ann(history, forecast, day, args.seed, args.epochs)
-            if args.plot:
-                plt.plot(losses)
-                plt.title('pv ann convergence')
-                plt.xlabel('Epochs', fontsize=15)
-                plt.ylabel('Loss', fontsize=15)
-                plt.show()
+            if count<8:
+                print("Skipping due to ANN needing last weeks data")
+                forecast.drop(forecast.loc[day_text].index, inplace=True)
+            else:
+                losses = forecast_ann(history, forecast, day, args.seed, args.epochs)
+                if args.plot:
+                    plt.plot(losses)
+                    plt.title('pv ann convergence')
+                    plt.xlabel('Epochs', fontsize=15)
+                    plt.ylabel('Loss', fontsize=15)
+                    plt.show()
 
         if method == 'gpr':
             losses = forecast_gpr(history, forecast, day, args.seed, args.epochs)
