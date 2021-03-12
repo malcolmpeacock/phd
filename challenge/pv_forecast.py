@@ -115,7 +115,7 @@ class SimpleNet(nn.Module):
     def __init__(self,num_inputs,num_outputs):
         super().__init__()
 #       num_nodes = num_inputs
-        num_nodes = 10
+        num_nodes = 60
         self.linear1 = nn.Linear(num_inputs, num_nodes)
         # Activation function
         self.act2 = nn.LeakyReLU() 
@@ -368,9 +368,9 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
     # don't try to predict pv at night!
     day_df = df[df['zenith'] < 87]
     # set up inputs
-    input_columns = ['zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'tempw', 'cs_ghi']
-#   input_columns = ['zenith', 'sunw', 'tempw', 'cs_ghi']
-#   input_columns = ['sun1', 'sun2', 'sun5', 'sun6']
+#   input_columns = ['zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'tempw', 'cs_ghi']
+    input_columns = ['month', 'season', 'zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'tempw', 'cs_ghi']
+#   input_columns = ['zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'temp1', 'temp2', 'temp5', 'temp6', 'cs_ghi']
     input_df = day_df[input_columns].copy()
 #   print(input_df)
 
@@ -379,20 +379,20 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
     output = day_df[output_column]
     # normalise the output (Y)
     output_max = output.max()
-    output = output / output_max
+    if output_max>0:
+        output = output / output_max
 
-    # store maximum values
-    input_max = {}
     # normalise the inputs (X)
-    for column in input_df.columns:
-        input_max[column] = input_df[column].max()
-        input_df[column] = input_df[column] / input_df[column].max()
+    input_max = utils.df_normalise(input_df)
 
     # santity check
-    for column in input_df.columns:
-        if input_df[column].isna().sum() >0:
-            print("ERROR NaN in {}".format(column))
-            quit()
+    utils.sanity_check(input_df)
+    # santity check
+    if output.isna().sum() >0:
+        print("ERROR NaN in output")
+        quit()
+
+
     if output.isna().sum() >0:
         print("ERROR NaN in output")
         quit()
@@ -422,10 +422,7 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
     model = SimpleNet(num_inputs,1)
 
     # Define optimizer
-#   opt = torch.optim.SGD(model.parameters(), lr=1e-2)
-#   opt = torch.optim.SGD(model.parameters(), lr=1e-4)
-#   opt = torch.optim.SGD(model.parameters(), lr=1e-5)
-    opt = torch.optim.SGD(model.parameters(), lr=1e-6)
+    opt = torch.optim.SGD(model.parameters(), lr=1e-3)
 
     # Define loss function
 #   loss_fn = F.mse_loss
