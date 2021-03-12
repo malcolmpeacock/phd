@@ -456,8 +456,28 @@ def df_normalise_by(df,df_max):
 def sanity_check(df):
     for column in df.columns:
         if df[column].isna().sum() >0:
-            print("ERROR {} NaN in {}".format(df[column].isna().sum(),column))
+            print("ERROR in sanity_check {} NaN in {}".format(df[column].isna().sum(),column))
             print(df[df[column].isna()][column])
             quit()
 
-
+def get_previous_week_day(dfd, day):
+    # we need a previous day to get data from, but in assessing the method
+    # there might not be one if it was removed due to bad data. So we then 
+    # look further back
+    first_day = dfd.first_valid_index().date()
+    previous_found = False
+    day_last_week  = day
+    while not previous_found:
+        day_last_week  = day_last_week - pd.Timedelta(days=7)
+        print('Looking to base data of previous week on {}'.format(day_last_week))
+        if day_last_week < first_day:
+            print('Previous day for demand before start of data!!!!')
+            quit()
+        if day_last_week.strftime('%Y-%m-%d') in dfd.index:
+            print('Found. Using {}'.format(day_last_week))
+            previous_day = dfd.loc[day_last_week.strftime('%Y-%m-%d')].copy()
+            if len(previous_day) > 0:
+                previous_found = True
+        else:
+            print('Not Found')
+    return previous_day

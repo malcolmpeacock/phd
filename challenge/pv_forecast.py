@@ -115,7 +115,7 @@ class SimpleNet(nn.Module):
     def __init__(self,num_inputs,num_outputs):
         super().__init__()
 #       num_nodes = num_inputs
-        num_nodes = 60
+        num_nodes = 150
         self.linear1 = nn.Linear(num_inputs, num_nodes)
         # Activation function
         self.act2 = nn.LeakyReLU() 
@@ -362,21 +362,35 @@ def forecast_reg(df, forecast, day, method, seed, num_epochs, set_weights):
 
     return losses
 
+# ann - inputs
+def ann_inputs(df_nw1, df_nwn):
+    input_columns = ['month', 'season', 'zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'tempw', 'cs_ghi']
+    input_df = df_nw1[input_columns].copy()
+    input_df['pv_power'] = df_nwn['pv_power'].values
+    input_df['pv_ghi'] = df_nwn['pv_ghi'].values
+    return input_df
+
 # ann - artificial neural network.
 
 def forecast_ann(df, forecast, day, seed, num_epochs):
     # don't try to predict pv at night!
     day_df = df[df['zenith'] < 87]
+    # drop the first week so we can use data from last week
+    df_nw1 = day_df.drop(day_df.head(48*7).index)
+    # drop the last week so we can use data from last week
+    df_nwn = day_df.drop(day_df.tail(48*7).index)
     # set up inputs
+    input_df = ann_inputs(df_nw1, df_nwn)
+
 #   input_columns = ['zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'tempw', 'cs_ghi']
-    input_columns = ['month', 'season', 'zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'tempw', 'cs_ghi']
+#   input_columns = ['month', 'season', 'zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'tempw', 'cs_ghi']
 #   input_columns = ['zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'temp1', 'temp2', 'temp5', 'temp6', 'cs_ghi']
-    input_df = day_df[input_columns].copy()
+#   input_df = day_df[input_columns].copy()
 #   print(input_df)
 
     # set up output
     output_column = 'pv_power'
-    output = day_df[output_column]
+    output = df_nw1[output_column]
     # normalise the output (Y)
     output_max = output.max()
     if output_max>0:
@@ -429,7 +443,7 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
     loss_fn = F.l1_loss
 
     loss = loss_fn(model(inputs), targets)
-    print(loss)
+#   print(loss)
     # Train the model for 100 epochs
 #   num_epochs=300
     losses = fit(num_epochs, model, loss_fn, opt, train_dl)
@@ -438,8 +452,20 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
 #   print(preds)
 #   print(targets)
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
+#   print(forecast_day)
     day_f = forecast_day[forecast_day['zenith'] < 87]
-    input_f = day_f[input_columns].copy()
+#   print(day_f)
+#   previous_day = utils.get_previous_week_day(day_df, day)
+    previous_day = utils.get_previous_week_day(df, day)
+#   print(previous_day)
+    delta = forecast_day.first_valid_index().date() - previous_day.first_valid_index().date()
+#   print(delta)
+    d_index = day_f.index - delta
+#   print(d_index)
+#   day_p = previous_day[previous_day['zenith'] < 87]
+#   day_p = previous_day.loc[d_index]
+    input_f = ann_inputs(forecast_day, previous_day)
+#   input_f = ann_inputs(day_f, day_p)
 #   print(input_f)
     # normalise the inputs (using same max as for the model)
     for column in input_f.columns:
@@ -451,7 +477,9 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
     # denormalize using df for the original model
     prediction_values = preds.detach().numpy() * output_max
     # set forecast for zentih angle for daylight
-    forecast_day.loc[forecast_day['zenith']<87, 'prediction'] = prediction_values
+#   forecast_day.loc[forecast_day['zenith']<87, 'prediction'] = prediction_values
+    forecast_day['prediction'] = prediction_values
+    forecast_day.loc[forecast_day['zenith']>87, 'prediction'] = 0.0
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = forecast_day['prediction'].values
 
 #   print(forecast)
