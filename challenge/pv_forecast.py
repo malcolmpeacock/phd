@@ -6,6 +6,8 @@ import sys
 import pandas as pd
 from datetime import datetime
 from datetime import timedelta
+from datetime import date
+
 import pytz
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
@@ -19,6 +21,8 @@ import gpytorch
 from torch.utils.data import TensorDataset, DataLoader
 # Import nn.functional
 import torch.nn.functional as F
+from scipy.signal import gaussian
+from scipy.ndimage import filters
 
 # custom code
 import utils
@@ -396,6 +400,11 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
     if output_max>0:
         output = output / output_max
 
+    # smooth the pv output first ??! - makes it worse!!
+#   b = gaussian(39, 3)
+#   gf = filters.convolve1d(output.values, b/b.sum())
+#   output.update(gf)
+
     # normalise the inputs (X)
     input_max = utils.df_normalise(input_df)
 
@@ -641,6 +650,7 @@ df = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=
 forecast_filename = '{}forecast_{}.csv'.format(output_dir, dataset)
 forecast = pd.read_csv(forecast_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
+int_day = False
 if args.day != 'set':
     columns = forecast.columns.append(pd.Index(['pv_power']))
     if args.day == 'all':
@@ -671,6 +681,7 @@ if args.day != 'set':
                    day=len(days)-1
                else:
                    day = int(args.day)
+                   int_day = True
             day_text = days[day].strftime("%Y-%m-%d")
             day_start = day_text + ' 00:00:00'
             day_end = day_text + ' 23:30:00'
@@ -744,7 +755,7 @@ for id in range(len(fdays)):
                 plt.show()
 
         if method == 'ann':
-            if count<8:
+            if not int_day and count<8:
                 print("Skipping due to ANN needing last weeks data")
                 forecast.drop(forecast.loc[day_text].index, inplace=True)
             else:
