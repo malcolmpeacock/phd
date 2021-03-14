@@ -260,6 +260,29 @@ def forecast_svr(df, forecast, day):
     print(forecast_day)
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = y_pred
 
+# using SVR to predict the demand for one k period
+
+def period_svr(input_df, output, input_f):
+
+    x = input_df.values
+    y = output.values.reshape(len(output), 1)
+    # normalise
+    sc_x = StandardScaler()
+    sc_y = StandardScaler()
+    x = sc_x.fit_transform(x)
+    y = sc_y.fit_transform(y)
+
+    regressor = SVR(kernel = 'rbf')
+    regressor.fit(x, y)
+
+    # Step 5: Predict
+    x_f = input_f
+    x_pred = sc_x.transform(x_f)
+    y_pred = regressor.predict(x_pred)
+    y_pred = sc_y.inverse_transform(y_pred) 
+
+    return y_pred[0]
+
 def reg_inputs(df_nw1, df_nwn):
     # dropping the first week
     # temperatures for a range of dsks
@@ -832,102 +855,83 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
     output_column = 'demand'
     output = dsk_df[output_column].copy()
 
-    # store maximum values
-    input_max = utils.df_normalise(input_df)
-    # santity check
-    utils.sanity_check(input_df)
-
-    # store maximum values
-#   input_max = {}
-    # normalise the inputs
-#   for column in input_df.columns:
-#       input_max[column] = input_df[column].max()
-#       if input_df[column].max() > 0.0:
-#           input_df[column] = input_df[column] / input_df[column].max()
-#       else:
-#           input_df[column] = 0.0
-    # normalise the output (Y)
-    output_max = output.max()
-    if output_max>0:
-        output = output / output_max
-
-    # santity check
-    if output.isna().sum() >0:
-        print("ERROR NaN in output")
-        quit()
-
-    inputs = torch.tensor(input_df.values.astype(np.float32))
-#   print("inputs")
-#   print(inputs)
-#   The .view seems to tell it what shape the data is
-    targets = torch.tensor(output.values.astype(np.float32)).view(-1,1)
-#   print("targets")
-#   print(targets)
-    torch.manual_seed(seed)    # reproducible
-    train_ds = TensorDataset(inputs, targets)
-
-    train_dl = DataLoader(train_ds, batch_size, shuffle=True)
-    next(iter(train_dl))
-
-    num_inputs = len(input_df.columns)
-    if alg == 'ann':
-        model = SimpleNet(num_inputs,1,20)
-        loss_fn = F.l1_loss
+    if alg == 'svr':
+        input_f = dsk_f[input_columns].copy()
+        prediction_values = period_svr(input_df, output, input_f)
+        return prediction_values
     else:
-        model = nn.Linear(num_inputs,1)
 
-    if method == 'regl':
-    # model using regression
-#       loss_fn = F.mse_loss
-        loss_fn = F.l1_loss
-    if method == 'regm' or method == 'regs':
-    # model using regression
-#       loss_fn = F.mse_loss
-        loss_fn = F.l1_loss
+        # store maximum values
+        input_max = utils.df_normalise(input_df)
+        # santity check
+        utils.sanity_check(input_df)
+        # normalise the output (Y)
+        output_max = output.max()
+        if output_max>0:
+            output = output / output_max
 
-    if method == 'regd':
-#       loss_fn = F.l1_loss
-        loss_fn = loss_wl1
-        weights = torch.tensor(dsk_df['weight'].values.astype(np.float32)).view(-1,1)
-        opt = torch.optim.SGD(model.parameters(), lr=rate)
-#       opt = torch.optim.Adam(model.parameters(), lr=rate)
-        loss = loss_fn(model(inputs), targets, weights)
-        losses = wfit(num_epochs, model, loss_fn, opt, train_dl, weights)
-    else:
-        opt = torch.optim.SGD(model.parameters(), lr=rate)
-        loss = loss_fn(model(inputs), targets)
-        losses = fit(num_epochs, model, loss_fn, opt, train_dl)
+        # santity check
+        if output.isna().sum() >0:
+            print("ERROR NaN in output")
+            quit()
 
-    preds = model(inputs)
-#   print(preds)
-    # prediction
-    #forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
-    #print(forecast_day)
-    #dsk_f = forecast_day[forecast_day['dsk'] == dsk]
-    input_f = dsk_f[input_columns].copy()
-#   print(input_f)
-    # normalise the inputs (using same max as for the model)
-    for column in input_f.columns:
-        if input_max[column]>0:
-            input_f[column] = input_f[column] / input_max[column]
-    f_inputs = torch.tensor(input_f.values.astype(np.float32))
-#   print('f_inputs')
-#   print(f_inputs)
-    preds = model(f_inputs)
-#   print(preds)
-    # denormalize using df for the original model
-    prediction_values = preds.detach().numpy() * output_max
-#   print(prediction_values)
+        inputs = torch.tensor(input_df.values.astype(np.float32))
+        targets = torch.tensor(output.values.astype(np.float32)).view(-1,1)
+        torch.manual_seed(seed)    # reproducible
+        train_ds = TensorDataset(inputs, targets)
 
-    if args.ploss:
-        plt.plot(losses)
-        plt.title('Demand Regression convergence. period {}'.format(dsk))
-        plt.xlabel('Epochs', fontsize=15)
-        plt.ylabel('Loss', fontsize=15)
-        plt.show()
+        train_dl = DataLoader(train_ds, batch_size, shuffle=True)
+        next(iter(train_dl))
 
-    return prediction_values[0][0]
+        num_inputs = len(input_df.columns)
+        if alg == 'ann':
+            model = SimpleNet(num_inputs,1,20)
+            loss_fn = F.l1_loss
+        else:
+            model = nn.Linear(num_inputs,1)
 
+        if method == 'regl':
+        # model using regression
+#           loss_fn = F.mse_loss
+            loss_fn = F.l1_loss
+        if method == 'regm' or method == 'regs':
+        # model using regression
+#           loss_fn = F.mse_loss
+            loss_fn = F.l1_loss
+
+        # day types treated differently and weighted loss
+        if method == 'regd':
+            loss_fn = loss_wl1
+            weights = torch.tensor(dsk_df['weight'].values.astype(np.float32)).view(-1,1)
+            opt = torch.optim.SGD(model.parameters(), lr=rate)
+#           opt = torch.optim.Adam(model.parameters(), lr=rate)
+            loss = loss_fn(model(inputs), targets, weights)
+            losses = wfit(num_epochs, model, loss_fn, opt, train_dl, weights)
+        else:
+            opt = torch.optim.SGD(model.parameters(), lr=rate)
+            loss = loss_fn(model(inputs), targets)
+            losses = fit(num_epochs, model, loss_fn, opt, train_dl)
+
+        preds = model(inputs)
+        # prediction
+        input_f = dsk_f[input_columns].copy()
+        # normalise the inputs (using same max as for the model)
+        for column in input_f.columns:
+            if input_max[column]>0:
+                input_f[column] = input_f[column] / input_max[column]
+        f_inputs = torch.tensor(input_f.values.astype(np.float32))
+        preds = model(f_inputs)
+        # denormalize using df for the original model
+        prediction_values = preds.detach().numpy() * output_max
+
+        if args.ploss:
+            plt.plot(losses)
+            plt.title('Demand Regression convergence. period {}'.format(dsk))
+            plt.xlabel('Epochs', fontsize=15)
+            plt.ylabel('Loss', fontsize=15)
+            plt.show()
+
+        return prediction_values[0][0]
 
 # ann - artificial neural network.
 
