@@ -25,6 +25,7 @@
 # dtype      0,6=day of week, 7=ph, 8=Christmas, 9=December 26th
 # month      month of the year, january=1,
 # dailytemp  mean daily temperature of the day
+# lockdown   made up parameter estimating level of lock down.
 
 # contrib code
 import sys
@@ -58,6 +59,17 @@ def sethols(df):
         df.loc[holiday+' 00:00:00' : holiday+' 23:30:00','ph'] = 1
     df['ph'] = df['ph'].astype(int)
 
+    # lockdown indicator
+    df['lockdown'] = 0
+    ld_changes = { '2020-03-16' : 1.0, 
+                   '2020-03-24' : 3.0,
+                   '2020-03-26' : 5.0,
+                   '2020-05-10' : 4.0,
+                   '2020-05-13' : 3.5,
+                   '2020-06-01' : 3.0,
+                   '2020-06-13' : 2.0,
+                   '2020-06-25' : 1.0 }
+
     # day of the week
     df['wd'] = 0
     # day type
@@ -77,6 +89,7 @@ def sethols(df):
     daily_temp = df['tempm'].resample('D', axis=0).mean()
 
     # loop round each day ...
+    ld_level = 0.0
     days = df.resample('D', axis=0).mean().index.date
     for day in days:
         day_str = day.strftime('%Y-%m-%d')
@@ -102,6 +115,10 @@ def sethols(df):
         df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','dtype'] = dtype
 
         df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','month'] = day.month
+
+        if day_str in ld_changes:
+            ld_level = ld_changes[day_str]
+        df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','lockdown'] = ld_level
             
     df['wd'] = df['wd'].astype(int)
     df['dtype'] = df['dtype'].astype(int)

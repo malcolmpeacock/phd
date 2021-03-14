@@ -34,7 +34,9 @@ pv_filename = "{}pv_train_{}.csv".format(input_dir,dataset)
 print('Cleaning {} {}'.format(dataset, pv_filename) )
 pv = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
+
 print(pv)
+
 # fix errors at particular points
 # Note: replacing whole days doesn't make sense as the weather will be 
 # different - so better to remove, so the join with weather df will have
@@ -74,6 +76,8 @@ if dataset[0:3] == 'set':
     pv.drop(pv.loc['2019-07-29'].index, inplace=True)
     pv.drop(pv.loc['2019-10-08'].index, inplace=True)
     pv.drop(pv.loc['2019-11-02'].index, inplace=True)
+    # missing values
+    pv.drop(pv.loc['2020-05-08'].index, inplace=True)
     # 2017-12-26 14:30:00 - Zero power value
     pv['pv_power_mw']['2017-12-26 14:30:00'] = pv['pv_power_mw']['2017-12-26 14:00:00']
     # replace a suspect days with different ones.
@@ -82,18 +86,22 @@ if dataset[0:3] == 'set':
     print('DROPPING')
 #   2018-03-02  - no power for several hours but irradiance
     pv.drop(pv.loc['2018-03-02'].index, inplace=True)
-#   2018-03-03  - no power for several hours but irradiance
+    #   2018-03-03  - no power for several hours but irradiance
     pv.drop(pv.loc['2018-03-03'].index, inplace=True)
-#   2018-03-05  - no power for several hours but irradiance
+    #   2018-03-05  - no power for several hours but irradiance
     pv.drop(pv.loc['2018-03-05'].index, inplace=True)
-#   2018-03-08  - no power for several hours but irradiance
+    #   2018-03-08  - no power for several hours but irradiance
     pv.drop(pv.loc['2018-05-08'].index, inplace=True)
-#   2018-06-15  - no power for several hours but irradiance
+    #   2018-06-15  - no power for several hours but irradiance
     pv.drop(pv.loc['2018-06-15'].index, inplace=True)
-#   2018-08-12  - no power for several hours but irradiance
+    #   2018-08-12  - no power for several hours but irradiance
     pv.drop(pv.loc['2018-08-12'].index, inplace=True)
 #   2019-02-11  - no power for several hours but irradiance
     pv.drop(pv.loc['2019-02-11'].index, inplace=True)
+#   2020-05-06  - no power for several hours but irradiance
+    pv.drop(pv.loc['2020-05-06'].index, inplace=True)
+    #   2020-05-08  - no power for several hours but irradiance
+    pv.drop(pv.loc['2020-05-08'].index, inplace=True)
 
 # ERROR CHECKS:
 
@@ -122,7 +130,6 @@ suspect = pv_small[pv_small['panel_temp_C']>large_temp]
 print('PV small but temp large {}'.format(len(suspect)) )
 print(suspect)
 
-
 # replace NaN panel temps with zero if irradiance is zero
 missing_panel_temp = pv[pv['panel_temp_C'].isnull().values]
 #rint(missing_panel_temp)
@@ -130,6 +137,7 @@ missing_panel_temp_with0 = missing_panel_temp['pv_power_mw'] == 0.0
 #print(missing_panel_temp_with0)
 index_to_update = missing_panel_temp[missing_panel_temp_with0].index
 pv['panel_temp_C'][index_to_update] = 0.0
+
 
 # look for zero power during the middle of the day
 zero_power = pv[pv['pv_power_mw'] == 0.0].copy()

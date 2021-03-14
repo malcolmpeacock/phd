@@ -100,7 +100,7 @@ if args.plot:
     plt.legend(loc='upper right', fontsize=15)
     plt.show()
 
-    fewdays = weather['2018-06-01 00:00:00' : '2018-06-04 23:30:00']
+    fewdays = weather['2019-12-11 00:00:00' : '2019-12-24 23:30:00']
     fewdays['solar_location1'].plot(label='sun 1', color='red')
     ax = fewdays['solar_location2'].plot(label='sun 2', color='green')
     plt.ylabel('Irradiance (W/m2)', fontsize=15)

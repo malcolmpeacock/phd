@@ -29,6 +29,27 @@ from scipy.ndimage import filters
 # custom code
 import utils
 
+# metric of how close the peak reduction score for the forecast demand
+# is to the peak reduction score obtained from the actual demand.
+
+def print_peak_metric(actual, predicted):
+    actual_pattern = utils.discharge_pattern(6.0, actual)
+    actual_score = utils.peak_score(actual, actual_pattern)
+    predicted_pattern = utils.discharge_pattern(6.0, predicted)
+    predicted_score = utils.peak_score(actual, predicted_pattern)
+    print('Peak Reduction Score {}'.format( actual_score / predicted_score) )
+#   k=range(len(actual))
+#   plt.plot(k,actual, label='actual demand')
+#   plt.plot(k,predicted,label='predicted demand')
+#   plt.plot(k,actual_pattern,label='actual pattern')
+#   plt.plot(k,predicted_pattern,label='predicted pattern')
+#   plt.title('demand prediction : '+method)
+#   plt.xlabel('Hour of the year', fontsize=15)
+#   plt.ylabel('Demand (MW)', fontsize=15)
+#   plt.legend(loc='lower left', fontsize=15)
+#   plt.show()
+
+
 # loss function for weighted L1
 def loss_wl1(X,Y,W):
     lossn =  torch.mean(torch.abs(X - Y) * W)
@@ -216,6 +237,7 @@ def forecast_svr(df, forecast, day):
     x = input_df.values
 #   y = output.values.reshape(-1, 1)
     y = output.values.reshape(len(output), 1)
+#   y = output.values.reshape(len(output), )
     # normalise
     sc_x = StandardScaler()
     sc_y = StandardScaler()
@@ -228,7 +250,9 @@ def forecast_svr(df, forecast, day):
     # Step 5: Predict
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     x_f = forecast_day[input_columns].copy().values
-    y_pred = regressor.predict(x_f)
+    print(x_f)
+    x_pred = sc_x.transform(x_f)
+    y_pred = regressor.predict(x_pred)
     y_pred = sc_y.inverse_transform(y_pred) 
     print(y_pred)
     print(len(y_pred))
@@ -275,7 +299,7 @@ def forecast_new_inputs(df):
 
 # new - regression to find the peak and sum. Then use sdays to find  
 #       days with this peak with matching temperature profile
-def forecast_new(df, forecast, day, seed, num_epochs, ann):
+def forecast_new(df, forecast, day, seed, num_epochs, alg):
 
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     # days with the same dtype
@@ -309,7 +333,7 @@ def forecast_new(df, forecast, day, seed, num_epochs, ann):
 
     num_inputs = len(input_df.columns)
     num_outputs = len(output_df.columns)
-    if ann:
+    if alg == 'ann':
 #       model = SimpleNet(num_inputs, num_outputs, num_inputs)
         model = SimpleNet(num_inputs, num_outputs, 50)
         opt = torch.optim.SGD(model.parameters(), lr=1e-3)
@@ -359,7 +383,7 @@ def forecast_new(df, forecast, day, seed, num_epochs, ann):
 
 # nreg - new regression - with all 11 periods of interest as seperate 
 #        inputs and outputs as per bogdan
-def forecast_nreg(df, forecast, day, seed, num_epochs, ann):
+def forecast_nreg(df, forecast, day, seed, num_epochs, alg):
     # only use days of the same type
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     dfd = df[df['dtype'] == forecast_day['dtype'].iloc[0]]
@@ -394,7 +418,7 @@ def forecast_nreg(df, forecast, day, seed, num_epochs, ann):
 
     num_inputs = len(input_df.columns)
     num_outputs = len(output_df.columns)
-    if ann:
+    if alg == 'ann':
         model = SimpleNet(num_inputs, num_outputs, 40)
     else:
         model = nn.Linear(num_inputs, num_outputs)
@@ -419,24 +443,25 @@ def forecast_nreg(df, forecast, day, seed, num_epochs, ann):
     # we need a previous day to get demand from, but in assessing the method
     # there might not be one if it was removed due to bad data. So we then 
     # look further back
-    first_day = dfd.first_valid_index().date()
-    previous_found = False
-    day_last_week  = day
-    while not previous_found:
-        day_last_week  = day_last_week - pd.Timedelta(days=7)
-        print('Looking to base demand of previous week on {}'.format(day_last_week))
-        if day_last_week < first_day:
-            print('Previous day for demand before start of data!!!!')
-            quit()
-        if day_last_week.strftime('%Y-%m-%d') in dfd.index:
-            print('Found using {}'.format(day_last_week))
-            previous_day = dfd.loc[day_last_week.strftime('%Y-%m-%d')].copy()
-            if len(previous_day) > 0:
-                previous_found = True
-        else:
-            print('Not Found')
+#   first_day = dfd.first_valid_index().date()
+#   previous_found = False
+#   day_last_week  = day
+#   while not previous_found:
+#       day_last_week  = day_last_week - pd.Timedelta(days=7)
+#       print('Looking to base demand of previous week on {}'.format(day_last_week))
+#       if day_last_week < first_day:
+#           print('Previous day for demand before start of data!!!!')
+#           quit()
+#       if day_last_week.strftime('%Y-%m-%d') in dfd.index:
+#           print('Found using {}'.format(day_last_week))
+#           previous_day = dfd.loc[day_last_week.strftime('%Y-%m-%d')].copy()
+#           if len(previous_day) > 0:
+#               previous_found = True
+#       else:
+#           print('Not Found')
 
-#   print(previous_day)
+    previous_day = utils.get_previous_week_day(dfd, day)
+    print(previous_day)
     # set up the values to forecast
     input_f = reg_inputs(forecast_day, previous_day)
 #   print(input_f)
@@ -670,7 +695,7 @@ def forecast_pub_hol(dsk_df, dsk_f, plot):
 #        regd  - only look at same day type
 #        regs  - model per season, dtype as a flag
 
-def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, ann, ww, ploss):
+def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, alg, ww, ploss):
     pred_values=[]
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     # look for days of similar type.
@@ -731,7 +756,7 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
                     prediction_values = forecast_pub_hol(dsk_df, dsk_f, ploss)
                 else:
                     dsk_df = dfd[dfd['dsk'] == dsk]
-                    prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, ann)
+                    prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg)
                 if math.isnan(prediction_values):
                     print('WARNING NaN replaced by interpolation at period {}'.format(row['k']))
                 if not math.isfinite(prediction_values):
@@ -754,16 +779,16 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
             prediction_values = forecast_pub_hol(dsk_df, dsk_f, ploss)
         else:
             dsk_df = dfd[dfd['dsk'] == dsk]
-            prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, ann)
+            prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg)
         print('Predicted value {} for period {}'.format(prediction_values, period))
         quit()
 
-def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, ann):
+def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg):
     # set up inputs
     if method == 'regd':
         # sfactor seems to make set 1 worse
 #       input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp']
-        input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp']
+        input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown']
 #       With the weighted loss function batch size has to be 1
         batch_size = 1
         rate = 1e-3
@@ -791,8 +816,8 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
         rate = 1e-4
 
     if method == 'regs':
-        input_columns = ['tempm', 'sun2', 'holiday', 'nothol', 'season', 'zenith']
-        input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp']
+#       input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp']
+        input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown']
         # days of the week 1-0 flags
         for wd in range(7):
             wd_key = 'wd{}'.format(wd)
@@ -845,7 +870,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
     next(iter(train_dl))
 
     num_inputs = len(input_df.columns)
-    if ann:
+    if alg == 'ann':
         model = SimpleNet(num_inputs,1,20)
         loss_fn = F.l1_loss
     else:
@@ -1044,7 +1069,7 @@ parser.add_argument('--method', action="store", dest="method", help='Forecasting
 parser.add_argument('--day', action="store", dest="day", help='Day to forecast: set=read the set forecast file, first= first day, last=last day, all=loop to forecast all days based on the others, otherwise integer day' , default='set' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--ploss', action="store_true", dest="ploss", help='Plot the loss', default=False)
-parser.add_argument('--ann', action="store_true", dest="ann", help='Replace regression with ANN', default=False)
+parser.add_argument('--alg', action="store", dest="alg", help='Algorithm: linear, ann, svm' , default='linear' )
 parser.add_argument('--mname', action="store_true", dest="mname", help='Name the output file using the method', default=False)
 parser.add_argument('--seed', action="store", dest="seed", help='Random seed, default=1.0', type=float, default=1.0)
 parser.add_argument('--ww', action="store", dest="ww", help='Loss Weight weight=0.5', type=float, default=0.5)
@@ -1188,12 +1213,12 @@ for id in range(len(fdays)):
             forecast_closest_days(history, forecast, day, method)
 
         if method[0:3] == 'reg':
-            forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ki, args.ann, args.ww, args.ploss)
+            forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ki, args.alg, args.ww, args.ploss)
 
         if method == 'svr':
             forecast_svr(df, forecast, day)
         if method == 'nreg':
-            losses = forecast_nreg(history, forecast, day, args.seed, args.epochs, args.ann)
+            losses = forecast_nreg(history, forecast, day, args.seed, args.epochs, args.alg)
             if args.ploss:
                 plt.plot(losses)
                 plt.title('demand nreg convergence')
@@ -1220,7 +1245,7 @@ for id in range(len(fdays)):
                 plt.show()
 
         if method == 'new':
-            losses, pred_peak, ac_peak = forecast_new(history, forecast, day, args.seed, args.epochs, args.ann)
+            losses, pred_peak, ac_peak = forecast_new(history, forecast, day, args.seed, args.epochs, args.alg)
             if args.ploss:
                 plt.plot(losses)
                 plt.title('demand peak convergence')
@@ -1251,11 +1276,13 @@ if 'demand' in forecast.columns:
 #       print(kf['demand'])
 #       print(kf['prediction'])
         print('Metrics for k>31 and k<43')
-        utils.print_metrics(kf['demand'], kf['prediction'], args.plot)
+        utils.print_metrics(kf['demand'], kf['prediction'])
+        print_peak_metric(kf['demand'], kf['prediction'])
         print('Metrics for whole day')
         utils.print_metrics(forecast['demand'], forecast['prediction'], False)
     else:
         utils.print_metrics(forecast['demand'], forecast['prediction'], args.plot)
+        print_peak_metric(forecast['demand'], forecast['prediction'])
     fpeak = forecast.loc[(forecast['k']>31) & (forecast['k']<43)]
     peak = (fpeak['demand'].max() - fpeak['prediction'].max() ) / fpeak['demand'].max()
     print('Peak prediction {} '.format(peak) )

@@ -1,4 +1,4 @@
-# python script to create a demand forecast from the previous demand and
+# python script to clean the demand data
 # the weather
 
 # contrib code
@@ -63,6 +63,10 @@ if dataset[0:3]=='set':
     demand.drop(demand['2018-05-10'].index, inplace=True)
     demand.drop(demand['2018-05-11'].index, inplace=True)
     demand.drop(demand['2018-11-04'].index, inplace=True)
+    # replace low values
+    demand['2020-02-28 07:30:00'] = demand['2020-02-08 07:00:00']
+    demand['2020-03-17 12:00:00'] = demand['2020-03-17 11:30:00']
+    demand['2020-03-17 12:30:00'] = demand['2020-03-17 13:00:00']
 print('Low demand values')
 low = demand[demand < 0.1]
 print(low)
@@ -80,7 +84,7 @@ if args.plot:
     plt.legend(loc='upper right', fontsize=15)
     plt.show()
 
-    fewdays = demand['2018-06-01 00:00:00' : '2018-06-04 23:30:00']
+    fewdays = demand['2020-06-26 00:00:00' : '2020-07-03 23:30:00']
     fewdays.plot(label='demand', color='blue')
     plt.title('demand for 4 days')
     plt.xlabel('Hour of the year', fontsize=15)

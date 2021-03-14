@@ -6,6 +6,8 @@ from datetime import timedelta
 import numpy as np
 import matplotlib.pyplot as plt
 import pytz
+from scipy.optimize import minimize
+from scipy.optimize import Bounds
 
 # get k for a single index value
 def index2k(index):
@@ -306,6 +308,15 @@ def solution_score(solution, pv, demand):
     Sfinal = sum(Sd) / 7.0
     return Sfinal, new_demand
 
+# calculate the peak reduction part of the score
+
+def peak_score(demand, discharge_pattern):
+    peak_old = np.max(demand)
+    new_demand = demand + discharge_pattern
+    peak_new = np.max(new_demand)
+    Rp = 100 * ( peak_old - peak_new ) / peak_old
+    return Rp
+
 # function to add new column to df based on weighted average
 def add_weighted(df, col_prefix, newcol):
     points = locations()
@@ -481,3 +492,20 @@ def get_previous_week_day(dfd, day):
         else:
             print('Not Found')
     return previous_day
+
+# function defining the constraints on the battery charge
+# do we need a constraint that charge is always -ve ? and <2.5 ?
+def discharge_con(charge, battery):
+    return sum(charge) + battery
+
+# function to optimize ie the peak demand by adding the battery 
+# charge (which is negative)
+def discharge_peak(c, demand):
+    return (demand + c ).max()
+
+def discharge_pattern(battery, demand):
+    discharge = np.full(len(demand),  battery / len(demand) )
+    cons = { 'type' : 'eq', 'fun': discharge_con, 'args': [battery] }
+    x0 = np.array(discharge)
+    res = minimize(discharge_peak, x0, args=demand, method='SLSQP', options={'disp': True, 'maxiter':200, 'ftol':1e-11}, constraints=cons, bounds=Bounds(-2.5,0.0) )
+    return res.x
