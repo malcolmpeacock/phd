@@ -23,6 +23,9 @@ from torch.utils.data import TensorDataset, DataLoader
 import torch.nn.functional as F
 from scipy.signal import gaussian
 from scipy.ndimage import filters
+# svr stuff
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVR
 
 # custom code
 import utils
@@ -374,6 +377,68 @@ def ann_inputs(df_nw1, df_nwn):
     input_df['pv_ghi'] = df_nwn['pv_ghi'].values
     return input_df
 
+# support vector regression
+
+def forecast_svr(df, forecast, day, seed, num_epochs):
+    # don't try to predict pv at night!
+    # ( create the model only using this zenith, but forecast all
+    #   points when making the prediction as the forecast day may 
+    #   have different zenith, and hence different values )
+    day_df = df[df['zenith'] < 87]
+    # drop the first week so we can use data from last week
+    df_nw1 = day_df.drop(day_df.head(48*7).index)
+    # drop the last week so we can use data from last week
+    df_nwn = day_df.drop(day_df.tail(48*7).index)
+    # set up inputs
+    input_df = ann_inputs(df_nw1, df_nwn)
+
+    # set up output
+    output_column = 'pv_power'
+    output = df_nw1[output_column]
+
+    # smooth the pv output first ??! - makes it worse!! for ann
+#   b = gaussian(39, 3)
+#   gf = filters.convolve1d(output.values, b/b.sum())
+#   output.update(gf)
+
+    x = input_df.values
+    y = output.values.reshape(len(output), 1)
+#   y = output.values.reshape(len(output), 1).ravel()
+#   y = output.values.ravel()
+
+    sc_x = StandardScaler()
+    sc_y = StandardScaler()
+    x = sc_x.fit_transform(x)
+    y = sc_y.fit_transform(y)
+
+    # define regressor
+    # defaults: C=1.0, gamma=1/n_features , epsilon=0.1
+    regressor = SVR(kernel = 'rbf', C=100, gamma=0.1, epsilon=0.1)
+    # fit the model
+    regressor.fit(x, y)
+
+    forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
+    day_f = forecast_day[forecast_day['zenith'] < 87]
+    previous_day = utils.get_previous_week_day(df, day)
+    delta = forecast_day.first_valid_index().date() - previous_day.first_valid_index().date()
+    input_f = ann_inputs(forecast_day, previous_day)
+#   print(input_f)
+
+    # normalise the inputs (using same max as for the model)
+    x_f = input_f.values
+    x_pred = sc_x.transform(x_f)
+    # prediction
+    y_pred = regressor.predict(x_pred)
+    # denormalize using df for the original model
+    y_pred = sc_y.inverse_transform(y_pred)
+
+    forecast_day['prediction'] = 0.0
+    forecast_day['prediction'] = y_pred
+    forecast_day.loc[forecast_day['zenith']>87, 'prediction'] = 0.0
+    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = forecast_day['prediction'].values
+
+#   print(forecast)
+
 # ann - artificial neural network.
 
 def forecast_ann(df, forecast, day, seed, num_epochs):
@@ -385,12 +450,6 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
     df_nwn = day_df.drop(day_df.tail(48*7).index)
     # set up inputs
     input_df = ann_inputs(df_nw1, df_nwn)
-
-#   input_columns = ['zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'tempw', 'cs_ghi']
-#   input_columns = ['month', 'season', 'zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'tempw', 'cs_ghi']
-#   input_columns = ['zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'temp1', 'temp2', 'temp5', 'temp6', 'cs_ghi']
-#   input_df = day_df[input_columns].copy()
-#   print(input_df)
 
     # set up output
     output_column = 'pv_power'
@@ -469,12 +528,7 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
 #   print(previous_day)
     delta = forecast_day.first_valid_index().date() - previous_day.first_valid_index().date()
 #   print(delta)
-    d_index = day_f.index - delta
-#   print(d_index)
-#   day_p = previous_day[previous_day['zenith'] < 87]
-#   day_p = previous_day.loc[d_index]
     input_f = ann_inputs(forecast_day, previous_day)
-#   input_f = ann_inputs(day_f, day_p)
 #   print(input_f)
     # normalise the inputs (using same max as for the model)
     for column in input_f.columns:
@@ -486,13 +540,13 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
     # denormalize using df for the original model
     prediction_values = preds.detach().numpy() * output_max
     # set forecast for zentih angle for daylight
-#   forecast_day.loc[forecast_day['zenith']<87, 'prediction'] = prediction_values
     forecast_day['prediction'] = prediction_values
     forecast_day.loc[forecast_day['zenith']>87, 'prediction'] = 0.0
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = forecast_day['prediction'].values
 
 #   print(forecast)
     return losses
+
 # closest 10 hours from each weather grid, then weighted average
 
 def forecast_closest_hours(df, forecast, day):
@@ -744,6 +798,9 @@ for id in range(len(fdays)):
 
         if method == 'r2':
             forecast_r2(history, forecast, day)
+
+        if method == 'svr':
+            forecast_svr(history, forecast, day, args.seed, args.epochs)
 
         if method[0:3] == 'reg':
             losses = forecast_reg(history, forecast, day, method, args.seed, args.epochs, args.sw)
