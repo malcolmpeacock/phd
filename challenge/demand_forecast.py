@@ -684,8 +684,7 @@ def set_weight(dfd, forecast_day):
 #   dfd.loc['weight'] = dfd['weight'] / dfd['weight'].max()
 
     # subtract from 1 so that higher values have less impact on the loss.
-    # multiply by ww so that the further off days have some impact not zero.
-    weight = 1.0 - ( weight * ww)
+    weight = 1.0 - weight
     dfd['weight'] = weight
     print(dfd['weight'])
 
@@ -699,7 +698,7 @@ def forecast_pub_hol(dsk_df, dsk_f, plot):
 #   print(residual_results.summary())
     res_const = residual_results.params[0]
     res_grad = residual_results.params[1]
-    print('Gradient {} intercept {}'.format(res_grad, res_const) )
+    print('Public Holiday algorithm: Gradient {} intercept {}'.format(res_grad, res_const) )
     if plot:
         # Fit of residuals line
         x = np.array([min(temps),max(temps)])
@@ -726,7 +725,7 @@ def forecast_pub_hol(dsk_df, dsk_f, plot):
 #        regd  - only look at same day type
 #        regs  - model per season, dtype as a flag
 
-def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, alg, ww, ploss):
+def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, alg, wl, ploss):
     pred_values=[]
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     # look for days of similar type.
@@ -743,33 +742,14 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
         else:
             dfd = df
 
-    # set weight to use in the weighted loss function to give less importance
-    # to some values
-
-    # set weight based on closeness to day of year.
-    # closer days should have a greater weight.
-    # difference between day of year and that of the forecast day
-    # doy_diff = np.abs(dfd['doy'].values - forecast_day['doy'].iloc[0])
-    # to cope with days at the end of one year being close to those at the
-    # start of the next
-    # weight = np.minimum( doy_diff, np.abs(doy_diff - 365) )
-
-    # set weight based on the week counter in the data
-    # ( how far away the week we are forecasting is away )
-    weight = np.abs(dfd['week'].values - forecast_day['week'].iloc[0])
-#   dfd['weight'] = weight
-#   dfd.loc['weight'] = weight
-    # normalise
-    weight = weight / np.max(weight)
-    #dfd['weight'] = dfd['weight'] / dfd['weight'].max()
-#   dfd.loc['weight'] = dfd['weight'] / dfd['weight'].max()
-
-    # subtract from 1 so that higher values have less impact on the loss.
-    # multiply by ww so that the further off days have some impact not zero.
-    weight = 1.0 - ( weight * ww)
-    dfd['weight'] = weight
-#   print(dfd['weight'])
-    forecast_day['weight'] = 1.0
+    if wl:
+        set_weight(dfd, forecast_day)
+    else:
+        weight = np.abs(dfd['week'].values - forecast_day['week'].iloc[0])
+        weight = weight / np.max(weight)
+        weight = 1.0 - weight
+        dfd['weight'] = weight
+        forecast_day['weight'] = 1.0
 
     if period == all:
         # for each k period, train a seperate model ...
@@ -1088,7 +1068,7 @@ parser.add_argument('--ploss', action="store_true", dest="ploss", help='Plot the
 parser.add_argument('--alg', action="store", dest="alg", help='Algorithm: linear, ann, svm' , default='linear' )
 parser.add_argument('--mname', action="store_true", dest="mname", help='Name the output file using the method', default=False)
 parser.add_argument('--seed', action="store", dest="seed", help='Random seed, default=1.0', type=float, default=1.0)
-parser.add_argument('--ww', action="store", dest="ww", help='Loss Weight weight=0.5', type=float, default=0.5)
+parser.add_argument('--wl', action="store_true", dest="wl", help='Use Weight loss function', default=False)
 parser.add_argument('--epochs', action="store", dest="epochs", help='Number of epochs', type=int, default=100)
 parser.add_argument('--nnear', action="store", dest="nnear", help='Number of days when using the --day near option', type=int, default=10)
 parser.add_argument('--period', action="store", dest="period", help='Period k to forecast', type=float, default=all)
@@ -1229,7 +1209,7 @@ for id in range(len(fdays)):
             forecast_closest_days(history, forecast, day, method)
 
         if method[0:3] == 'reg':
-            forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ki, args.alg, args.ww, args.ploss)
+            forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ki, args.alg, args.wl, args.ploss)
 
         if method == 'svr':
             forecast_svr(df, forecast, day)
