@@ -413,7 +413,7 @@ def forecast_svr(df, forecast, day, seed, num_epochs):
 
     # define regressor
     # defaults: C=1.0, gamma=1/n_features , epsilon=0.1
-    regressor = SVR(kernel = 'rbf', C=100, gamma=0.1, epsilon=0.1)
+    regressor = SVR(kernel = 'rbf', C=1.0, gamma=0.1, epsilon=0.1)
     # fit the model
     regressor.fit(x, y)
 

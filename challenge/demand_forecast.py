@@ -37,17 +37,19 @@ def print_peak_metric(actual, predicted):
     actual_score = utils.peak_score(actual, actual_pattern)
     predicted_pattern = utils.discharge_pattern(6.0, predicted)
     predicted_score = utils.peak_score(actual, predicted_pattern)
-    print('Peak Reduction Score {}'.format( actual_score / predicted_score) )
-#   k=range(len(actual))
-#   plt.plot(k,actual, label='actual demand')
-#   plt.plot(k,predicted,label='predicted demand')
-#   plt.plot(k,actual_pattern,label='actual pattern')
-#   plt.plot(k,predicted_pattern,label='predicted pattern')
-#   plt.title('demand prediction : '+method)
-#   plt.xlabel('Hour of the year', fontsize=15)
-#   plt.ylabel('Demand (MW)', fontsize=15)
-#   plt.legend(loc='lower left', fontsize=15)
-#   plt.show()
+    print('Peak Reduction Score {}'.format( (actual_score - predicted_score) / actual_score) )
+    plot=False
+    if plot:
+        k=range(len(actual))
+        plt.plot(k,actual, label='actual demand')
+        plt.plot(k,predicted,label='predicted demand')
+        plt.plot(k,actual_pattern,label='actual pattern')
+        plt.plot(k,predicted_pattern,label='predicted pattern')
+        plt.title('demand prediction : '+method)
+        plt.xlabel('Hour of the year', fontsize=15)
+        plt.ylabel('Demand (MW)', fontsize=15)
+        plt.legend(loc='lower left', fontsize=15)
+        plt.show()
 
 
 # loss function for weighted L1
@@ -815,6 +817,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
 #       With the weighted loss function batch size has to be 1
         batch_size = 1
         rate = 1e-3
+        nhidden = 100
 
     if method == 'regl':
 #       input_columns = ['tempm', 'zenith']
@@ -823,6 +826,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
         input_columns = ['tempm', 'zenith', 'holiday', 'nothol']
         batch_size = 1
         rate = 1e-4
+        nhidden = 20
 
     if method == 'regm':
 # sunw causes nans in predicition? 
@@ -837,6 +841,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
 
         batch_size = 1
         rate = 1e-4
+        nhidden = 20
 
     if method == 'regs':
 #       input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp']
@@ -848,6 +853,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
 
         batch_size = 1
         rate = 1e-3
+        nhidden = 50
 
     input_df = dsk_df[input_columns].copy()
 
@@ -885,7 +891,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
 
         num_inputs = len(input_df.columns)
         if alg == 'ann':
-            model = SimpleNet(num_inputs,1,20)
+            model = SimpleNet(num_inputs,1,nhidden)
             loss_fn = F.l1_loss
         else:
             model = nn.Linear(num_inputs,1)
@@ -1302,7 +1308,7 @@ if 'demand' in forecast.columns:
 output_dir = "/home/malcolm/uclan/challenge/output/"
 output_filename = '{}demand_forecast_{}.csv'.format(output_dir, dataset)
 if args.mname:
-    output_filename = '{}demand_forecast_{}_{}.csv'.format(output_dir, method, dataset)
+    output_filename = '{}demand_forecast_{}_{}_{}.csv'.format(output_dir, method, args.alg, dataset)
 forecast.to_csv(output_filename, float_format='%.2f')
 
 # only demand for bogdan

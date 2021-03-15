@@ -315,6 +315,7 @@ def peak_score(demand, discharge_pattern):
     new_demand = demand + discharge_pattern
     peak_new = np.max(new_demand)
     Rp = 100 * ( peak_old - peak_new ) / peak_old
+#   print('peak_old {} peak_new {} Rp {}'.format(peak_old, peak_new, Rp) )
     return Rp
 
 # function to add new column to df based on weighted average
@@ -507,5 +508,5 @@ def discharge_pattern(battery, demand):
     discharge = np.full(len(demand),  battery / len(demand) )
     cons = { 'type' : 'eq', 'fun': discharge_con, 'args': [battery] }
     x0 = np.array(discharge)
-    res = minimize(discharge_peak, x0, args=demand, method='SLSQP', options={'disp': True, 'maxiter':200, 'ftol':1e-11}, constraints=cons, bounds=Bounds(-2.5,0.0) )
+    res = minimize(discharge_peak, x0, args=demand, method='SLSQP', options={'disp': False, 'maxiter':200, 'ftol':1e-11}, constraints=cons, bounds=Bounds(-2.5,0.0) )
     return res.x

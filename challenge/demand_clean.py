@@ -84,7 +84,8 @@ if args.plot:
     plt.legend(loc='upper right', fontsize=15)
     plt.show()
 
-    fewdays = demand['2020-06-26 00:00:00' : '2020-07-03 23:30:00']
+    fewdays = demand['2020-03-20 00:00:00' : '2020-07-03 23:30:00']
+#   fewdays = demand['2020-06-26 00:00:00' : '2020-07-03 23:30:00']
     fewdays.plot(label='demand', color='blue')
     plt.title('demand for 4 days')
     plt.xlabel('Hour of the year', fontsize=15)
