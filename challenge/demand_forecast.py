@@ -33,10 +33,16 @@ import utils
 # is to the peak reduction score obtained from the actual demand.
 
 def print_peak_metric(actual, predicted):
-    actual_pattern = utils.discharge_pattern(6.0, actual)
-    actual_score = utils.peak_score(actual, actual_pattern)
-    predicted_pattern = utils.discharge_pattern(6.0, predicted)
-    predicted_score = utils.peak_score(actual, predicted_pattern)
+    days = pd.Series(actual.index.date).unique()
+    actual_score = 0
+    predicted_score = 0
+    for day in days:
+        actual_day = actual.loc[day.strftime('%Y-%m-%d')]
+        predicted_day = predicted.loc[day.strftime('%Y-%m-%d')]
+        actual_pattern = utils.discharge_pattern(6.0, actual_day)
+        actual_score += utils.peak_score(actual_day, actual_pattern)
+        predicted_pattern = utils.discharge_pattern(6.0, predicted_day)
+        predicted_score += utils.peak_score(actual_day, predicted_pattern)
     print('Peak Reduction Score {}'.format( (actual_score - predicted_score) / actual_score) )
     plot=False
     if plot:
