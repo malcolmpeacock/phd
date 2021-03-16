@@ -23,8 +23,9 @@ import torch.nn.functional as F
 import sklearn
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVR
-from scipy.signal import gaussian
-from scipy.ndimage import filters
+from sklearn.multioutput import MultiOutputRegressor
+#from scipy.signal import gaussian
+#from scipy.ndimage import filters
 
 # custom code
 import utils
@@ -260,9 +261,33 @@ def period_svr(input_df, output, input_f):
     y_pred = regressor.predict(x_pred)
     y_pred = sc_y.inverse_transform(y_pred) 
 
-    return y_pred[0]
+    return y_pred
 
-def reg_inputs(df_nw1, df_nwn):
+# multi output SVR
+
+def multi_svr(input_df, output, input_f):
+
+    x = input_df.values
+    y = output.values.reshape(len(output), len(output.columns))
+    # normalise
+    sc_x = StandardScaler()
+    sc_y = StandardScaler()
+    x = sc_x.fit_transform(x)
+    y = sc_y.fit_transform(y)
+
+    svr = SVR(kernel = 'rbf')
+    regressor = MultiOutputRegressor(svr)
+    regressor.fit(x, y)
+
+    # Step 5: Predict
+    x_f = input_f
+    x_pred = sc_x.transform(x_f)
+    y_pred = regressor.predict(x_pred)
+    y_pred = sc_y.inverse_transform(y_pred) 
+
+    return y_pred
+
+def reg_inputs(df_nw1, df_nwn, alg):
     # dropping the first week
     # temperatures for a range of dsks
     dsk_data={}
@@ -283,7 +308,8 @@ def reg_inputs(df_nw1, df_nwn):
     input_df = pd.DataFrame(dsk_data)
     # other columns
     dsk_df = df_nw1[ df_nw1['dsk'] == 32]
-    base_columns = ['season', 'week', 'month']
+#   base_columns = ['season', 'week', 'month']
+    base_columns = ['season', 'week', 'month', 'dailytemp', 'tempyd', 'sh']
     for col in base_columns:
         input_df[col] = dsk_df[col].values
     print(input_df)
@@ -396,7 +422,7 @@ def forecast_nreg(df, forecast, day, seed, num_epochs, alg):
     # df_nw1 is where we get last weeks data from so we 
     # drop the last week from it so its the same length as df_nw1
     df_nwn = dfd.drop(dfd.tail(48*7).index)
-    input_df = reg_inputs(df_nw1, df_nwn)
+    input_df = reg_inputs(df_nw1, df_nwn, alg)
 
     # outputs - demand for the k periods of interest
     k_demand={}
@@ -405,66 +431,76 @@ def forecast_nreg(df, forecast, day, seed, num_epochs, alg):
         k_demand['demand{}'.format(k)] = k_df['demand'].values
     output_df = pd.DataFrame(k_demand)
 
-    # store maximum values
-    input_max = utils.df_normalise(input_df)
-    output_max = utils.df_normalise(output_df)
-    # santity check
-    utils.sanity_check(input_df)
-    utils.sanity_check(output_df)
-        
-    inputs = torch.tensor(input_df.values.astype(np.float32))
-    targets = torch.tensor(output_df.values.astype(np.float32))
-    torch.manual_seed(seed)    # reproducible
-    train_ds = TensorDataset(inputs, targets)
-
-    batch_size = 48
-    train_dl = DataLoader(train_ds, batch_size, shuffle=True)
-    next(iter(train_dl))
-
-    num_inputs = len(input_df.columns)
-    num_outputs = len(output_df.columns)
-    if alg == 'ann':
-        model = SimpleNet(num_inputs, num_outputs, 800)
-    else:
-        model = nn.Linear(num_inputs, num_outputs)
-
-#   opt = torch.optim.SGD(model.parameters(), lr=1e-5)
-    opt = torch.optim.SGD(model.parameters(), lr=1e-3)
-
-    # Define loss function
-#   loss_fn = F.mse_loss
-#   loss_fn = loss_max1
-    loss_fn = F.l1_loss
-
-    loss = loss_fn(model(inputs), targets)
-#   print(loss)
-    # Train the model
-    losses = fit(num_epochs, model, loss_fn, opt, train_dl)
-    print('Training loss: ', loss_fn(model(inputs), targets))
-    preds = model(inputs)
-#   print(preds)
-
+    # set up the values to forecast
     previous_day = utils.get_previous_week_day(dfd, day)
     print(previous_day)
-    # set up the values to forecast
-    input_f = reg_inputs(forecast_day, previous_day)
+    input_f = reg_inputs(forecast_day, previous_day, alg)
 #   print(input_f)
-    # normalise the inputs (using same max as for the model)
-    for column in input_f.columns:
-        if input_max[column]>0:
-            input_f[column] = input_f[column] / input_max[column]
-    f_inputs = torch.tensor(input_f.values.astype(np.float32))
+
+    if alg == 'svr':
+        prediction_values = multi_svr(input_df, output_df, input_f)
+        vals = prediction_values[0]
+        losses = []
+    else:
+
+        # store maximum values
+        input_max = utils.df_normalise(input_df)
+        output_max = utils.df_normalise(output_df)
+        # santity check
+        utils.sanity_check(input_df)
+        utils.sanity_check(output_df)
+        
+        inputs = torch.tensor(input_df.values.astype(np.float32))
+        targets = torch.tensor(output_df.values.astype(np.float32))
+        torch.manual_seed(seed)    # reproducible
+        train_ds = TensorDataset(inputs, targets)
+
+        batch_size = 48
+        train_dl = DataLoader(train_ds, batch_size, shuffle=True)
+        next(iter(train_dl))
+
+        num_inputs = len(input_df.columns)
+        num_outputs = len(output_df.columns)
+        if alg == 'ann':
+#           model = SimpleNet(num_inputs, num_outputs, 800)
+            model = SimpleNet(num_inputs, num_outputs, 1400)
+#           loss_fn = F.l1_loss
+            loss_fn = loss_maxw
+        else:
+            loss_fn = F.l1_loss
+            model = nn.Linear(num_inputs, num_outputs)
+
+#       opt = torch.optim.SGD(model.parameters(), lr=1e-5)
+        opt = torch.optim.SGD(model.parameters(), lr=1e-3)
+
+        # Define loss function
+#       loss_fn = F.mse_loss
+#       loss_fn = loss_max1
+
+        loss = loss_fn(model(inputs), targets)
+#   print(loss)
+        # Train the model
+        losses = fit(num_epochs, model, loss_fn, opt, train_dl)
+        print('Training loss: ', loss_fn(model(inputs), targets))
+        preds = model(inputs)
+#       print(preds)
+
+        # normalise the inputs (using same max as for the model)
+        for column in input_f.columns:
+            if input_max[column]>0:
+                input_f[column] = input_f[column] / input_max[column]
+        f_inputs = torch.tensor(input_f.values.astype(np.float32))
 #   print('f_inputs')
 #   print(f_inputs)
-    preds = model(f_inputs)
+        preds = model(f_inputs)
 #   print(preds)
-    vals = preds.detach().numpy()[0]
+        vals = preds.detach().numpy()[0]
 #   print(vals)
 #   print(type(vals))
-    count=0
-    for column in output_max:
-        vals[count] = vals[count] * output_max[column]
-        count+=1
+        count=0
+        for column in output_max:
+            vals[count] = vals[count] * output_max[column]
+            count+=1
 
     count=0
     prediction_values = np.zeros(48)
@@ -805,7 +841,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
     if alg == 'svr':
         input_f = dsk_f[input_columns].copy()
         prediction_values = period_svr(input_df, output, input_f)
-        return prediction_values
+        return prediction_values[0]
     else:
 
         # store maximum values
