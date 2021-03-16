@@ -25,6 +25,7 @@
 # dtype      0,6=day of week, 7=ph, 8=Christmas, 9=December 26th
 # month      month of the year, january=1,
 # dailytemp  mean daily temperature of the day
+# tempyd     mean daily temperature of the day before
 # lockdown   made up parameter estimating level of lock down.
 
 # contrib code
@@ -87,13 +88,22 @@ def sethols(df):
 
     # daily mean temperature
     daily_temp = df['tempm'].resample('D', axis=0).mean()
+    yesterday_temp = daily_temp.values[0]
 
     # loop round each day ...
     ld_level = 0.0
-    days = df.resample('D', axis=0).mean().index.date
+#   days = df.resample('D', axis=0).mean().index.date
+    days = pd.Series(df.index.date).unique()
     for day in days:
         day_str = day.strftime('%Y-%m-%d')
+
+        # daily temperature
         df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','dailytemp'] = daily_temp.loc[day_str+' 00:00:00']
+        # yesterdays daily temperature
+        df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','tempyd'] = yesterday_temp
+        yesterday_temp = daily_temp.loc[day_str+' 00:00:00']
+
+        # day of week and day of year
         df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','wd'] = day.weekday()
         doy = day.timetuple().tm_yday
         df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','doy'] = doy
@@ -170,6 +180,7 @@ parser = argparse.ArgumentParser(description='Clean weather data.')
 parser.add_argument('set', help='weather file eg set0')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--raw', action="store_true", dest="raw", help='Use the original uncorrected data', default=False)
+parser.add_argument('--fix', action="store_true", dest="fix", help='Add the missing days back by forecasting', default=False)
 
 args = parser.parse_args()
 dataset = args.set
@@ -183,6 +194,8 @@ demand_filename = '{}demand_fixed_{}.csv'.format(output_dir, dataset)
 if args.raw:
     demand_filename = '{}demand_train_{}.csv'.format(input_dir, dataset)
 demand = pd.read_csv(demand_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+
+
 print(demand)
 
 # pv data
@@ -200,8 +213,10 @@ weather = pd.read_csv(weather_filename, header=0, sep=',', parse_dates=[0], inde
 
 # add period, k
 weather['k'] = utils.index2ks(weather.index)
-# set holidays
 
+
+
+# set holidays
 sethols(weather)
 
 # clear sky irradiance
@@ -218,10 +233,17 @@ weather['zenith'] = get_zenith(site_location, times)
 # and DHI
 clearsky = site_location.get_clearsky(times)
 weather['cs_ghi'] = clearsky['ghi'].fillna(0)
+
 print(weather)
 
 # split off the historical part of the weather and the forecast
-history = weather.loc[pv.index]
+if args.fix:
+    start = pv.first_valid_index().date().strftime('%Y-%m-%d')
+    end = pv.last_valid_index().date().strftime('%Y-%m-%d')
+    history = weather[ start + ' 00:00:00' : end + ' 23:30:00']
+else:
+    history = weather.loc[pv.index]
+
 forecast_index = pd.date_range(start = history.last_valid_index() + pd.Timedelta(minutes=30) , end= history.last_valid_index() + pd.Timedelta(days=6, hours=23, minutes=30), freq='30min')
 forecast = weather.loc[forecast_index]
 # add in a last 30 minutes row, because the weather upsample ended at the hour
@@ -232,11 +254,55 @@ forecast.index.rename('datetime', inplace=True)
 
 print(forecast)
 
-# stick it all together
-df = pd.concat([pv, history], axis=1)
-df = df.join(demand, how='inner')
-print(df)
+# put missing days back
+if args.fix:
+    df = pd.concat([history, pv, demand], axis=1)
+    #   Get the days missing demand values.
+    missing = df[df['demand'].isna()].index
+    print('MISSING Demand')
+#   print(missing)
+    missing_days = pd.Series(missing.date).unique()
+    print(missing_days)
+    df_weather = df.drop(missing)
+#   print(df_weather)
+    days = pd.Series(df_weather.index.date).unique()
+    for day in missing_days:
+        print('Fixing demand for day {}'.format(day) )
+        # get 10 closest weather days
+        closest_days = utils.find_closest_days(day, days, df, df_weather, 'tempm', 10, True, False)
+        # get the mean demand pattern from those
+        new_day = utils.create_day(closest_days.index, df, 'demand')
+        df.loc[day.strftime('%Y-%m-%d'), 'demand'] = new_day['demand'].values
+        print('FIXED DAY')
+        print(df.loc[day.strftime('%Y-%m-%d')] )
+    #   Get the days missing pv values.
+    missing = df[df['pv_power'].isna()].index
+    print('MISSING PV')
+#   print(missing)
+    missing_days = pd.Series(missing.date).unique()
+    print(missing_days)
+    df_weather = df.drop(missing)
+    days = pd.Series(df_weather.index.date).unique()
+    for day in missing_days:
+        print('Fixing PV for day {}'.format(day) )
+        # get 10 closest weather days
+        closest_days = utils.find_closest_days(day, days, df, df_weather, 'sunm', 10, True, False)
+        # get the mean demand pattern from those
+        new_day = utils.create_day(closest_days.index, df, 'pv_power')
+        df.loc[day.strftime('%Y-%m-%d'), 'pv_power'] = new_day['pv_power'].values
+        new_day = utils.create_day(closest_days.index, df, 'pv_ghi')
+        df.loc[day.strftime('%Y-%m-%d'), 'pv_ghi'] = new_day['pv_ghi'].values
+        new_day = utils.create_day(closest_days.index, df, 'pv_temp')
+        df.loc[day.strftime('%Y-%m-%d'), 'pv_temp'] = new_day['pv_temp'].values
+        print('FIXED DAY')
+        print(df.loc[day.strftime('%Y-%m-%d')] )
 
+else:
+    # stick it all together
+    df = pd.concat([pv, history], axis=1)
+    df = df.join(demand, how='inner')
+
+print(df)
 
 # get irradiance on the tilted surface - guessing 30
 tilt = 30
@@ -283,7 +349,7 @@ print(df.columns)
 for col in df.columns:
     if df[col].isna().sum() >0:
         print("ERROR nans in {}".format(col))
-        print(df[col].isnull().values)
+        print(df[df[col].isnull()])
         quit()
 
 

@@ -176,6 +176,15 @@ def valid_find_day(day, given_day, season, df1, df2):
         return True
 
 # find n closest weather days to a given day
+#
+# given_day  - the day we want to find other days of matching weather for
+# days       - the days to look at
+# df1        - dataframe containing given day
+# df2        - dataframe containing given days
+# parm       - the weather paramter to match, eg temperature
+# n          - number of closest days to look for
+# dst        - weather to take daylight saving time into account
+# season     - to filter on season or not.
 def find_closest_days(given_day, days, df1, df2, parm, n, dst=False, season=False):
     closest_day_score = day_diff(given_day, days[0], df1, df2, parm, dst)
     closest_days=pd.Series([closest_day_score], index=[days[0]], name='sdays')

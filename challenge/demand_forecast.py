@@ -63,47 +63,19 @@ def loss_wl1(X,Y,W):
     lossn =  torch.mean(torch.abs(X - Y) * W)
     return lossn
 
-# custom loss function
+# custom loss function - weighted to passed in weight
 def loss_max1(X,Y):
 #   lossn = abs( X.max().item() - Y.max().item() )
 #   print(X.max().item(), Y.max().item(), lossn)
     lossn =  torch.abs(X.max() - Y.max())
     return lossn
 
-# class for custom regression
-
-class Demandregression(torch.nn.Module):
-    def __init__(self):
-
-        super().__init__()
-        self.linear1 = nn.Linear(3, 1)
-        self.bilinear1 = nn.Bilinear(1, 1, 1)
-        self.act1 = nn.LeakyReLU()
-
-    # x is a tensor of input data
-    # x[0] is mean temperature
-    # x[1] is holiday
-    def forward(self, x):
-        # t = temperature
-        t = x[:,0].view(-1,1)
-#       print(t)
-        # h = holiday flag
-        h = x[:,1].view(-1,1)
-#       print(h)
-        # tsq = t-squared
-        tsq = self.bilinear1(t, t)
-#       print(tsq)
-        xx = torch.cat([tsq, t, h], 1)
-#       print(xx)
-        y = self.linear1(xx)
-#       demand = self.act1(y).clamp(min=0.0)
-        demand = self.act1(y)
-        return demand
-
-    def string(self):
-        return 'y = {self.a.item()} + {self.b.item()} x + {self.c.item()} x^2 + {self.d.item()} x^3'
-
-# class for custom regression#2
+# custom loss function - weighted to peaks
+def loss_maxw(X,Y):
+    # weight in favour of the peaks
+    W = Y / Y.max()
+    lossn =  torch.mean(torch.abs(X - Y) * W)
+    return lossn
 
 # class to create ANN
 
@@ -111,13 +83,12 @@ class SimpleNet(nn.Module):
     # Initialize the layers
     def __init__(self,num_inputs,num_outputs,num_hidden):
         super().__init__()
+#       Layer 1
         self.linear1 = nn.Linear(num_inputs, num_hidden)
         # Activation function
-#       self.act1 = nn.LeakyReLU() 
         self.act1 = nn.Sigmoid() 
+#       Layer 2
         self.act2 = nn.LeakyReLU() 
-#       self.act1 = nn.ReLU() 
-#       Layer 1
         self.linear2 = nn.Linear(num_hidden, num_outputs)
 
     # Perform the computation
@@ -418,9 +389,12 @@ def forecast_nreg(df, forecast, day, seed, num_epochs, alg):
     # only use days of the same type
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     dfd = df[df['dtype'] == forecast_day['dtype'].iloc[0]]
-    # drop the first week so we can use data from last week
+    # df_nw1 is the data we use to forecast from so we
+    # drop the first week from it so we never try and forecast that so
+    # we always have data from the previous week.
     df_nw1 = dfd.drop(dfd.head(48*7).index)
-    # drop the last week so we can use data from last week
+    # df_nw1 is where we get last weeks data from so we 
+    # drop the last week from it so its the same length as df_nw1
     df_nwn = dfd.drop(dfd.tail(48*7).index)
     input_df = reg_inputs(df_nw1, df_nwn)
 
@@ -450,7 +424,7 @@ def forecast_nreg(df, forecast, day, seed, num_epochs, alg):
     num_inputs = len(input_df.columns)
     num_outputs = len(output_df.columns)
     if alg == 'ann':
-        model = SimpleNet(num_inputs, num_outputs, 40)
+        model = SimpleNet(num_inputs, num_outputs, 800)
     else:
         model = nn.Linear(num_inputs, num_outputs)
 
@@ -469,27 +443,6 @@ def forecast_nreg(df, forecast, day, seed, num_epochs, alg):
     print('Training loss: ', loss_fn(model(inputs), targets))
     preds = model(inputs)
 #   print(preds)
-    # prediction
-#   print(forecast_day)
-    # we need a previous day to get demand from, but in assessing the method
-    # there might not be one if it was removed due to bad data. So we then 
-    # look further back
-#   first_day = dfd.first_valid_index().date()
-#   previous_found = False
-#   day_last_week  = day
-#   while not previous_found:
-#       day_last_week  = day_last_week - pd.Timedelta(days=7)
-#       print('Looking to base demand of previous week on {}'.format(day_last_week))
-#       if day_last_week < first_day:
-#           print('Previous day for demand before start of data!!!!')
-#           quit()
-#       if day_last_week.strftime('%Y-%m-%d') in dfd.index:
-#           print('Found using {}'.format(day_last_week))
-#           previous_day = dfd.loc[day_last_week.strftime('%Y-%m-%d')].copy()
-#           if len(previous_day) > 0:
-#               previous_found = True
-#       else:
-#           print('Not Found')
 
     previous_day = utils.get_previous_week_day(dfd, day)
     print(previous_day)
@@ -512,9 +465,6 @@ def forecast_nreg(df, forecast, day, seed, num_epochs, alg):
     for column in output_max:
         vals[count] = vals[count] * output_max[column]
         count+=1
-    # smooth the output
-#   b = gaussian(39, 1)
-#   vals = filters.convolve1d(vals, b/b.sum())
 
     count=0
     prediction_values = np.zeros(48)
@@ -831,7 +781,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
 
     if method == 'regs':
 #       input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp']
-        input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown']
+        input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd']
         # days of the week 1-0 flags
         for wd in range(7):
             wd_key = 'wd{}'.format(wd)
