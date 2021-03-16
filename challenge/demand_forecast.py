@@ -753,7 +753,7 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
                     prediction_values = forecast_pub_hol(dsk_df, dsk_f, ploss)
                 else:
                     dsk_df = dfd[dfd['dsk'] == dsk]
-                    prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg)
+                    prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg, wl)
                 if math.isnan(prediction_values):
                     print('WARNING NaN replaced by interpolation at period {}'.format(row['k']))
                 if not math.isfinite(prediction_values):
@@ -776,16 +776,14 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
             prediction_values = forecast_pub_hol(dsk_df, dsk_f, ploss)
         else:
             dsk_df = dfd[dfd['dsk'] == dsk]
-            prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg)
+            prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg, wl)
         print('Predicted value {} for period {}'.format(prediction_values, period))
         quit()
 
-def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg):
+def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg, wl):
     # set up inputs
     if method == 'regd':
         # sfactor seems to make set 1 worse
-#       input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd']
-#       input_columns = ['tempm', 'sunm', 'season', 'zenith', 'month', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd']
         input_columns = ['tempm', 'sunm', 'season', 'zenith', 'month', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'temp1', 'temp2', 'temp3', 'temp4','temp5', 'temp6']
 #       removing these makes regd svr and ann worse
 #       if alg != 'ann':
@@ -820,8 +818,8 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
         nhidden = 20
 
     if method == 'regs':
-#       input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp']
-        input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd']
+#       input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd']
+        input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'dtype']
 #       input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'temp1', 'temp2', 'temp3', 'temp4','temp5', 'temp6']
         # days of the week 1-0 flags
         for wd in range(7):
@@ -883,7 +881,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
             loss_fn = F.l1_loss
 
         # day types treated differently and weighted loss
-        if method == 'regd':
+        if wl:
             loss_fn = loss_wl1
             weights = torch.tensor(dsk_df['weight'].values.astype(np.float32)).view(-1,1)
             opt = torch.optim.SGD(model.parameters(), lr=rate)
