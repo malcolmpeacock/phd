@@ -748,12 +748,16 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
     # set up inputs
     if method == 'regd':
         # sfactor seems to make set 1 worse
-#       input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp']
-        input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown']
+#       input_columns = ['tempm', 'sunm', 'season', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd']
+#       input_columns = ['tempm', 'sunm', 'season', 'zenith', 'month', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd']
+        input_columns = ['tempm', 'sunm', 'season', 'zenith', 'month', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'temp1', 'temp2', 'temp3', 'temp4','temp5', 'temp6']
+#       removing these makes regd svr and ann worse
+#       if alg != 'ann':
+        input_columns.extend(['tsqd', 'ts','tm'])
 #       With the weighted loss function batch size has to be 1
         batch_size = 1
         rate = 1e-3
-        nhidden = 100
+        nhidden = 120
 
     if method == 'regl':
 #       input_columns = ['tempm', 'zenith']
@@ -782,6 +786,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
     if method == 'regs':
 #       input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp']
         input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd']
+#       input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'temp1', 'temp2', 'temp3', 'temp4','temp5', 'temp6']
         # days of the week 1-0 flags
         for wd in range(7):
             wd_key = 'wd{}'.format(wd)
