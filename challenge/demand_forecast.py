@@ -737,6 +737,16 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
         dfd['weight'] = weight
         forecast_day['weight'] = 1.0
 
+    # set doy_diff based on closeness to day of year.
+    # closer days should have a smaller value. 
+    # difference between day of year and that of the forecast day
+    doy_diff = np.abs(dfd['doy'].values - forecast_day['doy'].iloc[0])
+    # to cope with days at the end of one year being close to those at the
+    # start of the next
+    doy_diff = np.minimum( doy_diff, np.abs(doy_diff - 365) )
+    dfd['doydiff'] = doy_diff
+    forecast_day['doydiff'] = 0.0
+
     if period == all:
         # for each k period, train a seperate model ...
         for index, row in forecast_day.iterrows():
@@ -819,8 +829,9 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
 
     if method == 'regs':
 #       input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd']
-        input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'dtype']
-#       input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'temp1', 'temp2', 'temp3', 'temp4','temp5', 'temp6']
+#       input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'dtype']
+        # no point having dtype in here, as we have flags for each day below
+        input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'doydiff']
         # days of the week 1-0 flags
         for wd in range(7):
             wd_key = 'wd{}'.format(wd)

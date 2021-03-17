@@ -403,6 +403,7 @@ def forecast_svr(df, forecast, day, seed, num_epochs):
 
     x = input_df.values
     y = output.values.reshape(len(output), 1)
+#   y = np.ravel(y)
 #   y = output.values.reshape(len(output), 1).ravel()
 #   y = output.values.ravel()
 
@@ -685,6 +686,8 @@ parser.add_argument('--seed', action="store", dest="seed", help='Random seed, de
 parser.add_argument('--epochs', action="store", dest="epochs", help='Number of epochs', type=int, default=100)
 parser.add_argument('--step', action="store", dest="step", help='If using days=all or step only do every step days', type=int, default=1)
 parser.add_argument('--sw', action="store_true", dest="sw", help='Set weights to values that seem to work', default=False)
+parser.add_argument('--nnear', action="store", dest="nnear", help='Number of days when using the --day near option', type=int, default=10)
+
 
 args = parser.parse_args()
 method = args.method
@@ -704,43 +707,8 @@ df = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=
 forecast_filename = '{}forecast_{}.csv'.format(output_dir, dataset)
 forecast = pd.read_csv(forecast_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
-int_day = False
-if args.day != 'set':
-    columns = forecast.columns.append(pd.Index(['pv_power']))
-    if args.day == 'all':
-        forecast = df[columns]
-    else:
-        days = pd.Series(df.index.date).unique()
-        if args.day[0:4] == 'near' :
-            forecast = df[columns].copy()
-            near_date = args.day[4:]
-            print('Day of the year near to {}'.format(near_date))
-            near_date_doy = date(2018, int(near_date[0:2]), int(near_date[2:4]) ).timetuple().tm_yday
-            near_range = 10
-            # in case we are close to the end of the year
-            if near_date_doy > 366-near_range:
-                near_date_doy = near_date_doy - 366
-            print(near_date_doy)
-            for day in days:
-                day_str = day.strftime('%Y-%m-%d')
-                doy = day.timetuple().tm_yday
-                if abs(near_date_doy - doy) > near_range:
-                    forecast.drop(forecast.loc[day_str].index, inplace=True)
-        else:
+forecast, int_day = utils.set_forecast_days(args.day, forecast, df, args.nnear, 'pv_power' )
 
-            if args.day == 'first':
-               day=0
-            else: 
-               if args.day == 'last':
-                   day=len(days)-1
-               else:
-                   day = int(args.day)
-                   int_day = True
-            day_text = days[day].strftime("%Y-%m-%d")
-            day_start = day_text + ' 00:00:00'
-            day_end = day_text + ' 23:30:00'
-            forecast = df.loc[day_start : day_end]
-            forecast = forecast[columns]
 
 #print(forecast)
 

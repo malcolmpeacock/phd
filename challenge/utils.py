@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import pytz
 from scipy.optimize import minimize
 from scipy.optimize import Bounds
+from datetime import date
 
 # get k for a single index value
 def index2k(index):
@@ -519,3 +520,86 @@ def discharge_pattern(battery, demand):
     x0 = np.array(discharge)
     res = minimize(discharge_peak, x0, args=demand, method='SLSQP', options={'disp': False, 'maxiter':200, 'ftol':1e-11}, constraints=cons, bounds=Bounds(-2.5,0.0) )
     return res.x
+
+def set_forecast_days(day_opt, forecast, df, nnear, parm):
+    int_day = False
+    if day_opt != 'set':
+        columns = forecast.columns.append(pd.Index([parm]))
+        if day_opt == 'all' or day_opt == 'sh' or day_opt == 'ph' or day_opt == 'hol':
+            forecast = df[columns].copy()
+            if day_opt == 'sh':
+                print('School holidays only')
+                forecast.drop( forecast[ forecast['sh']==0].index, inplace=True)
+            if day_opt == 'ph':
+                print('Public holidays only')
+                forecast.drop( forecast[ forecast['ph']==0].index, inplace=True)
+            if day_opt == 'hol':
+                print('Public holidays and weekends')
+                forecast.drop( forecast[ forecast['holiday']==0].index, inplace=True)
+        else:
+            days = pd.Series(df.index.date).unique()
+            print('Number of days in data {}'.format(len(days)) )
+            if day_opt[0:4] == 'week' :
+                start_date = day_opt[4:]
+                print('Week starting {}'.format(start_date))
+                start_date = date(int(start_date[0:4]), int(start_date[4:6]), int(start_date[6:8]) )
+                end_date = start_date + pd.Timedelta(days=6)
+                day_text = start_date.strftime("%Y-%m-%d")
+                day_start = day_text + ' 00:00:00'
+                day_end = end_date.strftime("%Y-%m-%d") + ' 23:30:00'
+                forecast = df.loc[day_start : day_end]
+                forecast = forecast[columns]
+            else:
+                if day_opt[0:5] == 'range' :
+                    start_date = day_opt[5:13]
+                    end_date = day_opt[13:21]
+                    print('Date range from {} to {}'.format(start_date, end_date))
+                    start_date = date(int(start_date[0:4]), int(start_date[4:6]), int(start_date[6:8]) )
+                    end_date = date(int(end_date[0:4]), int(end_date[4:6]), int(end_date[6:8]) )
+                    day_text = start_date.strftime("%Y-%m-%d")
+                    day_start = day_text + ' 00:00:00'
+                    day_end = end_date.strftime("%Y-%m-%d") + ' 23:30:00'
+                    forecast = df.loc[day_start : day_end]
+                    forecast = forecast[columns]
+                else:
+                    if day_opt[0:4] == 'date' :
+                        start_date = day_opt[4:]
+                        print('One date to forecast {}'.format(start_date))
+                        start_date = date(int(start_date[0:4]), int(start_date[4:6]), int(start_date[6:8]) )
+                        day_text = start_date.strftime("%Y-%m-%d")
+                        day_start = day_text + ' 00:00:00'
+                        day_end = day_text + ' 23:30:00'
+                        forecast = df.loc[day_start : day_end]
+                        forecast = forecast[columns]
+                    else:
+                        if day_opt[0:4] == 'near' :
+                            forecast = df[columns].copy()
+                            near_date = day_opt[4:]
+                            print('Day of the year near to {}'.format(near_date))
+                            near_date_doy = date(2018, int(near_date[0:2]), int(near_date[2:4]) ).timetuple().tm_yday
+                            near_range = nnear
+                            # in case we are close to the end of the year
+                            if near_date_doy > 366-near_range:
+                                near_date_doy = near_date_doy - 366
+                            print(near_date_doy)
+                            for day in days:
+                                day_str = day.strftime('%Y-%m-%d')
+                                doy = day.timetuple().tm_yday
+                                if abs(near_date_doy - doy) > near_range:
+                                    forecast.drop(forecast.loc[day_str].index, inplace=True)
+                        else:
+                            if day_opt == 'first':
+                               day=0
+                            else:
+                               if day_opt == 'last':
+                                   day=len(days)-1
+                               else:
+                                   day = int(day_opt)
+                                   int_day = True
+                            day_text = days[day].strftime("%Y-%m-%d")
+                            day_start = day_text + ' 00:00:00'
+                            day_end = day_text + ' 23:30:00'
+                            forecast = df.loc[day_start : day_end]
+                            forecast = forecast[columns]
+
+    return forecast, int_day
