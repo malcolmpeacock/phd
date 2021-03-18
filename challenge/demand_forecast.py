@@ -881,14 +881,6 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
             loss_fn = F.l1_loss
         else:
             model = nn.Linear(num_inputs,1)
-
-        if method == 'regl':
-        # model using regression
-#           loss_fn = F.mse_loss
-            loss_fn = F.l1_loss
-        if method == 'regm' or method == 'regs':
-        # model using regression
-#           loss_fn = F.mse_loss
             loss_fn = F.l1_loss
 
         # day types treated differently and weighted loss
@@ -1100,74 +1092,11 @@ print(df)
 forecast_filename = '{}forecast_{}.csv'.format(output_dir, dataset)
 forecast = pd.read_csv(forecast_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
+# add extra variables
 additional_values(forecast)
 
-
-if args.day != 'set':
-    columns = forecast.columns.append(pd.Index(['demand']))
-    if args.day == 'all' or args.day == 'sh' or args.day == 'ph' or args.day == 'hol':
-        forecast = df[columns].copy()
-        if args.day == 'sh':
-            print('School holidays only')
-            forecast.drop( forecast[ forecast['sh']==0].index, inplace=True)
-        if args.day == 'ph':
-            print('Public holidays only')
-            forecast.drop( forecast[ forecast['ph']==0].index, inplace=True)
-        if args.day == 'hol':
-            print('Public holidays and weekends')
-            forecast.drop( forecast[ forecast['holiday']==0].index, inplace=True)
-    else:
-        days = pd.Series(df.index.date).unique()
-        print('Number of days in data {}'.format(len(days)) )
-        if args.day[0:4] == 'week' :
-            start_date = args.day[4:]
-            print('Week starting {}'.format(start_date))
-            start_date = date(int(start_date[0:4]), int(start_date[4:6]), int(start_date[6:8]) )
-            end_date = start_date + pd.Timedelta(days=6)
-            day_text = start_date.strftime("%Y-%m-%d")
-            day_start = day_text + ' 00:00:00'
-            day_end = end_date.strftime("%Y-%m-%d") + ' 23:30:00'
-            forecast = df.loc[day_start : day_end]
-            forecast = forecast[columns]
-        else:
-            if args.day[0:4] == 'date' :
-                start_date = args.day[4:]
-                print('One date to forecast {}'.format(start_date))
-                start_date = date(int(start_date[0:4]), int(start_date[4:6]), int(start_date[6:8]) )
-                day_text = start_date.strftime("%Y-%m-%d")
-                day_start = day_text + ' 00:00:00'
-                day_end = day_text + ' 23:30:00'
-                forecast = df.loc[day_start : day_end]
-                forecast = forecast[columns]
-            else:
-                if args.day[0:4] == 'near' :
-                    forecast = df[columns].copy()
-                    near_date = args.day[4:]
-                    print('Day of the year near to {}'.format(near_date))
-                    near_date_doy = date(2018, int(near_date[0:2]), int(near_date[2:4]) ).timetuple().tm_yday
-                    near_range = args.nnear
-                    # in case we are close to the end of the year
-                    if near_date_doy > 366-near_range:
-                        near_date_doy = near_date_doy - 366
-                    print(near_date_doy)
-                    for day in days:
-                        day_str = day.strftime('%Y-%m-%d')
-                        doy = day.timetuple().tm_yday
-                        if abs(near_date_doy - doy) > near_range:
-                            forecast.drop(forecast.loc[day_str].index, inplace=True)
-                else:
-                    if args.day == 'first':
-                       day=0
-                    else: 
-                       if args.day == 'last':
-                           day=len(days)-1
-                       else:
-                           day = int(args.day)
-                    day_text = days[day].strftime("%Y-%m-%d")
-                    day_start = day_text + ' 00:00:00'
-                    day_end = day_text + ' 23:30:00'
-                    forecast = df.loc[day_start : day_end]
-                    forecast = forecast[columns]
+# process the day options
+forecast, int_day = utils.set_forecast_days(args.day, forecast, df, args.nnear, 'demand' )
 
 #print(forecast)
 
