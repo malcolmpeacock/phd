@@ -100,6 +100,24 @@ class SimpleNet(nn.Module):
         x = self.act2(x)
         return x
 
+# class for LSTM which is a RNN algorithm
+class LSTM(nn.Module):
+    def __init__(self, input_size=1, output_size=1, hidden_layer_size=100):
+        super().__init__()
+        self.hidden_layer_size = hidden_layer_size
+
+        self.lstm = nn.LSTM(input_size, hidden_layer_size)
+
+        self.linear = nn.Linear(hidden_layer_size, output_size)
+
+        self.hidden_cell = (torch.zeros(1,1,self.hidden_layer_size),
+                            torch.zeros(1,1,self.hidden_layer_size))
+
+    def forward(self, input_seq):
+        lstm_out, self.hidden_cell = self.lstm(input_seq.view(len(input_seq) ,1, -1), self.hidden_cell)
+        predictions = self.linear(lstm_out.view(len(input_seq), -1))
+        return predictions[-1]
+
 # Define a utility function to train the model
 def fit(num_epochs, model, loss_fn, opt, train_dl):
     loss_history=[]
@@ -113,6 +131,27 @@ def fit(num_epochs, model, loss_fn, opt, train_dl):
             loss.backward()
             opt.step()
             opt.zero_grad()
+        # report at each epoc
+        sys.stdout.write('\repoch {:03d}, loss {:.7f} '.format(epoch, loss.item()))
+        loss_history.append(loss.item() )
+    sys.stdout.flush()
+    return loss_history
+
+# Define a utility function to train the model
+def fitlstm(num_epochs, model, loss_fn, opt, train_dl):
+    loss_history=[]
+    for epoch in range(num_epochs):
+        # each batch in the training ds
+        for xb,yb in train_dl:
+            opt.zero_grad()
+            model.hidden_cell = (torch.zeros(1, 1, model.hidden_layer_size),
+                        torch.zeros(1, 1, model.hidden_layer_size))
+            # Generate predictions
+            pred = model(xb)
+            loss = loss_fn(pred, yb)
+            # Perform gradient descent
+            loss.backward()
+            opt.step()
         # report at each epoc
         sys.stdout.write('\repoch {:03d}, loss {:.7f} '.format(epoch, loss.item()))
         loss_history.append(loss.item() )
@@ -756,6 +795,7 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
             else:
                 print('Period k {} dsk {}'.format(row['k'],dsk) )
                 dsk_f = forecast_day[forecast_day['dsk'] == dsk]
+                dsk_f1 = forecast_day[forecast_day['dsk'] == dsk -1]
                 # if pub hol or christmas then we don't have enough so interp
                 if fd_type >= 7:
                     dfd = df[df['dtype'] == fd_type]
@@ -763,7 +803,8 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
                     prediction_values = forecast_pub_hol(dsk_df, dsk_f, ploss)
                 else:
                     dsk_df = dfd[dfd['dsk'] == dsk]
-                    prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg, wl)
+                    dsk_df1 = dfd[dfd['dsk'] == dsk - 1]
+                    prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg, wl, dsk_df1, dsk_f1)
                 if math.isnan(prediction_values):
                     print('WARNING NaN replaced by interpolation at period {}'.format(row['k']))
                 if not math.isfinite(prediction_values):
@@ -780,17 +821,20 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
     else:
         dsk = int(period)
         dsk_f = forecast_day[forecast_day['dsk'] == dsk]
+        dsk_f1 = forecast_day[forecast_day['dsk'] == dsk -1]
         if fd_type >= 7:
             dfd = df[df['dtype'] == fd_type]
             dsk_df = dfd[dfd['dsk'] == dsk]
             prediction_values = forecast_pub_hol(dsk_df, dsk_f, ploss)
         else:
             dsk_df = dfd[dfd['dsk'] == dsk]
-            prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg, wl)
+            dsk_df1 = dfd[dfd['dsk'] == dsk - 1]
+            prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg, wl, dsk_df1, dsk_f1)
         print('Predicted value {} for period {}'.format(prediction_values, period))
         quit()
 
-def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg, wl):
+def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg, wl, dsk_df1, dsk_f1):
+    lagged = []
     # set up inputs
     if method == 'regd':
         # sfactor seems to make set 1 worse
@@ -828,10 +872,13 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
         nhidden = 20
 
     if method == 'regs':
-#       input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd']
-#       input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'dtype']
         # no point having dtype in here, as we have flags for each day below
         input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'doydiff']
+        # tempdb is the day before yesterday and has no effect.
+#       input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'doydiff', 'tempdb']
+        # variables from the previous period - doesn't seem to make any
+        # difference
+        lagged = ['tempm']
         # days of the week 1-0 flags
         for wd in range(7):
             wd_key = 'wd{}'.format(wd)
@@ -842,6 +889,8 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
         nhidden = 50
 
     input_df = dsk_df[input_columns].copy()
+    for lcol in lagged:
+        input_df['l'+lcol] = dsk_df1[lcol].values
 
     # set up output
     output_column = 'demand'
@@ -849,6 +898,8 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
 
     if alg == 'svr':
         input_f = dsk_f[input_columns].copy()
+        for lcol in lagged:
+            input_f['l'+lcol] = dsk_f1[lcol].values
         prediction_values = period_svr(input_df, output, input_f)
         return prediction_values[0]
     else:
@@ -880,8 +931,12 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
             model = SimpleNet(num_inputs,1,nhidden)
             loss_fn = F.l1_loss
         else:
-            model = nn.Linear(num_inputs,1)
-            loss_fn = F.l1_loss
+            if alg == 'lstm':
+                model = LSTM(num_inputs,1,nhidden)
+                loss_fn = F.l1_loss
+            else:
+                model = nn.Linear(num_inputs,1)
+                loss_fn = F.l1_loss
 
         # day types treated differently and weighted loss
         if wl:
@@ -893,12 +948,17 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
             losses = wfit(num_epochs, model, loss_fn, opt, train_dl, weights)
         else:
             opt = torch.optim.SGD(model.parameters(), lr=rate)
-            loss = loss_fn(model(inputs), targets)
-            losses = fit(num_epochs, model, loss_fn, opt, train_dl)
+            if alg == 'lstm':
+                losses = fitlstm(num_epochs, model, loss_fn, opt, train_dl)
+            else:
+                loss = loss_fn(model(inputs), targets)
+                losses = fit(num_epochs, model, loss_fn, opt, train_dl)
 
         preds = model(inputs)
         # prediction
         input_f = dsk_f[input_columns].copy()
+        for lcol in lagged:
+            input_f['l'+lcol] = dsk_f1[lcol].values
         # normalise the inputs (using same max as for the model)
         for column in input_f.columns:
             if input_max[column]>0:
@@ -915,7 +975,10 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
             plt.ylabel('Loss', fontsize=15)
             plt.show()
 
-        return prediction_values[0][0]
+        if alg == 'lstm':
+            return prediction_values[0]
+        else:
+            return prediction_values[0][0]
 
 # ann - artificial neural network.
 

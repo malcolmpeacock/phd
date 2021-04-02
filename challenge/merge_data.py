@@ -70,6 +70,15 @@ def sethols(df):
                    '2020-06-01' : 3.0,
                    '2020-06-13' : 2.0,
                    '2020-06-25' : 1.0 }
+    ld_changes_change = { '2020-03-16' : 1.0, 
+                   '2020-03-24' : 3.0,
+                   '2020-04-14' : 4.0,
+                   '2020-04-21' : 5.0,
+                   '2020-05-10' : 4.0,
+                   '2020-05-13' : 3.5,
+                   '2020-06-01' : 3.0,
+                   '2020-06-13' : 2.0,
+                   '2020-06-25' : 1.0 }
 
     # day of the week
     df['wd'] = 0
@@ -88,17 +97,23 @@ def sethols(df):
 
     # daily mean temperature
     daily_temp = df['tempm'].resample('D', axis=0).mean()
-    yesterday_temp = daily_temp.values[0]
 
+    # it doesn't matter what these are initialsed to as the weather starts
+    # years before the demand and pv
+    yesterday_temp = 0.0
+    daybefore_temp = 0.0
+
+    days = pd.Series(df.index.date).unique()
     # loop round each day ...
     ld_level = 0.0
-#   days = df.resample('D', axis=0).mean().index.date
-    days = pd.Series(df.index.date).unique()
     for day in days:
         day_str = day.strftime('%Y-%m-%d')
 
         # daily temperature
         df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','dailytemp'] = daily_temp.loc[day_str+' 00:00:00']
+        # day before yesterdays daily temperature
+        df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','tempdb'] = daybefore_temp
+        daybefore_temp = yesterday_temp
         # yesterdays daily temperature
         df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','tempyd'] = yesterday_temp
         yesterday_temp = daily_temp.loc[day_str+' 00:00:00']

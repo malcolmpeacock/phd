@@ -95,5 +95,5 @@ if args.plot:
     plt.xlabel('Hour of the year', fontsize=15)
     plt.ylabel('MWh', fontsize=15)
 #   plt.legend(loc='upper right', fontsize=15, bbox_to_anchor=(0.9,1.5) )
-    plt.legend(loc='lower right', fontsize=13 )
+    plt.legend(loc='upper left', fontsize=13 )
     plt.show()
