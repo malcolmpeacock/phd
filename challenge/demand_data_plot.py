@@ -15,13 +15,18 @@ import pvlib
 import utils
 import glob
 
-def plot_days(df, days, title):
+def plot_days(df, days, title, dot=False):
     k = range(1,49)
+    count=0
     for day in days:
+        count+=1
         dft = df[day + ' 00:00:00' : day + ' 23:30:00']
         meantemp = dft['tempm'].mean()
         demand = dft['demand'].values
-        plt.plot(k, demand, label='{}, {:.2f}'.format(day, meantemp) )
+        if dot and count>len(days)/2:
+            plt.plot(k, demand, label='{}, {:.2f}'.format(day, meantemp), linestyle = 'dotted' )
+        else:
+            plt.plot(k, demand, label='{}, {:.2f}'.format(day, meantemp) )
 
     plt.title(title)
     plt.xlabel('Hour of the day', fontsize=15)
@@ -52,24 +57,26 @@ df = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=
 k = range(1,49)
 # plot 
 if args.plot:
+    lockdown1 = ['2020-03-16', '2020-03-17', '2020-03-18', '2020-03-19', '2020-03-20', '2020-03-21', '2020-03-22', '2020-03-23', '2020-03-24', '2020-03-25', '2020-03-26', '2020-03-27']
+    plot_days(df, lockdown1, 'Start of the first lockdown', True)
+    lockdown2 = ['2019-06-21', '2019-06-22', '2019-06-23', '2019-06-24', '2019-06-25', '2019-06-26', '2019-06-27', '2020-06-26', '2020-06-27', '2020-06-28', '2020-06-29', '2020-06-30', '2020-07-01', '2020-07-02']
+    plot_days(df, lockdown2, 'Comparison of lockdown end with year before', True)
+
     demand_bins = pd.cut(df['demand'], bins=10).value_counts()
-    print(demand_bins)
     demand_bins.plot()
     plt.title('Demand distribution')
     plt.show()
 
-    tuesdays = ['2017-11-07', '2017-11-14', '2017-11-21', '2017-11-28', '2017-12-05', '2017-12-12', '2017-12-19', '2017-12-26']
-    for day in tuesdays:
-        dft = df[day + ' 00:00:00' : day + ' 23:30:00']
-        meantemp = dft['tempm'].mean()
-        demand = dft['demand'].values
-        plt.plot(k, demand, label='{}, {:.2f}'.format(day, meantemp) )
+    bank_hols = pd.Series(df[df['dtype'] == 7].index.date).unique()
+    print(bank_hols)
+    days=[]
+    for day in bank_hols:
+        days.append(day.strftime('%Y-%m-%d') )
+    print(days)
+    plot_days(df, days, 'Bank holidays')
 
-    plt.title('Comparison of Tuesday demands')
-    plt.xlabel('Hour of the day', fontsize=15)
-    plt.ylabel('Demand (MWh)', fontsize=15)
-    plt.legend(loc='upper left', fontsize=15)
-    plt.show()
+    tuesdays = ['2017-11-07', '2017-11-14', '2017-11-21', '2017-11-28', '2017-12-05', '2017-12-12', '2017-12-19', '2017-12-26']
+    plot_days(df, tuesdays, 'Comparison of Tuesday demands')
 
     sundays = ['2017-11-05', '2017-11-12', '2017-11-19', '2017-11-26', '2017-12-03', '2017-12-10', '2017-12-17', '2017-12-24', '2017-12-25', '2017-12-26']
     plot_days(df, sundays, 'Comparison of Sunday demands')
