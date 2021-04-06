@@ -15,6 +15,31 @@ import pvlib
 # custom code
 import utils
 
+# globals
+counters = { 'dropped':0, 'fixed':0 }
+
+# function to drop or fix days
+
+def fix_or_drop(df, parms, bad, counters, description):
+    bad_days = pd.Series(bad.index.date).unique()
+    for day in bad_days:
+        day_str = day.strftime('%Y-%m-%d')
+        bad_day = bad.loc[day_str]
+        nbad = len(bad_day)
+        print('{} : Day {} has {} bad values'.format(description, day_str, nbad) )
+        if nbad>2:
+            print('{} : Dropping Day {}'.format(description, day_str) )
+            df.drop(df.loc[day_str].index, inplace=True)
+            counters['dropped']+=1
+        else:
+            print('{} : Fixing Day {} by interpolation'.format(description, day_str) )
+            for parm in parms:
+                day_to_fix = df.loc[day_str,parm].copy()
+                day_to_fix.loc[bad_day.index] = float("NaN")
+                day_to_fix = day_to_fix.interpolate()
+                df.loc[day_str, parm] = day_to_fix.values
+            counters['fixed']+=1
+
 # main program
 
 # process command line
@@ -37,80 +62,120 @@ pv = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, s
 
 print(pv)
 
+# thresholds
+large_pv = pv['pv_power_mw'].max() * 0.9
+small_pv = pv['pv_power_mw'].max() * 0.1
+large_irrad = pv['irradiance_Wm-2'].max() * 0.9
+small_irrad = pv['irradiance_Wm-2'].max() * 0.1
+large_temp = pv['panel_temp_C'].max() * 0.9
+small_temp = pv['panel_temp_C'].max() * 0.1
+
+print('Mean values pv {:.2f} irradiance {:.2f} temp {:.2f}'.format(pv['pv_power_mw'].mean(), pv['irradiance_Wm-2'].mean(), pv['panel_temp_C'].mean() ) )
+print('Thresholds large_pv {:.2f} small_pv {:.2f} large_irrad {:.2f} small_irrad {:.2f} large_temp {:.2f} small_temp {:.2f}'.format(large_pv, small_pv, large_irrad, small_irrad, large_temp, small_temp) )
+
+parms = pv.columns
+pv['k'] = utils.index2ks(pv.index)
+
+# fix large PV but low temp or irradiance
+pv_large = pv[(pv['pv_power_mw']>large_pv) & (pv['k']>10) & (pv['k']<32)]
+suspect = pv_large[(pv_large['irradiance_Wm-2']<small_irrad) & (pv_large['panel_temp_C']<small_temp)]
+print('PV large but irradiance and temp small {}'.format(len(suspect)) )
+print(suspect)
+fix_or_drop(pv, parms, suspect, counters, 'BIG PV')
+
+# fix small PV but low temp or irradiance
+pv_small = pv[(pv['pv_power_mw']>small_pv) & (pv['k']>10) & (pv['k']<32)]
+suspect = pv_small[(pv_small['irradiance_Wm-2']>large_irrad) & (pv_small['panel_temp_C']>large_temp)]
+print('PV small but irradiance and temp large {}'.format(len(suspect)) )
+print(suspect)
+fix_or_drop(pv, parms, suspect, counters, 'SMALL PV')
+
+# look for zero power during the middle of the day
+zero_power = pv[(pv['pv_power_mw'] == 0.0) & (pv['k']>20) & (pv['k']<32) &(pv['irradiance_Wm-2']<small_irrad)]
+print('Zero power in the middle of the day {}'.format(len(zero_power)) )
+fix_or_drop(pv, parms, zero_power, counters, 'MID ZERO')
+
+# look for missing values
+no_pv = pv.loc[pv['pv_power_mw'].isna()]
+print('Nans {}'.format(len(no_pv)) )
+fix_or_drop(pv, parms, no_pv, counters, 'NaN')
+
+print('Days fixed {} Days dropped {}'.format(counters['fixed'], counters['dropped']) )
+
+# fix remaining errors by fill or interpolation
+pv = pv.interpolate()
+pv = pv.fillna(method='bfill')
+
 # fix errors at particular points
 # Note: replacing whole days doesn't make sense as the weather will be 
 # different - so better to remove, so the join with weather df will have
 # missing index values - but we can cope with this.
-if dataset[0:3] == 'set':
-    print('Fixing certain dodgy hours')
+#if dataset[0:3] == 'set':
+#   print('Fixing certain dodgy hours')
     # 2017-11-29 07:30:00 - no panel temperature value
-    pv['panel_temp_C']['2017-11-29 07:30:00'] = pv['panel_temp_C']['2017-11-29 08:00:00']
+#   pv['panel_temp_C']['2017-11-29 07:30:00'] = pv['panel_temp_C']['2017-11-29 08:00:00']
     # 2018-02-28 11:00:00 - no power but irradiance.
     #   - irradiance is pretty low here as well
-    pv['panel_temp_C']['2018-02-28 11:00:00'] = pv['panel_temp_C']['2018-02-28 10:30:00']
+#   pv['panel_temp_C']['2018-02-28 11:00:00'] = pv['panel_temp_C']['2018-02-28 10:30:00']
     # no power irradiance or temp
-    pv['pv_power_mw']['2019-07-19 14:00:00'] = pv['pv_power_mw']['2019-07-19 13:30:00']
-    pv['pv_power_mw']['2019-07-19 14:30:00'] = pv['pv_power_mw']['2019-07-19 13:30:00']
-    pv['pv_power_mw']['2019-07-19 15:00:00'] = pv['pv_power_mw']['2019-07-19 16:00:00']
-    pv['pv_power_mw']['2019-07-19 15:30:00'] = pv['pv_power_mw']['2019-07-19 16:00:00']
+#   pv['pv_power_mw']['2019-07-19 14:00:00'] = pv['pv_power_mw']['2019-07-19 13:30:00']
+#   pv['pv_power_mw']['2019-07-19 14:30:00'] = pv['pv_power_mw']['2019-07-19 13:30:00']
+#   pv['pv_power_mw']['2019-07-19 15:00:00'] = pv['pv_power_mw']['2019-07-19 16:00:00']
+#   pv['pv_power_mw']['2019-07-19 15:30:00'] = pv['pv_power_mw']['2019-07-19 16:00:00']
 
-    pv['irradiance_Wm-2']['2019-07-19 14:00:00'] = pv['irradiance_Wm-2']['2019-07-19 13:30:00']
-    pv['irradiance_Wm-2']['2019-07-19 14:30:00'] = pv['irradiance_Wm-2']['2019-07-19 13:30:00']
-    pv['irradiance_Wm-2']['2019-07-19 15:00:00'] = pv['irradiance_Wm-2']['2019-07-19 16:00:00']
-    pv['irradiance_Wm-2']['2019-07-19 15:30:00'] = pv['irradiance_Wm-2']['2019-07-19 16:00:00']
+#   pv['irradiance_Wm-2']['2019-07-19 14:00:00'] = pv['irradiance_Wm-2']['2019-07-19 13:30:00']
+#   pv['irradiance_Wm-2']['2019-07-19 14:30:00'] = pv['irradiance_Wm-2']['2019-07-19 13:30:00']
+#   pv['irradiance_Wm-2']['2019-07-19 15:00:00'] = pv['irradiance_Wm-2']['2019-07-19 16:00:00']
+#   pv['irradiance_Wm-2']['2019-07-19 15:30:00'] = pv['irradiance_Wm-2']['2019-07-19 16:00:00']
 
-    pv['panel_temp_C']['2019-07-19 14:00:00'] = pv['panel_temp_C']['2019-07-19 13:30:00']
-    pv['panel_temp_C']['2019-07-19 14:30:00'] = pv['panel_temp_C']['2019-07-19 13:30:00']
-    pv['panel_temp_C']['2019-07-19 15:00:00'] = pv['panel_temp_C']['2019-07-19 16:00:00']
-    pv['panel_temp_C']['2019-07-19 15:30:00'] = pv['panel_temp_C']['2019-07-19 16:00:00']
+#   pv['panel_temp_C']['2019-07-19 14:00:00'] = pv['panel_temp_C']['2019-07-19 13:30:00']
+#   pv['panel_temp_C']['2019-07-19 14:30:00'] = pv['panel_temp_C']['2019-07-19 13:30:00']
+#   pv['panel_temp_C']['2019-07-19 15:00:00'] = pv['panel_temp_C']['2019-07-19 16:00:00']
+#   pv['panel_temp_C']['2019-07-19 15:30:00'] = pv['panel_temp_C']['2019-07-19 16:00:00']
     # replace a suspect days with different ones.
-#   utils.replace_day(pv, '2018-03-04', '2018-03-01')
-    print('Dropping 2018-03-04 lot of missing values')
-    pv.drop(pv.loc['2018-03-04'].index, inplace=True)
-    print('Dropping 2019-01-23, 24, 25 missing irradiance values')
-    pv.drop(pv.loc['2019-01-23'].index, inplace=True)
-    pv.drop(pv.loc['2019-01-24'].index, inplace=True)
-    pv.drop(pv.loc['2019-01-25'].index, inplace=True)
-    print('Dropping 2019-07-29, 2019-10-08, 2019-11-02 zero power values')
-    pv.drop(pv.loc['2018-12-13'].index, inplace=True)
-    pv.drop(pv.loc['2019-07-29'].index, inplace=True)
-    pv.drop(pv.loc['2019-10-08'].index, inplace=True)
-    pv.drop(pv.loc['2019-11-02'].index, inplace=True)
+#   print('Dropping 2018-03-04 lot of missing values')
+#   pv.drop(pv.loc['2018-03-04'].index, inplace=True)
+#   print('Dropping 2019-01-23, 24, 25 missing irradiance values')
+#   pv.drop(pv.loc['2019-01-23'].index, inplace=True)
+#   pv.drop(pv.loc['2019-01-24'].index, inplace=True)
+#   pv.drop(pv.loc['2019-01-25'].index, inplace=True)
+#   print('Dropping 2019-07-29, 2019-10-08, 2019-11-02 zero power values')
+#   pv.drop(pv.loc['2018-12-13'].index, inplace=True)
+#   pv.drop(pv.loc['2019-07-29'].index, inplace=True)
+#   pv.drop(pv.loc['2019-10-08'].index, inplace=True)
+#   pv.drop(pv.loc['2019-11-02'].index, inplace=True)
     # missing values
-    pv.drop(pv.loc['2020-05-08'].index, inplace=True)
-    # 2017-12-26 14:30:00 - Zero power value
-    pv['pv_power_mw']['2017-12-26 14:30:00'] = pv['pv_power_mw']['2017-12-26 14:00:00']
+#   pv.drop(pv.loc['2020-05-08'].index, inplace=True)
+    # 2017-12-26 14:30:00 - Zero power value  MZ
+#   pv['pv_power_mw']['2017-12-26 14:30:00'] = pv['pv_power_mw']['2017-12-26 14:00:00']
     # replace a suspect days with different ones.
-#   utils.replace_day(pv, '2018-06-15', '2018-06-14')
-    # drop day completely
-    print('DROPPING')
-#   2018-03-02  - no power for several hours but irradiance
-    pv.drop(pv.loc['2018-03-02'].index, inplace=True)
-    #   2018-03-03  - no power for several hours but irradiance
-    pv.drop(pv.loc['2018-03-03'].index, inplace=True)
-    #   2018-03-05  - no power for several hours but irradiance
-    pv.drop(pv.loc['2018-03-05'].index, inplace=True)
-    #   2018-03-08  - no power for several hours but irradiance
-    pv.drop(pv.loc['2018-05-08'].index, inplace=True)
-    #   2018-06-15  - no power for several hours but irradiance
-    pv.drop(pv.loc['2018-06-15'].index, inplace=True)
-    #   2018-08-12  - no power for several hours but irradiance
-    pv.drop(pv.loc['2018-08-12'].index, inplace=True)
+    # drop day completel
+    # # 
+#   print('DROPPING')
+#   2018-03-02  - no power for several hours but irradiance MZ
+#   pv.drop(pv.loc['2018-03-02'].index, inplace=True)
+    #   2018-03-03  - no power for several hours but irradiance MZ
+#   pv.drop(pv.loc['2018-03-03'].index, inplace=True)
+    #   2018-03-05  - no power for several hours but irradiance MZ
+#   pv.drop(pv.loc['2018-03-05'].index, inplace=True)
+    #   2018-03-08  - no power for several hours but irradiance MZ
+#   pv.drop(pv.loc['2018-05-08'].index, inplace=True)
+    #   2018-06-15  - no power for several hours but irradiance MZ
+#   pv.drop(pv.loc['2018-06-15'].index, inplace=True)
+    #   2018-08-12  - no power for several hours but irradiance MZ
+#   pv.drop(pv.loc['2018-08-12'].index, inplace=True)
+#     2018-11-11 NEW
+#     2018-11-12 NEW
+#     2018-11-13 NEW
 #   2019-02-11  - no power for several hours but irradiance
-    pv.drop(pv.loc['2019-02-11'].index, inplace=True)
+#   pv.drop(pv.loc['2019-02-11'].index, inplace=True)
 #   2020-05-06  - no power for several hours but irradiance
-    pv.drop(pv.loc['2020-05-06'].index, inplace=True)
+#   pv.drop(pv.loc['2020-05-06'].index, inplace=True)
     #   2020-05-08  - no power for several hours but irradiance
-    pv.drop(pv.loc['2020-05-08'].index, inplace=True)
+#   pv.drop(pv.loc['2020-05-08'].index, inplace=True)
 
 # ERROR CHECKS:
 
-large_pv = pv['pv_power_mw'].max() * 0.8
-small_pv = pv['pv_power_mw'].max() * 0.2
-large_irrad = pv['irradiance_Wm-2'].max() * 0.8
-small_irrad = pv['irradiance_Wm-2'].max() * 0.2
-large_temp = pv['panel_temp_C'].max() * 0.8
-small_temp = pv['panel_temp_C'].max() * 0.2
 
 # pv large but irradiance small or temp small
 pv_large = pv[pv['pv_power_mw']>large_pv]
@@ -136,7 +201,7 @@ missing_panel_temp = pv[pv['panel_temp_C'].isnull().values]
 missing_panel_temp_with0 = missing_panel_temp['pv_power_mw'] == 0.0
 #print(missing_panel_temp_with0)
 index_to_update = missing_panel_temp[missing_panel_temp_with0].index
-pv['panel_temp_C'][index_to_update] = 0.0
+pv.loc[index_to_update, 'panel_temp_C'] = 0.0
 
 
 # look for zero power during the middle of the day
@@ -206,6 +271,7 @@ if args.plot:
     plt.legend(loc='upper right', fontsize=15)
     plt.show()
 
+pv = pv[parms]
 pv.columns = ['pv_ghi', 'pv_power', 'pv_temp']
 print(pv.columns)
 

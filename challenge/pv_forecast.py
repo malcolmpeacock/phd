@@ -373,8 +373,8 @@ def forecast_reg(df, forecast, day, method, seed, num_epochs, set_weights):
 def ann_inputs(df_nw1, df_nwn):
     input_columns = ['month', 'season', 'zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'tempw', 'cs_ghi']
     input_df = df_nw1[input_columns].copy()
-    input_df['pv_power'] = df_nwn['pv_power'].values
-    input_df['pv_ghi'] = df_nwn['pv_ghi'].values
+#   input_df['pv_power'] = df_nwn['pv_power'].values
+#   input_df['pv_ghi'] = df_nwn['pv_ghi'].values
     return input_df
 
 # support vector regression
@@ -387,6 +387,8 @@ def forecast_svr(df, forecast, day, seed, num_epochs):
     day_df = df[df['zenith'] < 87]
     # drop the first week so we can use data from last week
     df_nw1 = day_df.drop(day_df.head(48*7).index)
+    # TODO - this doesn't make sense as we removed some k above with the zenith
+    # needs to be done another way!!!
     # drop the last week so we can use data from last week
     df_nwn = day_df.drop(day_df.tail(48*7).index)
     # set up inputs
@@ -678,7 +680,7 @@ def forecast_gpr(df, forecast, day, seed, num_epochs):
 
 parser = argparse.ArgumentParser(description='Create pv forecast.')
 parser.add_argument('set', help='input data eg set0')
-parser.add_argument('--method', action="store", dest="method", help='Forecasting method: reg2, reg, ann, sday' , default='simple' )
+parser.add_argument('--method', action="store", dest="method", help='Forecasting method: reg2, reg, ann, sday, svr' , default='simple' )
 parser.add_argument('--day', action="store", dest="day", help='Day to forecast: set=read the set forecast file, first= first day, last=last day, all=loop to forecast all days based on the others, otherwise integer day' , default='set' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--bad', action="store", dest="bad", help='Fraction of bad weather to remove, default=0.0', type=float, default=0.0)
@@ -806,7 +808,9 @@ for id in range(len(fdays)):
 # metrics
 if 'pv_power' in forecast.columns:
     kf = forecast[ (forecast['k'] > 12) & (forecast['k'] < 32)]
+    print('Metrics for whole day')
     utils.print_metrics(forecast['pv_power'], forecast['prediction'], args.plot)
+    print('Metrics for periods 13 to 31')
     utils.print_metrics(kf['pv_power'], kf['prediction'], False )
     if args.plot:
         forecast['pv_power'].plot(label='actual power', color='blue')

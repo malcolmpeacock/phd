@@ -191,7 +191,7 @@ def ghi2irradiance(site_location, tilt, surface_azimuth, in_ghi):
 
 # process command line
 
-parser = argparse.ArgumentParser(description='Clean weather data.')
+parser = argparse.ArgumentParser(description='Merge and augment data.')
 parser.add_argument('set', help='weather file eg set0')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--raw', action="store_true", dest="raw", help='Use the original uncorrected data', default=False)

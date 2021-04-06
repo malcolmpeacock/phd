@@ -526,7 +526,9 @@ def set_forecast_days(day_opt, forecast, df, nnear, parm):
     if day_opt != 'set':
         columns = forecast.columns.append(pd.Index([parm]))
         if day_opt == 'all' or day_opt == 'sh' or day_opt == 'ph' or day_opt == 'hol':
-            forecast = df[columns].copy()
+#           forecast = df[columns].copy()
+            # drop the first week 7*48 so that we can use values from last week
+            forecast = df[columns].iloc[7*48:].copy()
             if day_opt == 'sh':
                 print('School holidays only')
                 forecast.drop( forecast[ forecast['sh']==0].index, inplace=True)
