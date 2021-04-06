@@ -97,8 +97,8 @@ for day in days:
 #   print(pv_max)
 #   print(cpoints)
     charge_points = np.minimum(cpoints, pv_max)
-    print('After removing pv_max')
-    print(charge_points)
+#   print('After removing pv_max')
+#   print(charge_points)
 
     # if the charge pattern didn't fully charge, then top up a bit
     points_sum = np.sum(charge_points)
@@ -107,7 +107,8 @@ for day in days:
     # keep dividing the remaining charge evenlt amongst the points where the
     # theoretical power genration is greater than zero
     npoints = len( pv_max[pv_max > 0.0] )
-    while remaining > 0.0001:
+    addition = 1.0
+    while remaining > 0.0001 and addition > 0.0001:
         topup = remaining / npoints
         print('Day {} Remaining {} topup {} npoints {}'.format(day, remaining, topup, npoints) )
         # top charge values from remaining for each k period
@@ -125,11 +126,13 @@ for day in days:
 #           print('Topping up from {} to {} with {} topup {} remaining {} at k {}'.format(old_value, charge_value, addition, topup, remaining, k) )
             remaining = remaining - addition
             charge_points[i] = charge_value
-        print(charge_points)
+#       print(charge_points)
 
+    if addition<=0.0001:
+        print('WARNING: topup failed!!')
 #   print(charge_points)
     cpoints.update(charge_points)
-    print(cpoints)
+#   print(cpoints)
 
     # now output stored these points in the solution
 
