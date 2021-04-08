@@ -15,7 +15,7 @@ import numpy as np
 import math
 import torch
 import torch.nn as nn
-import gpytorch
+#import gpytorch
 # Import tensor dataset & data loader
 from torch.utils.data import TensorDataset, DataLoader
 # Import nn.functional
@@ -26,9 +26,25 @@ from sklearn.svm import SVR
 from sklearn.multioutput import MultiOutputRegressor
 #from scipy.signal import gaussian
 #from scipy.ndimage import filters
+import sklearn.gaussian_process as gp
 
 # custom code
 import utils
+
+# using sklearn GPR to predict the demand for one k period
+
+def period_gpr(input_df, output, input_f):
+    X_train = input_df
+    y_train = output
+    X_test = input_f
+#   kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.RBF(10.0, (1e-3, 1e3))
+    kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.RBF(10.0, (1e-3, 1e8))
+    model = gp.GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10, alpha=0.1, normalize_y=False)
+
+    model.fit(X_train, y_train)
+    sk_pred, std = model.predict(X_test, return_std=True)
+    print(sk_pred)
+    return sk_pred
 
 # metric of how close the peak reduction score for the forecast demand
 # is to the peak reduction score obtained from the actual demand.
@@ -566,126 +582,6 @@ def normalise_df(df):
         df[column] = df[column] / df[column].max()
     return df_max
 
-# We will use the simplest form of GP model, exact inference
-class ExactGPModel(gpytorch.models.ExactGP):
-    def __init__(self, train_x, train_y, likelihood):
-        super(ExactGPModel, self).__init__(train_x, train_y, likelihood)
-        self.mean_module = gpytorch.means.ConstantMean()
-        self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
-
-    def forward(self, x):
-        mean_x = self.mean_module(x)
-        covar_x = self.covar_module(x)
-        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
-
-
-# Gaussian Process Regression.
-def forecast_gpr(df, forecast, day, seed, num_epochs):
-
-    input_df = reg_inputs(df)
-    print(input_df)
-
-    # outputs - demand for the k periods of interest
-    k_demand={}
-    for k in range(32,44):
-        k_df = df[ df['k'] == k]
-        k_demand['demand{}'.format(k)] = k_df['demand'].values
-    output_df = pd.DataFrame(k_demand)
-    print(output_df)
-        
-    # store maximum values and normalise
-    input_max = normalise_df(input_df)
-    output_max = normalise_df(output_df)
-    # santity check
-    sanity_check(input_df)
-    sanity_check(output_df)
-
-    inputs = torch.tensor(input_df.values.astype(np.float32))
-    print(inputs)
-    targets = torch.tensor(output_df.values.astype(np.float32))
-    print(targets)
-
-    # initialize likelihood and model
-    likelihood = gpytorch.likelihoods.GaussianLikelihood()
-    model = ExactGPModel(inputs, targets, likelihood)
-
-    # Find optimal model hyperparameters
-    model.train()
-    likelihood.train()
-
-    # Use the adam optimizer
-    optimizer = torch.optim.Adam([
-    {'params': model.parameters()},  # Includes GaussianLikelihood parameters
-], lr=0.1)
-
-    # "Loss" for GPs - the marginal log likelihood
-    mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
-
-    for i in range(num_epochs):
-        # Zero gradients from previous iteration
-        optimizer.zero_grad()
-        # Output from model
-        output = model(inputs)
-        print(output)
-        print(targets)
-        # Calc loss and backprop gradients
-        loss = -mll(output, targets)
-        loss.backward()
-        print('Iter %d/%d - Loss: %.3f   lengthscale: %.3f   noise: %.3f' % (
-            i + 1, training_iter, loss.item(),
-            model.covar_module.base_kernel.lengthscale.item(),
-            model.likelihood.noise.item()
-        ))
-        optimizer.step()
-
-    # Get into evaluation (predictive posterior) mode
-    model.eval()
-    likelihood.eval()
-    # prediction
-    forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
-    # set up the values to forecast
-    input_f = reg_inputs(forecast_day)
-    # normalise the inputs (using same max as for the model)
-    for column in input_f.columns:
-        input_f[column] = input_f[column] / input_max[column]
-    # Test points are regularly spaced along [0,1]
-    # Make predictions by feeding model through likelihood
-    with torch.no_grad(), gpytorch.settings.fast_pred_var():
-        test_x = torch.tensor(input_f.values.astype(np.float32))
-        print(test_x)
-        observed_pred = likelihood(model(test_x))
-        print(observed_pred)
-
-        # Get upper and lower confidence bounds
-        lower, upper = observed_pred.confidence_region()
-
-    print(lower)
-    print(upper)
-    quit()
-
-#   print('f_inputs')
-#   print(f_inputs)
-    preds = model(f_inputs)
-#   print(preds)
-    # denormalize using df for the original model
-    vals = preds.detach().numpy()[0]
-#   print(vals)
-#   print(type(vals))
-    count=0
-    for column in output_max:
-        vals[count] = vals[count] * output_max[column]
-        count+=1
-    count=0
-    prediction_values = np.zeros(48)
-#   print(prediction_values)
-#   print(type(prediction_values))
-    for k in range(32,44):
-        prediction_values[k-1] = vals[count]
-        count+=1
-    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = prediction_values
-
-    return losses
-
 def set_weight(dfd, forecast_day):
     # set weight to use in the weighted loss function to give less importance
     # to some values
@@ -896,12 +792,16 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
     output_column = 'demand'
     output = dsk_df[output_column].copy()
 
-    if alg == 'svr':
+    if alg == 'svr' or alg == 'gpr':
         input_f = dsk_f[input_columns].copy()
         for lcol in lagged:
             input_f['l'+lcol] = dsk_f1[lcol].values
-        prediction_values = period_svr(input_df, output, input_f)
-        return prediction_values[0]
+        if alg == 'svr':
+            prediction_values = period_svr(input_df, output, input_f)
+            return prediction_values[0]
+        else:
+            prediction_values = period_gpr(input_df, output, input_f)
+            return prediction_values[0]
     else:
 
         # store maximum values
@@ -921,6 +821,16 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
         inputs = torch.tensor(input_df.values.astype(np.float32))
         targets = torch.tensor(output.values.astype(np.float32)).view(-1,1)
         torch.manual_seed(seed)    # reproducible
+
+        input_f = dsk_f[input_columns].copy()
+        for lcol in lagged:
+            input_f['l'+lcol] = dsk_f1[lcol].values
+        # normalise the inputs (using same max as for the model)
+        for column in input_f.columns:
+            if input_max[column]>0:
+                input_f[column] = input_f[column] / input_max[column]
+        f_inputs = torch.tensor(input_f.values.astype(np.float32))
+
         train_ds = TensorDataset(inputs, targets)
 
         train_dl = DataLoader(train_ds, batch_size, shuffle=True)
@@ -943,7 +853,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
             loss_fn = loss_wl1
             weights = torch.tensor(dsk_df['weight'].values.astype(np.float32)).view(-1,1)
             opt = torch.optim.SGD(model.parameters(), lr=rate)
-#           opt = torch.optim.Adam(model.parameters(), lr=rate)
+#               opt = torch.optim.Adam(model.parameters(), lr=rate)
             loss = loss_fn(model(inputs), targets, weights)
             losses = wfit(num_epochs, model, loss_fn, opt, train_dl, weights)
         else:
@@ -954,16 +864,8 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
                 loss = loss_fn(model(inputs), targets)
                 losses = fit(num_epochs, model, loss_fn, opt, train_dl)
 
-        preds = model(inputs)
+#           preds = model(inputs)
         # prediction
-        input_f = dsk_f[input_columns].copy()
-        for lcol in lagged:
-            input_f['l'+lcol] = dsk_f1[lcol].values
-        # normalise the inputs (using same max as for the model)
-        for column in input_f.columns:
-            if input_max[column]>0:
-                input_f[column] = input_f[column] / input_max[column]
-        f_inputs = torch.tensor(input_f.values.astype(np.float32))
         preds = model(f_inputs)
         # denormalize using df for the original model
         prediction_values = preds.detach().numpy() * output_max
@@ -1210,15 +1112,6 @@ for id in range(len(fdays)):
             if args.ploss:
                 plt.plot(losses)
                 plt.title('demand nreg convergence')
-                plt.xlabel('Epochs', fontsize=15)
-                plt.ylabel('Loss', fontsize=15)
-                plt.show()
-
-        if method == 'gpr':
-            losses = forecast_gpr(history, forecast, day, args.seed, args.epochs)
-            if args.ploss:
-                plt.plot(losses)
-                plt.title('demand gpr convergence')
                 plt.xlabel('Epochs', fontsize=15)
                 plt.ylabel('Loss', fontsize=15)
                 plt.show()

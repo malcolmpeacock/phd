@@ -104,8 +104,8 @@ for day in days:
     points_sum = np.sum(charge_points)
     remaining = capacity - points_sum
 
-    # keep dividing the remaining charge evenlt amongst the points where the
-    # theoretical power genration is greater than zero
+    # keep dividing the remaining charge evenly amongst the points where the
+    # theoretical power generation is greater than zero
     npoints = len( pv_max[pv_max > 0.0] )
     addition = 1.0
     while remaining > 0.0001 and addition > 0.0001:
@@ -129,7 +129,13 @@ for day in days:
 #       print(charge_points)
 
     if addition<=0.0001:
-        print('WARNING: topup failed!!')
+        print('WARNING: topup failed!! remaining {} adding more'.format(remaining))
+        for i in range(len(charge_points)):
+            if charge_points[i] < 2.5:
+                addition = min(2.5 - charge_points[i], remaining)
+                charge_points[i] += addition
+                remaining -= addition
+#               print('Adding {} remaining {}'.format(addition, remaining))
 #   print(charge_points)
     cpoints.update(charge_points)
 #   print(cpoints)
