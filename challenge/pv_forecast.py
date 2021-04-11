@@ -26,6 +26,7 @@ from scipy.ndimage import filters
 # svr stuff
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVR
+import sklearn.gaussian_process as gp
 
 # custom code
 import utils
@@ -599,80 +600,66 @@ class ExactGPModel(gpytorch.models.ExactGP):
 
 # Gaussian Process Regression.
 def forecast_gpr(df, forecast, day, seed, num_epochs):
-
+    # don't try to predict pv at night!
+    # ( create the model only using this zenith, but forecast all
+    #   points when making the prediction as the forecast day may 
+    #   have different zenith, and hence different values )
     day_df = df[df['zenith'] < 87]
+    # drop the first week so we can use data from last week
+    df_nw1 = day_df.drop(day_df.head(48*7).index)
+    # TODO - this doesn't make sense as we removed some k above with the zenith
+    # needs to be done another way!!!
+    # drop the last week so we can use data from last week
+    df_nwn = day_df.drop(day_df.tail(48*7).index)
     # set up inputs
-    input_df = day_df['poa_ghi'].copy()
-    print(input_df)
-    inputs = torch.tensor(input_df.values.astype(np.float32))
-#   print("inputs")
-#   print(inputs)
-#   The .view seems to tell it what shape the data is
+    input_df = ann_inputs(df_nw1, df_nwn)
+
     # set up output
     output_column = 'pv_power'
-    output = day_df[output_column]
-    targets = torch.tensor(output.values.astype(np.float32)).view(-1,1)
+    output = df_nw1[output_column]
 
-    print(inputs)
-    print(targets)
+    # smooth the pv output first ??! - makes it worse!! for ann
+#   b = gaussian(39, 3)
+#   gf = filters.convolve1d(output.values, b/b.sum())
+#   output.update(gf)
 
-    # initialize likelihood and model
-    likelihood = gpytorch.likelihoods.GaussianLikelihood()
-    model = ExactGPModel(inputs, targets, likelihood)
+    X_train = input_df.values
+    y_train = output.values.reshape(len(output), 1)
+#   y = np.ravel(y)
+#   y = output.values.reshape(len(output), 1).ravel()
+#   y = output.values.ravel()
 
-    # Find optimal model hyperparameters
-    model.train()
-    likelihood.train()
+#   sc_x = StandardScaler()
+#   sc_y = StandardScaler()
+#   x = sc_x.fit_transform(x)
+#   y = sc_y.fit_transform(y)
 
-    # Use the adam optimizer
-    optimizer = torch.optim.Adam([
-    {'params': model.parameters()},  # Includes GaussianLikelihood parameters
-], lr=0.1)
-    # "Loss" for GPs - the marginal log likelihood
-    mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
+    # define regressor
+    # defaults: C=1.0, gamma=1/n_features , epsilon=0.1
+    # fit the model
+    kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.RBF(10.0, (1e-3, 1e3))
+#   kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.RBF(10.0, (1e-3, 1e8))
+    model = gp.GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10, alpha=0.1, normalize_y=False)
 
-    for i in range(num_epochs):
-        # Zero gradients from previous iteration
-        optimizer.zero_grad()
-        # Output from model
-        output = model(inputs)
-        print(output)
-        print(targets)
-        # Calc loss and backprop gradients
-        loss = -mll(output, targets)
-        loss.backward()
-        print('Iter %d/%d - Loss: %.3f   lengthscale: %.3f   noise: %.3f' % (
-            i + 1, training_iter, loss.item(),
-            model.covar_module.base_kernel.lengthscale.item(),
-            model.likelihood.noise.item()
-        ))
-        optimizer.step()
+    model.fit(X_train, y_train)
 
-    # Get into evaluation (predictive posterior) mode
-    model.eval()
-    likelihood.eval()
-    # prediction
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
-    # set up the values to forecast
-    input_f = reg_inputs(forecast_day)
+    day_f = forecast_day[forecast_day['zenith'] < 87]
+    previous_day = utils.get_previous_week_day(df, day)
+    delta = forecast_day.first_valid_index().date() - previous_day.first_valid_index().date()
+    input_f = ann_inputs(forecast_day, previous_day)
+    X_test = input_f.values
+#   print(input_f)
+
     # normalise the inputs (using same max as for the model)
-    for column in input_f.columns:
-        input_f[column] = input_f[column] / input_max[column]
-    # Test points are regularly spaced along [0,1]
-    # Make predictions by feeding model through likelihood
-    with torch.no_grad(), gpytorch.settings.fast_pred_var():
-        test_x = torch.tensor(input_f.values.astype(np.float32))
-        print(test_x)
-        observed_pred = likelihood(model(test_x))
-        print(observed_pred)
+    # prediction
+    sk_pred, std = model.predict(X_test, return_std=True)
+    # denormalize using df for the original model
+#   y_pred = sc_y.inverse_transform(y_pred)
 
-        # Get upper and lower confidence bounds
-        lower, upper = observed_pred.confidence_region()
-
-    print(lower)
-    print(upper)
-    quit()
-
+    forecast_day['prediction'] = sk_pred
+    forecast_day.loc[forecast_day['zenith']>87, 'prediction'] = 0.0
+    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = forecast_day['prediction'].values
 
 # main program
 
@@ -795,13 +782,7 @@ for id in range(len(fdays)):
                     plt.show()
 
         if method == 'gpr':
-            losses = forecast_gpr(history, forecast, day, args.seed, args.epochs)
-            if args.plot:
-                plt.plot(losses)
-                plt.title('pv gpr convergence')
-                plt.xlabel('Epochs', fontsize=15)
-                plt.ylabel('Loss', fontsize=15)
-                plt.show()
+            forecast_gpr(history, forecast, day, args.seed, args.epochs)
 
 #print(forecast)
 
