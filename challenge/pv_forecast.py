@@ -16,7 +16,7 @@ import numpy as np
 import math
 import torch
 import torch.nn as nn
-import gpytorch
+#import gpytorch
 # Import tensor dataset & data loader
 from torch.utils.data import TensorDataset, DataLoader
 # Import nn.functional
@@ -27,6 +27,7 @@ from scipy.ndimage import filters
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVR
 import sklearn.gaussian_process as gp
+from sklearn.ensemble import GradientBoostingRegressor
 
 # custom code
 import utils
@@ -42,34 +43,6 @@ def remove_bad_weather(df, bad):
     df.drop( todrop.index, inplace=True )
     after = len(df)
     print('Removing inacurate weather above {} of the maximum. before {} after {}'.format(bad, before, after))
-
-# class for custom regression
-
-class PVregression(torch.nn.Module):
-    def __init__(self):
-
-        super().__init__()
-        # weights
-        self.a = torch.nn.Parameter(torch.randn(()))
-        self.b = torch.nn.Parameter(torch.randn(()))
-        self.c = torch.nn.Parameter(torch.randn(()))
-        self.d = torch.nn.Parameter(torch.randn(()))
-        self.e = torch.nn.Parameter(torch.randn(()))
-        self.act1 = nn.ReLU() 
-
-    # x is a tensor of input data
-    def forward(self, x):
-#       pv = self.a + self.b * x[:,0] + self.c * x[:,1] + self.d * x[:,2] + self.e * x[:,3]
-#       pv = (x[:,0] - self.a) * ( self.b * x[:,1] + self.c * x[:,2] + self.d * x[:,3] + self.e * x[:,4] )
-        pv = self.a + self.b * x[:,0] + self.c * x[:,1] + self.d * x[:,2] + self.e * x[:,3] + self.e * x[:,4]
-#       return pv.clamp(min=0.0)
-# this gives negative power.
-        return pv
-#    this causes zero pv
-#       return self.act1(pv)
-
-    def string(self):
-        return f'y = {self.a.item()} + {self.b.item()} x + {self.c.item()} x^2 + {self.d.item()} x^3'
 
 # regp class
 
@@ -319,21 +292,15 @@ def forecast_reg(df, forecast, day, method, seed, num_epochs, set_weights):
         model = RegL(num_inputs,1)
     if method == 'regp':
     # custom function converges but gives negative power
-#       model = PVregression()
         model = RegP(set_weights)
 
-#   opt = torch.optim.SGD(model.parameters(), lr=1e-6)
-#   opt = torch.optim.SGD(model.parameters(), lr=1e-5)
-#   opt = torch.optim.SGD(model.parameters(), lr=1e-4)
     opt = torch.optim.SGD(model.parameters(), lr=1e-3)
-#   opt = torch.optim.SGD(model.parameters(), lr=1e-9)
 
     # Define loss function
     loss_fn = F.mse_loss
 #   loss_fn = F.l1_loss
 
-    # Train the model for 100 epochs
-#   num_epochs=300
+    # Train the model
     print('Starting loss: ', loss_fn(model(inputs), targets))
     losses = fit(num_epochs, model, loss_fn, opt, train_dl)
     print('Training loss: ', loss_fn(model(inputs), targets))
@@ -344,25 +311,18 @@ def forecast_reg(df, forecast, day, method, seed, num_epochs, set_weights):
         print(model.linear1.bias.data)
 
     preds = model(inputs)
-#   print(preds)
     # prediction
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
-#   print(forecast_day)
     day_f = forecast_day[forecast_day['zenith'] < 87]
     input_f = day_f[input_columns].copy()
-#   print(input_f)
     # normalise the inputs (using same max as for the model)
     for column in input_f.columns:
         input_f[column] = input_f[column] / input_max[column]
     f_inputs = torch.tensor(input_f.values.astype(np.float32))
-#   print('f_inputs')
-#   print(f_inputs)
     preds = model(f_inputs)
-#   print(preds)
     forecast_day['prediction'] = 0.0
     # denormalize using df for the original model
     prediction_values = preds.detach().numpy() * output_max
-#   print(prediction_values)
     # set forecast for zentih angle for daylight and denormalize using
     forecast_day.loc[forecast_day['zenith']<87, 'prediction'] = prediction_values.reshape(len(prediction_values),)
 #   print(forecast_day['prediction'].values)
@@ -371,44 +331,31 @@ def forecast_reg(df, forecast, day, method, seed, num_epochs, set_weights):
     return losses
 
 # ann - inputs
-def ann_inputs(df_nw1, df_nwn):
-    input_columns = ['month', 'season', 'zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'tempw', 'cs_ghi']
-    input_df = df_nw1[input_columns].copy()
-#   input_df['pv_power'] = df_nwn['pv_power'].values
-#   input_df['pv_ghi'] = df_nwn['pv_ghi'].values
+def ann_inputs(df, all=False):
+    if all:
+        input_columns = ['month', 'season', 'zenith', 'sun1', 'sun2', 'sun3', 'sun4', 'sun5', 'sun6', 'temp1', 'temp2', 'temp3', 'temp4', 'temp5', 'temp6', 'cs_ghi']
+    else:
+        input_columns = ['month', 'season', 'zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'tempw', 'cs_ghi']
+    input_df = df[input_columns].copy()
     return input_df
 
 # support vector regression
 
-def forecast_svr(df, forecast, day, seed, num_epochs):
+def forecast_svr(df, forecast, day, seed, num_epochs,all):
     # don't try to predict pv at night!
     # ( create the model only using this zenith, but forecast all
     #   points when making the prediction as the forecast day may 
     #   have different zenith, and hence different values )
     day_df = df[df['zenith'] < 87]
-    # drop the first week so we can use data from last week
-    df_nw1 = day_df.drop(day_df.head(48*7).index)
-    # TODO - this doesn't make sense as we removed some k above with the zenith
-    # needs to be done another way!!!
-    # drop the last week so we can use data from last week
-    df_nwn = day_df.drop(day_df.tail(48*7).index)
     # set up inputs
-    input_df = ann_inputs(df_nw1, df_nwn)
+    input_df = ann_inputs(day_df, all)
 
     # set up output
     output_column = 'pv_power'
-    output = df_nw1[output_column]
-
-    # smooth the pv output first ??! - makes it worse!! for ann
-#   b = gaussian(39, 3)
-#   gf = filters.convolve1d(output.values, b/b.sum())
-#   output.update(gf)
+    output = day_df[output_column]
 
     x = input_df.values
     y = output.values.reshape(len(output), 1)
-#   y = np.ravel(y)
-#   y = output.values.reshape(len(output), 1).ravel()
-#   y = output.values.ravel()
 
     sc_x = StandardScaler()
     sc_y = StandardScaler()
@@ -423,9 +370,9 @@ def forecast_svr(df, forecast, day, seed, num_epochs):
 
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     day_f = forecast_day[forecast_day['zenith'] < 87]
-    previous_day = utils.get_previous_week_day(df, day)
-    delta = forecast_day.first_valid_index().date() - previous_day.first_valid_index().date()
-    input_f = ann_inputs(forecast_day, previous_day)
+#   previous_day = utils.get_previous_week_day(df, day)
+#   delta = forecast_day.first_valid_index().date() - previous_day.first_valid_index().date()
+    input_f = ann_inputs(forecast_day, all)
 #   print(input_f)
 
     # normalise the inputs (using same max as for the model)
@@ -448,16 +395,12 @@ def forecast_svr(df, forecast, day, seed, num_epochs):
 def forecast_ann(df, forecast, day, seed, num_epochs):
     # don't try to predict pv at night!
     day_df = df[df['zenith'] < 87]
-    # drop the first week so we can use data from last week
-    df_nw1 = day_df.drop(day_df.head(48*7).index)
-    # drop the last week so we can use data from last week
-    df_nwn = day_df.drop(day_df.tail(48*7).index)
     # set up inputs
-    input_df = ann_inputs(df_nw1, df_nwn)
+    input_df = ann_inputs(day_df)
 
     # set up output
     output_column = 'pv_power'
-    output = df_nw1[output_column]
+    output = day_df[output_column]
     # normalise the output (Y)
     output_max = output.max()
     if output_max>0:
@@ -528,11 +471,11 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
     day_f = forecast_day[forecast_day['zenith'] < 87]
 #   print(day_f)
 #   previous_day = utils.get_previous_week_day(day_df, day)
-    previous_day = utils.get_previous_week_day(df, day)
+#   previous_day = utils.get_previous_week_day(df, day)
 #   print(previous_day)
-    delta = forecast_day.first_valid_index().date() - previous_day.first_valid_index().date()
+#   delta = forecast_day.first_valid_index().date() - previous_day.first_valid_index().date()
 #   print(delta)
-    input_f = ann_inputs(forecast_day, previous_day)
+    input_f = ann_inputs(forecast_day)
 #   print(input_f)
     # normalise the inputs (using same max as for the model)
     for column in input_f.columns:
@@ -586,80 +529,87 @@ def forecast_knn(df, forecast, day):
     probability = 0.8
     forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
 
-# We will use the simplest form of GP model, exact inference
-class ExactGPModel(gpytorch.models.ExactGP):
-    def __init__(self, train_x, train_y, likelihood):
-        super(ExactGPModel, self).__init__(train_x, train_y, likelihood)
-        self.mean_module = gpytorch.means.ConstantMean()
-        self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
+# Gradient Booting Regression.
 
-    def forward(self, x):
-        mean_x = self.mean_module(x)
-        covar_x = self.covar_module(x)
-        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+def forecast_gbr(df, forecast, day, seed, num_epochs, all):
+    # don't try to predict pv at night!
+    # ( create the model only using this zenith, but forecast all
+    #   points when making the prediction as the forecast day may 
+    #   have different zenith, and hence different values )
+    day_df = df[df['zenith'] < 87]
+    # set up inputs
+    input_df = ann_inputs(day_df, all)
+
+    # set up output
+    output_column = 'pv_power'
+    output = day_df[output_column]
+
+    X_train = input_df.values
+    y_train = output.values.reshape(len(output), 1)
+
+    print('Creating Regressor ...')
+    # loss='ls' or 'lad'
+    reg = GradientBoostingRegressor(random_state=0, n_estimators=200, max_depth=3, loss='lad')
+    print('Fitting model ...')
+    reg.fit(X_train, y_train)
+
+    print('Making prediction ...')
+    # although the model is only trained on day time ( zenith>87)
+    # we forecast the whole day as it doesn't do any harm.
+    forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
+    input_f = ann_inputs(forecast_day, all)
+    X_test = input_f.values
+
+    # prediction
+    sk_pred = reg.predict(X_test)
+    print('Prediction completed ...')
+
+    forecast_day['prediction'] = sk_pred
+    forecast_day.loc[forecast_day['zenith']>87, 'prediction'] = 0.0
+    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = forecast_day['prediction']
 
 # Gaussian Process Regression.
+
 def forecast_gpr(df, forecast, day, seed, num_epochs):
     # don't try to predict pv at night!
     # ( create the model only using this zenith, but forecast all
     #   points when making the prediction as the forecast day may 
     #   have different zenith, and hence different values )
     day_df = df[df['zenith'] < 87]
-    # drop the first week so we can use data from last week
-    df_nw1 = day_df.drop(day_df.head(48*7).index)
-    # TODO - this doesn't make sense as we removed some k above with the zenith
-    # needs to be done another way!!!
-    # drop the last week so we can use data from last week
-    df_nwn = day_df.drop(day_df.tail(48*7).index)
     # set up inputs
-    input_df = ann_inputs(df_nw1, df_nwn)
+    input_df = ann_inputs(day_df)
 
     # set up output
     output_column = 'pv_power'
-    output = df_nw1[output_column]
-
-    # smooth the pv output first ??! - makes it worse!! for ann
-#   b = gaussian(39, 3)
-#   gf = filters.convolve1d(output.values, b/b.sum())
-#   output.update(gf)
+    output = day_df[output_column]
 
     X_train = input_df.values
     y_train = output.values.reshape(len(output), 1)
-#   y = np.ravel(y)
-#   y = output.values.reshape(len(output), 1).ravel()
-#   y = output.values.ravel()
 
-#   sc_x = StandardScaler()
-#   sc_y = StandardScaler()
-#   x = sc_x.fit_transform(x)
-#   y = sc_y.fit_transform(y)
-
-    # define regressor
-    # defaults: C=1.0, gamma=1/n_features , epsilon=0.1
-    # fit the model
-    kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.RBF(10.0, (1e-3, 1e3))
-#   kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.RBF(10.0, (1e-3, 1e8))
+    print('Creating kernel ...')
+#   kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.RBF(10.0, (1e-3, 1e3))
+    kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.Matern(length_scale=1.0, nu=1.5)
+    print('Creating model ...')
     model = gp.GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10, alpha=0.1, normalize_y=False)
 
+    # fit the model
+    print('Fitting model ...')
     model.fit(X_train, y_train)
 
+    print('Making prediction ...')
+    # although the model is only trained on day time ( zenith>87)
+    # we forecast the whole day as it doesn't do anay harm.
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
-    day_f = forecast_day[forecast_day['zenith'] < 87]
-    previous_day = utils.get_previous_week_day(df, day)
-    delta = forecast_day.first_valid_index().date() - previous_day.first_valid_index().date()
-    input_f = ann_inputs(forecast_day, previous_day)
+    input_f = ann_inputs(forecast_day)
     X_test = input_f.values
-#   print(input_f)
 
-    # normalise the inputs (using same max as for the model)
     # prediction
     sk_pred, std = model.predict(X_test, return_std=True)
-    # denormalize using df for the original model
-#   y_pred = sc_y.inverse_transform(y_pred)
+    print('Prediction completed ...')
 
     forecast_day['prediction'] = sk_pred
     forecast_day.loc[forecast_day['zenith']>87, 'prediction'] = 0.0
-    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = forecast_day['prediction'].values
+    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = forecast_day['prediction']
 
 # main program
 
@@ -676,6 +626,7 @@ parser.add_argument('--epochs', action="store", dest="epochs", help='Number of e
 parser.add_argument('--step', action="store", dest="step", help='If using days=all or step only do every step days', type=int, default=1)
 parser.add_argument('--sw', action="store_true", dest="sw", help='Set weights to values that seem to work', default=False)
 parser.add_argument('--nnear', action="store", dest="nnear", help='Number of days when using the --day near option', type=int, default=10)
+parser.add_argument('--all', action="store_true", dest="all", help='Use all niput variables', default=False)
 
 
 args = parser.parse_args()
@@ -757,7 +708,7 @@ for id in range(len(fdays)):
             forecast_r2(history, forecast, day)
 
         if method == 'svr':
-            forecast_svr(history, forecast, day, args.seed, args.epochs)
+            forecast_svr(history, forecast, day, args.seed, args.epochs, args.all)
 
         if method[0:3] == 'reg':
             losses = forecast_reg(history, forecast, day, method, args.seed, args.epochs, args.sw)
@@ -783,6 +734,8 @@ for id in range(len(fdays)):
 
         if method == 'gpr':
             forecast_gpr(history, forecast, day, args.seed, args.epochs)
+        if method == 'gbr':
+            forecast_gbr(history, forecast, day, args.seed, args.epochs, args.all)
 
 #print(forecast)
 
