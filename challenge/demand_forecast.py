@@ -27,9 +27,48 @@ from sklearn.multioutput import MultiOutputRegressor
 #from scipy.signal import gaussian
 #from scipy.ndimage import filters
 import sklearn.gaussian_process as gp
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import GradientBoostingRegressor
+import seaborn as sns
+from sklearn.linear_model import LassoCV, Lasso
+#from sklearn.linear_model import RidgeCV, LassoCV, Ridge, Lasso
 
 # custom code
 import utils
+
+def select_features(input_df,output,plot):
+    print('Select Features')
+    df = input_df.copy()
+    df['output'] = output
+
+    # Using Pearson Correlation
+    cor = df.corr()
+    if plot:
+        plt.figure(figsize=(12,10))
+        sns.heatmap(cor, annot=True, cmap=plt.cm.Reds)
+        plt.show()
+
+    # Correlation with output variable
+    cor_target = abs(cor["output"])
+    #Selecting highly correlated features
+    relevant_features = cor_target[cor_target>0.2]
+    print(relevant_features)
+
+    X = input_df.values
+    y = output.values
+    reg = LassoCV(max_iter=8000)
+    reg.fit(X, y)
+#   print("Best alpha using built-in LassoCV: %f" % reg.alpha_)
+#   print("Best score using built-in LassoCV: %f" %reg.score(X,y))
+    coef = pd.Series(reg.coef_, index = input_df.columns)
+    imp_coef = coef.sort_values()
+#   print(imp_coef)
+    if plot:
+        matplotlib.rcParams['figure.figsize'] = (8.0, 10.0)
+        imp_coef.plot(kind = "barh")
+        plt.title("Feature importance using Lasso Model")
+        plt.show()
+    return coef
 
 # using sklearn GPR to predict the demand for one k period
 
@@ -39,12 +78,44 @@ def period_gpr(input_df, output, input_f):
     X_test = input_f
 #   kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.RBF(10.0, (1e-3, 1e3))
     kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.RBF(10.0, (1e-3, 1e8))
-    model = gp.GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10, alpha=0.1, normalize_y=False)
+    model = gp.GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10, alpha=0.1, normalize_y=False, random_state=0)
 
     model.fit(X_train, y_train)
     sk_pred, std = model.predict(X_test, return_std=True)
+#   sd factor +3.0 seems good for set 2 but bad for set 3!
+    sdf = 0.0
+#   print(sk_pred,std)
+#   pred = sk_pred[0] - std[0]*2.0
+    pred = sk_pred[0] + std[0]*sdf
+#   pred = sk_pred[0]
+    return pred
+
+# using sklearn GBR to predict the demand for one k period
+
+def period_gbr(input_df, output, input_f):
+    X_train = input_df
+    y_train = output
+    X_test = input_f
+    print('Creating Regressor ...')
+    # loss='ls' or 'lad'
+    model = GradientBoostingRegressor(random_state=0, n_estimators=200, max_depth=3, loss='lad')
+    print('Fitting model ...')
+    model.fit(X_train, y_train)
+    sk_pred = model.predict(X_test)
     print(sk_pred)
     return sk_pred
+
+# using sklearn Random Forest to predict the demand for one k period
+
+def period_rf(input_df, output, input_f):
+    X_train = input_df
+    y_train = output
+    X_test = input_f
+    regressor = RandomForestRegressor(n_estimators=20, random_state=0)
+    regressor.fit(X_train, y_train)
+    y_pred = regressor.predict(X_test)
+#   print(y_pred)
+    return y_pred
 
 # metric of how close the peak reduction score for the forecast demand
 # is to the peak reduction score obtained from the actual demand.
@@ -646,7 +717,7 @@ def forecast_pub_hol(dsk_df, dsk_f, plot):
 #        regd  - only look at same day type
 #        regs  - model per season, dtype as a flag
 
-def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, alg, wl, ploss):
+def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ka, alg, wl, ploss):
     pred_values=[]
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     # look for days of similar type.
@@ -686,7 +757,7 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
         # for each k period, train a seperate model ...
         for index, row in forecast_day.iterrows():
             dsk = row['dsk']
-            if ki and (row['k'] < 32 or row['k'] > 42):
+            if not ka and (row['k'] < 32 or row['k'] > 42):
                 prediction_values = 1.0
             else:
                 print('Period k {} dsk {}'.format(row['k'],dsk) )
@@ -700,20 +771,36 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
                 else:
                     dsk_df = dfd[dfd['dsk'] == dsk]
                     dsk_df1 = dfd[dfd['dsk'] == dsk - 1]
-                    prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg, wl, dsk_df1, dsk_f1)
-                if math.isnan(prediction_values):
-                    print('WARNING NaN replaced by interpolation at period {}'.format(row['k']))
-                if not math.isfinite(prediction_values):
-                    print('WARNING Inf replaced by interpolation at period {}'.format(row['k']))
-                    prediction_values = float("NaN")
+                    prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ka, alg, wl, dsk_df1, dsk_f1)
+                if alg != 'features':
+                    if math.isnan(prediction_values):
+                        print('WARNING NaN replaced by interpolation at period {}'.format(row['k']))
+                    if not math.isfinite(prediction_values):
+                        print('WARNING Inf replaced by interpolation at period {}'.format(row['k']))
+                        prediction_values = float("NaN")
             pred_values.append(prediction_values)
-        pred_series = pd.Series(pred_values, index=forecast_day.index)
-        # Replace any NaNs at the start or end with adjacent values
-        pred_series = pred_series.fillna(method='bfill')
-        pred_series = pred_series.fillna(method='ffill')
-        # Replace any NaNs in the middle by interpolation.
-        pred_series = pred_series.interpolate()
-        forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = pred_series
+        if alg == 'features':
+            print('Features')
+            count=0
+            p_list={}
+            for period in pred_values:
+                count+=1
+                if count>31 and count <43:
+                    p_list[count] = period
+            pdf = pd.DataFrame(p_list)
+            print(pdf)
+            plt.figure(figsize=(12,10))
+            sns.heatmap(pdf, annot=True, cmap=plt.cm.Reds)
+            plt.show()
+            quit()
+        else:
+            pred_series = pd.Series(pred_values, index=forecast_day.index)
+            # Replace any NaNs at the start or end with adjacent values
+            pred_series = pred_series.fillna(method='bfill')
+            pred_series = pred_series.fillna(method='ffill')
+            # Replace any NaNs in the middle by interpolation.
+            pred_series = pred_series.interpolate()
+            forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = pred_series
     else:
         dsk = int(period)
         dsk_f = forecast_day[forecast_day['dsk'] == dsk]
@@ -725,11 +812,11 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ki, 
         else:
             dsk_df = dfd[dfd['dsk'] == dsk]
             dsk_df1 = dfd[dfd['dsk'] == dsk - 1]
-            prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg, wl, dsk_df1, dsk_f1)
+            prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ka, alg, wl, dsk_df1, dsk_f1)
         print('Predicted value {} for period {}'.format(prediction_values, period))
         quit()
 
-def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, alg, wl, dsk_df1, dsk_f1):
+def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ka, alg, wl, dsk_df1, dsk_f1):
     lagged = []
     # set up inputs
     if method == 'regd':
@@ -769,12 +856,23 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
 
     if method == 'regs':
         # no point having dtype in here, as we have flags for each day below
-        input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'doydiff']
+#       input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'doydiff']
         # tempdb is the day before yesterday and has no effect.
+#       lasoo version set0
+#       input_columns = ['tsqd', 'ts', 'tm', 'dailytemp', 'tempyd', 'doydiff', 'tempdb']
+#       lasoo version set2
 #       input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'doydiff', 'tempdb']
+#       lasoo version set4
+#       input_columns = ['sunm', 'zenith', 'tsqd', 'ts', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'doydiff', 'tempdb']
+        if alg == 'features':
+#           input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'doydiff', 'tempdb']
+            input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'doydiff', 'tempdb', 'sun1', 'sun2', 'sun3', 'sun4', 'sun5', 'sun6', 'sunw', 'temp1', 'temp2', 'temp3', 'temp4', 'temp5', 'temp6', 'cs_ghi']
+        else:
+            input_columns = ['tempm', 'sunm', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'doydiff', 'tempdb']
         # variables from the previous period - doesn't seem to make any
         # difference
-        lagged = ['tempm']
+        #lagged = ['tempm']
+        lagged = []
         # days of the week 1-0 flags
         for wd in range(7):
             wd_key = 'wd{}'.format(wd)
@@ -792,7 +890,11 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
     output_column = 'demand'
     output = dsk_df[output_column].copy()
 
-    if alg == 'svr' or alg == 'gpr':
+    if alg == 'features':
+        features = select_features(input_df,output,plot)
+        return features
+
+    if alg == 'svr' or alg == 'gpr' or alg=='rf' or alg=='gbr':
         input_f = dsk_f[input_columns].copy()
         for lcol in lagged:
             input_f['l'+lcol] = dsk_f1[lcol].values
@@ -800,8 +902,16 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ki, 
             prediction_values = period_svr(input_df, output, input_f)
             return prediction_values[0]
         else:
-            prediction_values = period_gpr(input_df, output, input_f)
-            return prediction_values[0]
+            if alg == 'gpr':
+                prediction_values = period_gpr(input_df, output, input_f)
+                return prediction_values
+            else:
+                if alg == 'rf':
+                    prediction_values = period_rf(input_df, output, input_f)
+                    return prediction_values[0]
+                else:
+                    prediction_values = period_gbr(input_df, output, input_f)
+                    return prediction_values[0]
     else:
 
         # store maximum values
@@ -1031,7 +1141,7 @@ parser.add_argument('--nnear', action="store", dest="nnear", help='Number of day
 parser.add_argument('--period', action="store", dest="period", help='Period k to forecast', type=float, default=all)
 parser.add_argument('--step', action="store", dest="step", help='If using days=all or step only do every step days', type=int, default=1)
 parser.add_argument('--use', action="store", dest="use", help='Number of days data to use, 0=all', type=int, default=0)
-parser.add_argument('--ki', action="store_true", dest="ki", help='Only forecast K of interest.', default=False)
+parser.add_argument('--ka', action="store_true", dest="ka", help='Forecast all K (default is only k of interest)', default=False)
 
 args = parser.parse_args()
 method = args.method
@@ -1103,7 +1213,7 @@ for id in range(len(fdays)):
             forecast_closest_days(history, forecast, day, method)
 
         if method[0:3] == 'reg':
-            forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ki, args.alg, args.wl, args.ploss)
+            forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ka, args.alg, args.wl, args.ploss)
 
         if method == 'svr':
             forecast_svr(df, forecast, day)
@@ -1152,7 +1262,7 @@ if 'demand' in forecast.columns:
         peak_predict = pd.Series(peak_pred['peak_predict'])
         print('Prediction of peak demand')
         utils.print_metrics(peak_actual, peak_predict, args.plot)
-    if args.ki:
+    if not args.ka:
         kf = forecast[ (forecast['k'] > 31) & (forecast['k'] < 43)]
 #       print(kf['demand'])
 #       print(kf['prediction'])

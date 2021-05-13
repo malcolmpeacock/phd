@@ -11,6 +11,7 @@ import argparse
 import numpy as np
 import math
 import pvlib
+from sklearn.ensemble import IsolationForest
 
 # custom code
 import utils
@@ -62,6 +63,24 @@ pv = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, s
 
 print(pv)
 
+print('PV mean {} sd {}'.format(pv['pv_power_mw'].mean(), pv['pv_power_mw'].std() ) )
+
+# look for missing values
+parms = pv.columns
+no_pv = pv.loc[(pv['pv_power_mw'].isna()) | (pv['irradiance_Wm-2'].isna()) | (pv['panel_temp_C'].isna()) ]
+print('Nans {}'.format(len(no_pv)) )
+fix_or_drop(pv, parms, no_pv, counters, 'NaN')
+
+clf = IsolationForest(random_state=0).fit_predict(pv)
+print(clf)
+days = pd.Series(pv.index.date).unique()
+count=0
+for day in days:
+    d_clf = clf[count:count+48+1]
+    print(day, np.count_nonzero(d_clf == -1) )
+    count+=48
+
+
 # thresholds
 large_pv = pv['pv_power_mw'].max() * 0.9
 small_pv = pv['pv_power_mw'].max() * 0.1
@@ -73,7 +92,6 @@ small_temp = pv['panel_temp_C'].max() * 0.1
 print('Mean values pv {:.2f} irradiance {:.2f} temp {:.2f}'.format(pv['pv_power_mw'].mean(), pv['irradiance_Wm-2'].mean(), pv['panel_temp_C'].mean() ) )
 print('Thresholds large_pv {:.2f} small_pv {:.2f} large_irrad {:.2f} small_irrad {:.2f} large_temp {:.2f} small_temp {:.2f}'.format(large_pv, small_pv, large_irrad, small_irrad, large_temp, small_temp) )
 
-parms = pv.columns
 pv['k'] = utils.index2ks(pv.index)
 
 # fix large PV but low temp or irradiance
@@ -95,10 +113,6 @@ zero_power = pv[(pv['pv_power_mw'] == 0.0) & (pv['k']>20) & (pv['k']<32) &(pv['i
 print('Zero power in the middle of the day {}'.format(len(zero_power)) )
 fix_or_drop(pv, parms, zero_power, counters, 'MID ZERO')
 
-# look for missing values
-no_pv = pv.loc[pv['pv_power_mw'].isna()]
-print('Nans {}'.format(len(no_pv)) )
-fix_or_drop(pv, parms, no_pv, counters, 'NaN')
 
 print('Days fixed {} Days dropped {}'.format(counters['fixed'], counters['dropped']) )
 
@@ -230,6 +244,10 @@ print(pv['pv_power_mw'].nsmallest())
 
 # plot pv
 if args.plot:
+
+    plt.hist(pv['pv_power_mw'], color='blue', edgecolor = 'black', bins = 30)
+    plt.show()
+
     pv['pv_power_mw'].plot(label='pv power', color='blue')
     plt.title('pv')
     plt.xlabel('Hour of the year', fontsize=15)

@@ -16,6 +16,7 @@ import utils
 import glob
 
 def plot_days(df, days, title, dot=False):
+    degree_sign= u'\N{DEGREE SIGN}'
     k = range(1,49)
     count=0
     for day in days:
@@ -24,9 +25,9 @@ def plot_days(df, days, title, dot=False):
         meantemp = dft['tempm'].mean()
         demand = dft['demand'].values
         if dot and count>len(days)/2:
-            plt.plot(k, demand, label='{}, {:.2f}'.format(day, meantemp), linestyle = 'dotted' )
+            plt.plot(k, demand, label='{}, {:.2f} {}C'.format(day, meantemp, degree_sign), linestyle = 'dotted' )
         else:
-            plt.plot(k, demand, label='{}, {:.2f}'.format(day, meantemp) )
+            plt.plot(k, demand, label='{}, {:.2f} {}C'.format(day, meantemp, degree_sign) )
 
     plt.title(title)
     plt.xlabel('Hour of the day', fontsize=15)

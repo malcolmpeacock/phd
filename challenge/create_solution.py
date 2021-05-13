@@ -49,8 +49,6 @@ print('Reading demand from {}'.format(demand_filename) )
 demand = pd.read_csv(demand_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 demand['k'] = utils.index2ks(demand.index)
 
-#print(demand)
-
 # pv data
 pv_filename = '{}pv_forecast_{}.csv'.format(input_dir, dataset)
 print('Reading pv from {}'.format(pv_filename) )
@@ -70,15 +68,12 @@ pv['average'] = gf
 solution = pv.copy()
 solution['charge_MW'] = 0.0
 solution['k'] = utils.index2ks(solution.index)
-#print(solution)
-#print(solution.columns)
 
 # For each day ...
 days = solution.resample('D', axis=0).mean().index
 for day in days:
     print('Creating solution for day: {}'.format(day) )
     pv_day = pv[day : day + pd.Timedelta(hours=23,minutes=30)].copy()
-#   print(pv_day)
 
     # get charging pattern
     cpoints = utils.charge_points(pv_day)
@@ -94,11 +89,7 @@ for day in days:
     cs_ghi = pv_day[pv_day['k'] < 32]['cs_ghi']
     pv_max = cs_ghi * 0.8 * 5.0 * 0.002
     pv_max = pv_max.loc[cpoints.index]
-#   print(pv_max)
-#   print(cpoints)
     charge_points = np.minimum(cpoints, pv_max)
-#   print('After removing pv_max')
-#   print(charge_points)
 
     # if the charge pattern didn't fully charge, then top up a bit
     points_sum = np.sum(charge_points)
@@ -110,7 +101,7 @@ for day in days:
     addition = 1.0
     while remaining > 0.0001 and addition > 0.0001:
         topup = remaining / npoints
-        print('Day {} Remaining {} topup {} npoints {}'.format(day, remaining, topup, npoints) )
+#       print('Day {} Remaining {} topup {} npoints {}'.format(day, remaining, topup, npoints) )
         # top charge values from remaining for each k period
         for i in range(len(charge_points)):
             k = i+1
@@ -129,7 +120,7 @@ for day in days:
 #       print(charge_points)
 
     if addition<=0.0001:
-        print('WARNING: topup failed!! remaining {} adding more'.format(remaining))
+        print('WARNING: did not top up with max PV. remaining {} adding more to other times of day'.format(remaining))
         for i in range(len(charge_points)):
             if charge_points[i] < 2.5:
                 addition = min(2.5 - charge_points[i], remaining)

@@ -28,6 +28,11 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVR
 import sklearn.gaussian_process as gp
 from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.experimental import enable_hist_gradient_boosting
+from sklearn.ensemble import HistGradientBoostingRegressor
+import seaborn as sns
+from sklearn.linear_model import LassoCV
 
 # custom code
 import utils
@@ -333,11 +338,40 @@ def forecast_reg(df, forecast, day, method, seed, num_epochs, set_weights):
 # ann - inputs
 def ann_inputs(df, all=False):
     if all:
-        input_columns = ['month', 'season', 'zenith', 'sun1', 'sun2', 'sun3', 'sun4', 'sun5', 'sun6', 'temp1', 'temp2', 'temp3', 'temp4', 'temp5', 'temp6', 'cs_ghi']
+        input_columns = ['month', 'season', 'zenith', 'sun1', 'sun2', 'sun3', 'sun4', 'sun5', 'sun6', 'sunw', 'sunm', 'temp1', 'temp2', 'temp3', 'temp4', 'temp5', 'temp6', 'tempw', 'tempm', 'cs_ghi', 'week']
     else:
+# lasso set - slightly worse
+#       input_columns = ['sun1', 'sun2', 'sun3', 'sun4', 'sun5', 'sun6', 'sunw', 'temp5', 'cs_ghi', 'week']
+# competition set
+#       input_columns = ['month', 'season', 'zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'tempw', 'cs_ghi', 'week']
+# removing week seems to improve things.
         input_columns = ['month', 'season', 'zenith', 'sun1', 'sun2', 'sun5', 'sun6', 'tempw', 'cs_ghi']
     input_df = df[input_columns].copy()
     return input_df
+
+# feature selection
+def forecast_features(df, forecast, day, seed, num_epochs,all):
+    day_df = df[df['zenith'] < 87]
+    # set up inputs
+    input_df = ann_inputs(day_df, all)
+    # set up output
+    output_column = 'pv_power'
+    output = day_df[output_column]
+
+    X = input_df.values
+    y = output.values
+    reg = LassoCV(max_iter=1000)
+    reg.fit(X, y)
+#   print("Best alpha using built-in LassoCV: %f" % reg.alpha_)
+#   print("Best score using built-in LassoCV: %f" %reg.score(X,y))
+    coef = pd.Series(reg.coef_, index = input_df.columns)
+    imp_coef = coef.sort_values()
+    print(imp_coef)
+#   matplotlib.rcParams['figure.figsize'] = (8.0, 10.0)
+#   imp_coef.plot(kind = "barh")
+#   plt.title("Feature importance using Lasso Model")
+#   plt.show()
+    quit()
 
 # support vector regression
 
@@ -529,6 +563,84 @@ def forecast_knn(df, forecast, day):
     probability = 0.8
     forecast.loc[day.strftime('%Y-%m-%d'), 'probability'] = probability
 
+# Random Forest
+
+def forecast_rf(df, forecast, day, seed, num_epochs, all):
+    # don't try to predict pv at night!
+    # ( create the model only using this zenith, but forecast all
+    #   points when making the prediction as the forecast day may 
+    #   have different zenith, and hence different values )
+    day_df = df[df['zenith'] < 87]
+    # set up inputs
+    input_df = ann_inputs(day_df, all)
+
+    # set up output
+    output_column = 'pv_power'
+    output = day_df[output_column]
+
+    X_train = input_df.values
+    y_train = output.values.reshape(len(output), 1)
+
+    print('Creating Regressor ...')
+    reg = RandomForestRegressor(n_estimators=20, random_state=0)
+    print('Fitting model ...')
+    reg.fit(X_train, y_train)
+
+    print('Making prediction ...')
+    # although the model is only trained on day time ( zenith>87)
+    # we forecast the whole day as it doesn't do any harm.
+    forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
+    input_f = ann_inputs(forecast_day, all)
+    X_test = input_f.values
+
+    # prediction
+    sk_pred = reg.predict(X_test)
+    print('Prediction completed ...')
+
+    forecast_day['prediction'] = sk_pred
+    forecast_day.loc[forecast_day['zenith']>87, 'prediction'] = 0.0
+    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = forecast_day['prediction']
+
+
+# Histogram Gradient Booting Regression.
+
+def forecast_hgbr(df, forecast, day, seed, num_epochs, all):
+    # don't try to predict pv at night!
+    # ( create the model only using this zenith, but forecast all
+    #   points when making the prediction as the forecast day may 
+    #   have different zenith, and hence different values )
+    day_df = df[df['zenith'] < 87]
+    # set up inputs
+    input_df = ann_inputs(day_df, all)
+
+    # set up output
+    output_column = 'pv_power'
+    output = day_df[output_column]
+
+    X_train = input_df.values
+    y_train = output.values.reshape(len(output), 1)
+
+    print('Creating Regressor ...')
+    # loss='ls' or 'lad'
+    reg = HistGradientBoostingRegressor(max_iter=500)
+    print('Fitting model ...')
+    reg.fit(X_train, y_train)
+
+    print('Making prediction ...')
+    # although the model is only trained on day time ( zenith>87)
+    # we forecast the whole day as it doesn't do any harm.
+    forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
+    input_f = ann_inputs(forecast_day, all)
+    X_test = input_f.values
+
+    # prediction
+    sk_pred = reg.predict(X_test)
+    print('Prediction completed ...')
+
+    forecast_day['prediction'] = sk_pred
+    forecast_day.loc[forecast_day['zenith']>87, 'prediction'] = 0.0
+    forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = forecast_day['prediction']
+
 # Gradient Booting Regression.
 
 def forecast_gbr(df, forecast, day, seed, num_epochs, all):
@@ -588,6 +700,7 @@ def forecast_gpr(df, forecast, day, seed, num_epochs):
 
     print('Creating kernel ...')
 #   kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.RBF(10.0, (1e-3, 1e3))
+    # if nu is not in 0.5, 1.5, 2.5 it takes longer
     kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.Matern(length_scale=1.0, nu=1.5)
     print('Creating model ...')
     model = gp.GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10, alpha=0.1, normalize_y=False)
@@ -617,7 +730,7 @@ def forecast_gpr(df, forecast, day, seed, num_epochs):
 
 parser = argparse.ArgumentParser(description='Create pv forecast.')
 parser.add_argument('set', help='input data eg set0')
-parser.add_argument('--method', action="store", dest="method", help='Forecasting method: reg2, reg, ann, sday, svr' , default='simple' )
+parser.add_argument('--method', action="store", dest="method", help='Forecasting method: reg2, reg, ann, sday, svr, features' , default='simple' )
 parser.add_argument('--day', action="store", dest="day", help='Day to forecast: set=read the set forecast file, first= first day, last=last day, all=loop to forecast all days based on the others, otherwise integer day' , default='set' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--bad', action="store", dest="bad", help='Fraction of bad weather to remove, default=0.0', type=float, default=0.0)
@@ -709,6 +822,8 @@ for id in range(len(fdays)):
 
         if method == 'svr':
             forecast_svr(history, forecast, day, args.seed, args.epochs, args.all)
+        if method == 'features':
+            forecast_features(history, forecast, day, args.seed, args.epochs, args.all)
 
         if method[0:3] == 'reg':
             losses = forecast_reg(history, forecast, day, method, args.seed, args.epochs, args.sw)
@@ -736,6 +851,10 @@ for id in range(len(fdays)):
             forecast_gpr(history, forecast, day, args.seed, args.epochs)
         if method == 'gbr':
             forecast_gbr(history, forecast, day, args.seed, args.epochs, args.all)
+        if method == 'rf':
+            forecast_rf(history, forecast, day, args.seed, args.epochs, args.all)
+        if method == 'hgbr':
+            forecast_hgbr(history, forecast, day, args.seed, args.epochs, args.all)
 
 #print(forecast)
 

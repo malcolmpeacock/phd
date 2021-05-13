@@ -366,11 +366,11 @@ def charge_points(df):
     csum, points = charge_sum(df, threshold)
 #   move_amount = 0.8 * df['average'].max()
     move_amount = 0.8 * csum
-    print('PV Charge sum: {}'.format(csum))
+#   print('PV Charge sum: {}'.format(csum))
     # whilst difference between sum of generation for demand and capacity
     # is less than limit ...
     while abs(csum - capacity) > limit:
-        print('csum {} threshold {} move_amount {} '.format(csum, threshold, move_amount) )
+#       print('csum {} threshold {} move_amount {} '.format(csum, threshold, move_amount) )
         # move up or down a smaller and smaller bit
         if csum > capacity:
             threshold += move_amount
