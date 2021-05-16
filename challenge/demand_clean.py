@@ -1,5 +1,4 @@
 # python script to clean the demand data
-# the weather
 
 # contrib code
 import sys
@@ -11,6 +10,7 @@ import statsmodels.api as sm
 import argparse
 import numpy as np
 import math
+from sklearn.ensemble import IsolationForest
 
 # custom code
 import utils
@@ -37,24 +37,23 @@ demand = pd.read_csv(demand_filename, header=0, sep=',', parse_dates=[0], index_
 n_missing = utils.missing_times(demand, '30min')
 print('Number of missing demand rows: {}'.format(n_missing) )
 
-# fix zeros
-
-#last_week = demand[low.index - pd.Timedelta(days=7)]
-#last_week.index = low.index
-#print(last_week)
-#demand.update(last_week)
-
-#bad_day = demand['2018-05-10']
-#print(bad_day)
-#previous_day = demand['2018-05-09']
-#previous_day.index = bad_day.index
-#print(previous_day)
-#demand.update(previous_day)
+clf = IsolationForest(random_state=0).fit_predict(demand.values.reshape(-1,1))
+print(clf)
+days = pd.Series(demand.index.date).unique()
+count=0
+for day in days:
+    d_clf = clf[count:count+48+1] 
+    print(day, np.count_nonzero(d_clf == -1) )
+    count+=48
 
 mean_demand = demand.mean()
+std_demand = demand.std()
+new_low = mean_demand - 3*std_demand
+new_high = mean_demand + 3*std_demand
 low_threshold = mean_demand * 0.01
 high_threshold = mean_demand * 2.0
 print('Mean demand : {} Low threshold {} High threshold {}'.format(mean_demand, low_threshold, high_threshold) )
+print('Mean demand : {} New Low       {} New High       {}'.format(mean_demand, new_low, new_high) )
 
 # fix low values
 low = demand[demand < low_threshold]
@@ -92,22 +91,6 @@ for day in high_days:
         day_to_fix = day_to_fix.interpolate()
         demand.loc[day_str] = day_to_fix.values
 
-# replace a suspect days with different ones.
-if dataset[0:3]=='set':
-#   utils.replace_day(demand, '2018-05-10', '2018-05-09')
-#   utils.replace_day(demand, '2018-05-11', '2018-05-12')
-    print('Dropping days 2018-05-08 2018-05-09')
-    # drop because of small values
-#   demand.drop(demand['2018-05-08'].index, inplace=True)
-#   demand.drop(demand['2018-05-09'].index, inplace=True)
-    # drop because of large values
-#   demand.drop(demand['2018-05-10'].index, inplace=True)
-#   demand.drop(demand['2018-05-11'].index, inplace=True)
-#   demand.drop(demand['2018-11-04'].index, inplace=True)
-    # replace low values
-#   demand['2020-02-28 07:30:00'] = demand['2020-02-08 07:00:00']
-#   demand['2020-03-17 12:00:00'] = demand['2020-03-17 11:30:00']
-#   demand['2020-03-17 12:30:00'] = demand['2020-03-17 13:00:00']
 print('Low demand values')
 low = demand[demand < low_threshold]
 print(low)

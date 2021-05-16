@@ -145,6 +145,29 @@ def print_peak_metric(actual, predicted):
         plt.legend(loc='lower left', fontsize=15)
         plt.show()
 
+# pytorch loss function for 1-R ( Pearson correlation )
+def loss_1mr(X,Y):
+    vx = X - torch.mean(X)
+    vy = Y - torch.mean(Y)
+    lossn = torch.sum(vx * vy) / (torch.sqrt(torch.sum(vx ** 2)) * torch.sqrt(torch.sum(vy ** 2)))
+
+    return 1.0 - lossn
+
+# loss function for difference
+def loss_diff(X,Y):
+#   print(X)
+#   print(Y)
+    diff =  X - Y
+#   print(diff)
+#   dmax =  torch.max(diff,1)
+#   print(dmax)
+#   dmin =  torch.min(diff,1)
+#   print(dmin)
+#   lossn =  dmax - dmin
+    lossn = torch.var(diff,1).sum()
+#   print(lossn)
+#   quit()
+    return lossn
 
 # loss function for weighted L1
 def loss_wl1(X,Y,W):
@@ -592,6 +615,9 @@ def forecast_nreg(df, forecast, day, seed, num_epochs, alg):
             model = SimpleNet(num_inputs, num_outputs, 1400)
 #           loss_fn = F.l1_loss
             loss_fn = loss_maxw
+#           loss_fn = loss_1mr
+#           loss_fn = loss_diff
+#           batch_size = 1
         else:
             loss_fn = F.l1_loss
             model = nn.Linear(num_inputs, num_outputs)
