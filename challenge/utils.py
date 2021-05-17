@@ -10,6 +10,33 @@ from scipy.optimize import minimize
 from scipy.optimize import Bounds
 from datetime import date
 
+# convert to slopes:
+#   k       - period
+#   dsk_df  - data for the period
+#   dsk_df1 - data for the previous period
+def to_slopes(k, dsk_df, dsk_df1):
+    dsk_df_copy = dsk_df.copy()
+    if k>32:
+        diffs = dsk_df['demand'].values - dsk_df1['demand'].values
+        dsk_df_copy['demand'] = diffs
+    return dsk_df_copy
+
+# reverse to_slopes
+def from_slopes(k, dsk_df, dsk_df1):
+    dsk_df_copy = dsk_df.copy()
+    if k>32:
+        sums = dsk_df['demand'].values + dsk_df1['demand'].values
+        dsk_df_copy['demand'] = sums
+    return dsk_df_copy
+
+# convert from slopes
+def series_from_slopes(series):
+    demand = series.values
+    for k in range(48):
+        if k>31 and k<42:
+            demand[k] = demand[k-1] + demand[k]
+    series.update(demand)
+
 # get k for a single index value
 def index2k(index):
     k = (index.hour * 2) + (index.minute / 30) + 1
@@ -521,6 +548,8 @@ def discharge_pattern(battery, demand):
     res = minimize(discharge_peak, x0, args=demand, method='SLSQP', options={'disp': False, 'maxiter':200, 'ftol':1e-11}, constraints=cons, bounds=Bounds(-2.5,0.0) )
     return res.x
 
+# function to process the day option for demand and pv to determine which
+# data to use and which days to forecast
 def set_forecast_days(day_opt, forecast, df, nnear, parm):
     int_day = False
     if day_opt != 'set':

@@ -195,7 +195,7 @@ parser = argparse.ArgumentParser(description='Merge and augment data.')
 parser.add_argument('set', help='weather file eg set0')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--raw', action="store_true", dest="raw", help='Use the original uncorrected data', default=False)
-parser.add_argument('--fix', action="store_true", dest="fix", help='Add the missing days back by forecasting', default=False)
+parser.add_argument('--fix', action="store_true", dest="fix", help='Add the missing days back by forecasting', default=True)
 
 args = parser.parse_args()
 dataset = args.set
@@ -288,8 +288,8 @@ if args.fix:
         # get the mean demand pattern from those
         new_day = utils.create_day(closest_days.index, df, 'demand')
         df.loc[day.strftime('%Y-%m-%d'), 'demand'] = new_day['demand'].values
-        print('FIXED DAY')
-        print(df.loc[day.strftime('%Y-%m-%d')] )
+#       print('FIXED DAY')
+#       print(df.loc[day.strftime('%Y-%m-%d')] )
     #   Get the days missing pv values.
     missing = df[df['pv_power'].isna()].index
     print('MISSING PV')
@@ -309,8 +309,8 @@ if args.fix:
         df.loc[day.strftime('%Y-%m-%d'), 'pv_ghi'] = new_day['pv_ghi'].values
         new_day = utils.create_day(closest_days.index, df, 'pv_temp')
         df.loc[day.strftime('%Y-%m-%d'), 'pv_temp'] = new_day['pv_temp'].values
-        print('FIXED DAY')
-        print(df.loc[day.strftime('%Y-%m-%d')] )
+#       print('FIXED DAY')
+#       print(df.loc[day.strftime('%Y-%m-%d')] )
 
 else:
     # stick it all together

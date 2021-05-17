@@ -41,10 +41,13 @@ clf = IsolationForest(random_state=0).fit_predict(demand.values.reshape(-1,1))
 print(clf)
 days = pd.Series(demand.index.date).unique()
 count=0
+removed=0
 for day in days:
     d_clf = clf[count:count+48+1] 
-    print(day, np.count_nonzero(d_clf == -1) )
+#   print(day, np.count_nonzero(d_clf == -1) )
     count+=48
+    removed+=np.count_nonzero(d_clf == -1)
+print('Isolation Forrest would remove {} of {}'.format(removed, count) )
 
 mean_demand = demand.mean()
 std_demand = demand.std()
@@ -54,6 +57,8 @@ low_threshold = mean_demand * 0.01
 high_threshold = mean_demand * 2.0
 print('Mean demand : {} Low threshold {} High threshold {}'.format(mean_demand, low_threshold, high_threshold) )
 print('Mean demand : {} New Low       {} New High       {}'.format(mean_demand, new_low, new_high) )
+low_threshold = new_low
+high_threshold = new_high
 
 # fix low values
 low = demand[demand < low_threshold]

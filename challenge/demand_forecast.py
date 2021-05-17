@@ -72,12 +72,15 @@ def select_features(input_df,output,plot):
 
 # using sklearn GPR to predict the demand for one k period
 
-def period_gpr(input_df, output, input_f):
+def period_gpr(input_df, output, input_f, slope):
     X_train = input_df
     y_train = output
     X_test = input_f
 #   kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.RBF(10.0, (1e-3, 1e3))
-    kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.RBF(10.0, (1e-3, 1e8))
+    if slope:
+        kernel = gp.kernels.ConstantKernel(1.0, (1e-2, 1e3)) * gp.kernels.RBF(10.0, (1e-3, 1e13))
+    else:
+        kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.RBF(10.0, (1e-3, 1e8))
     model = gp.GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10, alpha=0.1, normalize_y=False, random_state=0)
 
     model.fit(X_train, y_train)
@@ -111,7 +114,7 @@ def period_rf(input_df, output, input_f):
     X_train = input_df
     y_train = output
     X_test = input_f
-    regressor = RandomForestRegressor(n_estimators=20, random_state=0)
+    regressor = RandomForestRegressor(n_estimators=100, random_state=0)
     regressor.fit(X_train, y_train)
     y_pred = regressor.predict(X_test)
 #   print(y_pred)
@@ -743,7 +746,7 @@ def forecast_pub_hol(dsk_df, dsk_f, plot):
 #        regd  - only look at same day type
 #        regs  - model per season, dtype as a flag
 
-def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ka, alg, wl, ploss):
+def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ka, alg, wl, ploss, slope):
     pred_values=[]
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     # look for days of similar type.
@@ -779,6 +782,7 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ka, 
     dfd['doydiff'] = doy_diff
     forecast_day['doydiff'] = 0.0
 
+
     if period == all:
         # for each k period, train a seperate model ...
         for index, row in forecast_day.iterrows():
@@ -797,7 +801,11 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ka, 
                 else:
                     dsk_df = dfd[dfd['dsk'] == dsk]
                     dsk_df1 = dfd[dfd['dsk'] == dsk - 1]
-                    prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ka, alg, wl, dsk_df1, dsk_f1)
+                    if slope:
+                        dsk_df = utils.to_slopes(row['k'], dsk_df, dsk_df1)
+                    prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ka, alg, wl, dsk_df1, dsk_f1, slope)
+                    if slope:
+                        dsk_df = utils.from_slopes(row['k'], dsk_df, dsk_df1)
                 if alg != 'features':
                     if math.isnan(prediction_values):
                         print('WARNING NaN replaced by interpolation at period {}'.format(row['k']))
@@ -826,6 +834,8 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ka, 
             pred_series = pred_series.fillna(method='ffill')
             # Replace any NaNs in the middle by interpolation.
             pred_series = pred_series.interpolate()
+            if slope:
+                utils.series_from_slopes(pred_series)
             forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = pred_series
     else:
         dsk = int(period)
@@ -838,11 +848,11 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ka, 
         else:
             dsk_df = dfd[dfd['dsk'] == dsk]
             dsk_df1 = dfd[dfd['dsk'] == dsk - 1]
-            prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ka, alg, wl, dsk_df1, dsk_f1)
+            prediction_values = forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ka, alg, wl, dsk_df1, dsk_f1, slope)
         print('Predicted value {} for period {}'.format(prediction_values, period))
         quit()
 
-def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ka, alg, wl, dsk_df1, dsk_f1):
+def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ka, alg, wl, dsk_df1, dsk_f1, slope):
     lagged = []
     # set up inputs
     if method == 'regd':
@@ -929,7 +939,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ka, 
             return prediction_values[0]
         else:
             if alg == 'gpr':
-                prediction_values = period_gpr(input_df, output, input_f)
+                prediction_values = period_gpr(input_df, output, input_f, slope)
                 return prediction_values
             else:
                 if alg == 'rf':
@@ -1158,6 +1168,7 @@ parser.add_argument('--method', action="store", dest="method", help='Forecasting
 parser.add_argument('--day', action="store", dest="day", help='Day to forecast: set=read the set forecast file, first= first day, last=last day, all=loop to forecast all days based on the others, otherwise integer day' , default='set' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--ploss', action="store_true", dest="ploss", help='Plot the loss', default=False)
+parser.add_argument('--slope', action="store_true", dest="slope", help='Use slopes', default=False)
 parser.add_argument('--alg', action="store", dest="alg", help='Algorithm: linear, ann, svm' , default='linear' )
 parser.add_argument('--mname', action="store_true", dest="mname", help='Name the output file using the method', default=False)
 parser.add_argument('--seed', action="store", dest="seed", help='Random seed, default=1.0', type=float, default=1.0)
@@ -1168,6 +1179,7 @@ parser.add_argument('--period', action="store", dest="period", help='Period k to
 parser.add_argument('--step', action="store", dest="step", help='If using days=all or step only do every step days', type=int, default=1)
 parser.add_argument('--use', action="store", dest="use", help='Number of days data to use, 0=all', type=int, default=0)
 parser.add_argument('--ka', action="store_true", dest="ka", help='Forecast all K (default is only k of interest)', default=False)
+parser.add_argument('--window', action="store", dest="window", help='Rolling window of days data to use, 0=all', type=int, default=0)
 
 args = parser.parse_args()
 method = args.method
@@ -1220,11 +1232,24 @@ for id in range(len(fdays)):
         forecast.drop(forecast.loc[day_text].index, inplace=True)
     else:
 
-        # drop this day from main data
+        # if forecasting a competition week, just copy the data.
         if args.day == 'set':
             history = df.copy()
         else:
-            history = df.drop(df.loc[day_text].index).copy()
+            # drop this day and anything following from the history
+            if args.window > 0:
+                window_end = df.index.get_loc(day_start)
+                window_start = window_end - args.window * 48
+                print(window_end, window_start)
+                if window_start>=0:
+                    history = df.iloc[window_start:window_end].copy()
+                    print(history)
+                else:
+                    print('ERROR: window start negative')
+                    quit()
+            # drop this day from main data
+            else:
+                history = df.drop(df.loc[day_text].index).copy()
 
         # Naive Demand forecast based on same as last week
         if method == 'naive':
@@ -1239,7 +1264,7 @@ for id in range(len(fdays)):
             forecast_closest_days(history, forecast, day, method)
 
         if method[0:3] == 'reg':
-            forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ka, args.alg, args.wl, args.ploss)
+            forecast_reg(history, forecast, day, method, args.plot, args.seed, args.epochs, args.period, args.ka, args.alg, args.wl, args.ploss, args.slope)
 
         if method == 'svr':
             forecast_svr(df, forecast, day)
