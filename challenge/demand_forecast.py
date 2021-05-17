@@ -802,7 +802,7 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ka, 
                 dsk_f1 = forecast_day[forecast_day['dsk'] == dsk -1]
                 # if pub hol or christmas then we don't have enough so interp
                 if fd_type >= 7:
-                    dfd = df[df['dtype'] >= fd_type]
+                    dfd = df[df['dtype'] >= 7]
                     dsk_df = dfd[dfd['dsk'] == dsk]
                     prediction_values = forecast_pub_hol(dsk_df, dsk_f, ploss)
                 else:
