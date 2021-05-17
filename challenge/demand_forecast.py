@@ -9,6 +9,7 @@ from datetime import timedelta
 from datetime import date
 import pytz
 import matplotlib.pyplot as plt
+import matplotlib
 import statsmodels.api as sm
 import argparse
 import numpy as np
@@ -589,6 +590,11 @@ def forecast_nreg(df, forecast, day, seed, num_epochs, alg):
     input_f = reg_inputs(forecast_day, previous_day, alg)
 #   print(input_f)
 
+    if alg == 'features':
+        features = select_features(input_df,output_df['demand38'],True)
+        print(features)
+        quit()
+
     if alg == 'svr':
         prediction_values = multi_svr(input_df, output_df, input_f)
         vals = prediction_values[0]
@@ -712,6 +718,7 @@ def set_weight(dfd, forecast_day):
 def forecast_pub_hol(dsk_df, dsk_f, plot):
     demands = dsk_df['demand'].values
     temps = dsk_df['tempm'].values
+    print('len', len(demands))
     # Fit line through the points - the add constant bit gives us 
     # the intercept as well as the gradient of the fit line.
     rmodel = sm.OLS(demands, sm.add_constant(temps))
@@ -795,7 +802,7 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ka, 
                 dsk_f1 = forecast_day[forecast_day['dsk'] == dsk -1]
                 # if pub hol or christmas then we don't have enough so interp
                 if fd_type >= 7:
-                    dfd = df[df['dtype'] == fd_type]
+                    dfd = df[df['dtype'] >= fd_type]
                     dsk_df = dfd[dfd['dsk'] == dsk]
                     prediction_values = forecast_pub_hol(dsk_df, dsk_f, ploss)
                 else:
@@ -876,11 +883,10 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ka, 
         nhidden = 20
 
     if method == 'regm':
-# sunw causes nans in predicition? 
-#       input_columns = ['tempm', 'zenith', 'holiday', 'nothol', 'tsqd', 'th', 'tnh', 'sunw', 'sh']
-# this is ok, but a bit worse
-#       input_columns = ['tempm', 'zenith', 'holiday', 'nothol', 'tsqd', 'th', 'tnh', 'sunw']
-        input_columns = ['tempm', 'sun2', 'holiday', 'nothol', 'season', 'zenith']
+        if alg == 'features':
+            input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'doydiff', 'tempdb', 'sun1', 'sun2', 'sun3', 'sun4', 'sun5', 'sun6', 'sunw', 'temp1', 'temp2', 'temp3', 'temp4', 'temp5', 'temp6', 'cs_ghi', 'season']
+        else:
+            input_columns = ['zenith', 'doydiff', 'tempdb', 'tempyd', 'dailytemp', 'ts']
         # days of the week 1-0 flags
         for wd in range(7):
             wd_key = 'wd{}'.format(wd)
@@ -903,12 +909,12 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ka, 
         if alg == 'features':
 #           input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'doydiff', 'tempdb']
             input_columns = ['tempm', 'sunm', 'ph', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'doydiff', 'tempdb', 'sun1', 'sun2', 'sun3', 'sun4', 'sun5', 'sun6', 'sunw', 'temp1', 'temp2', 'temp3', 'temp4', 'temp5', 'temp6', 'cs_ghi']
+            lagged = ['tempm']
         else:
             input_columns = ['tempm', 'sunm', 'zenith', 'tsqd', 'ts', 'month', 'tm', 'weight', 'sh', 'dailytemp', 'lockdown', 'tempyd', 'doydiff', 'tempdb']
-        # variables from the previous period - doesn't seem to make any
-        # difference
-        #lagged = ['tempm']
-        lagged = []
+            # variables from the previous period - doesn't seem to make any
+            # difference
+            lagged = []
         # days of the week 1-0 flags
         for wd in range(7):
             wd_key = 'wd{}'.format(wd)
