@@ -55,6 +55,8 @@ print(df)
 print ('Reading building files ...')
 advm_dir = '/home/malcolm/uclan/data/advanced_metering/'
 
+daily_usage = {}
+
 # for each building file ....
 for name in glob.glob(advm_dir + '*.csv'):
     filename = os.path.basename(name)
@@ -78,8 +80,15 @@ for name in glob.glob(advm_dir + '*.csv'):
     ones = house_heat * 0.0 + 1.0
     ones = ones.reindex(df.index, fill_value = 0.0)
     ones = ones.rename('ones')
-#   print(ones)
-#   print(ones.loc['2004-06-01'])
+    # set for no heating on sundays - some of them have some heating so
+    # this doesn't really solve the issue
+#   ones.loc[df.index.dayofweek == 6] = 0.0
+    # store daily usage to work out what happens at weekends
+    daily_usage[location] = []
+    for d in range(7):
+        du = house_heat[house_heat.index.dayofweek == d]
+        daily_usage[location].append(du.sum() / total_heat)
+
     house_heat = house_heat.reindex(df.index,fill_value = 0.0)
 #   print(house_heat)
 #   print(house_heat.loc['2004-06-01'])
@@ -94,6 +103,21 @@ for name in glob.glob(advm_dir + '*.csv'):
     df['gas'] = df['gas'] + house_heat
 
 print(df)
+day_totals=[]
+for d in range(7):
+    day_totals.append(0)
 
 output_dir = "/home/malcolm/uclan/data/advanced_metering/testing/"
 df.to_csv(output_dir + 'methods.csv')
+
+print('Location Monday Tuesday Wednesday Thursday Friday Saturday Sunday')
+for location,days in daily_usage.items():
+    print('{} '.format(location), end='')
+    for d in range(7):
+        day_totals[d] += days[d]
+        print('{:.2f}    '.format(days[d]), end='' )
+    print(' ')
+print('Total   ', end='')
+for d in range(7):
+    print('{:.2f}    '.format(day_totals[d]), end='' )
+print(' ')

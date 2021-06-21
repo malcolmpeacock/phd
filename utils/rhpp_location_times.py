@@ -43,12 +43,15 @@ plt.ylabel('Monitored properties', fontsize=15)
 plt.xlabel('Day of the year')
 plt.show()
 
-# drop columns
-df = df.drop(['nans_tin', 'nans_tsf', 'nans_Hhp', 'nans_Ehp'], axis=1)
-#df = df.drop([0], axis=1)
-# find locations active during 2014
-started_before_2014 = df[df['start'] < '2014-01-01 00:00:00']
-print(started_before_2014)
-in_2014 = started_before_2014['end'] > '2014-12-31 23:00:00'
-print(in_2014)
-print(in_2014.index[in_2014])
+# plot a single line showing when each house was monitored
+df.sort_values(by='start', ascending=True, inplace=True, axis=0)
+df.reset_index(drop=True, inplace=True)
+print(df)
+for index, row in df.iterrows():
+    x = [ row['start'], row['end'] ]
+    y = [ index, index ]
+    plt.plot(x,y)
+plt.ylabel('House number', fontsize=15)
+plt.xlabel('Day of the year')
+plt.title('RHPP Heat pump trial - monitoring periods')
+plt.show()

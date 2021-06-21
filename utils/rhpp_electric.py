@@ -1,5 +1,5 @@
 # python script to use the rhpp heat pump data to and the COP time series 
-# from heat_serier to generate an electricity demand time series to compare
+# from heat_series to generate an electricity demand time series to compare
 # with the real one.
 
 # library stuff

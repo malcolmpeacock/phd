@@ -97,8 +97,8 @@ def read_gas(filename):
     # gas = gas.resample('D').mean()
     gas = gas.resample('D').mean()
     # get smallest values to check for missing data
-    print('GAS: SMALLEST')
-    print(gas.nsmallest())
+#   print('GAS: SMALLEST')
+#   print(gas.nsmallest())
     # replace zeros with NaN
     gas = gas.replace(0.0, float("NaN"))
     # replace missing values (NaN) by interpolation
@@ -230,6 +230,7 @@ def read_rhpp(filename, location):
 #   print('Start {} End {} Nans Hhp {} Ehp {} Tin {} Tsf {}'.format(start, end, heat_nans, elec_nans, tin_nans, tsf_nans) )
     analysis = { 'start' : start, 'end': end, 'nans_Hhp': heat_nans, 'nans_Ehp': elec_nans, 'nans_tin': tin_nans, 'nans_tsf': tsf_nans, 'location' : location }
     rhpp = rhpp.interpolate()
+    # the units are Wh per 2 mins - so just summing should be ok? right?
     rhpp = rhpp.resample('H').sum()
     
     return rhpp, analysis

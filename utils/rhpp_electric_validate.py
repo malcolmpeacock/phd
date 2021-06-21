@@ -40,8 +40,37 @@ def cop_plot(df_cop, hp):
     plt.show()
 
 # cop calculation
+#   df
+#   hp
+#   sink_time
+#   source_name  = variable name for source temperature
 def cop(df, hp, sink_temp,source_name):
     df_hp = df[[source_name, 'elec_'+hp, 'heat_'+hp]]
+    # only include points where there is some electricity
+    # put in some minimum as it may consume some when not heating?
+    df_hp = df_hp[ df_hp['elec_'+hp] > 200.0]
+    print('{} SMALL'.format(hp) )
+    print(df_hp['elec_'+hp].nsmallest() )
+    print(df_hp['elec_'+hp].nlargest() )
+    df_hp = df_hp[ df_hp['heat_'+hp] > 200.0]
+    df_hp['deltat'] = (df_hp[source_name] * -1.0) + sink_temp
+    df_hp['cop'] = df_hp['heat_'+hp] / df_hp['elec_'+hp]
+#   df_hp = df_hp.sort_values('deltat', axis=0)
+    print('{} {} mean cop {}'.format(hp, source_name, df_hp['cop'].mean() ))
+    return df_hp
+
+# daily cop calculation
+#   df
+#   hp
+#   sink_time
+#   source_name  = variable name for source temperature
+def daily_cop(df, hp, sink_temp,source_name):
+    source_temp = df[source_name].resample('D').mean()
+    elec = df['elec_'+hp].resample('D').sum()
+    heat = df['heat_'+hp].resample('D').sum()
+ 
+    df_hp = pd.concat([source_temp, elec, heat], axis=1,keys=[source_name, 'elec_'+hp, 'heat_'+hp ])
+    print(df_hp)
     # only include points where there is some electricity
     # put in some minimum as it may consume some when not heating?
     df_hp = df_hp[ df_hp['elec_'+hp] > 200.0]
@@ -85,32 +114,16 @@ plt.ylabel('Electricity Demand (kWh)', fontsize=15)
 plt.legend(loc='upper right', fontsize=15)
 plt.show()
 
-# cop calculation
-df_ashp = df[['temperature', 'elec_ASHP', 'heat_ASHP']]
-df_ashp = df_ashp[ df_ashp['elec_ASHP'] > 0.0]
-df_ashp['deltat'] = (df_ashp['temperature'] * -1.0) + 40.0
-df_ashp['cop'] = df_ashp['heat_ASHP'] / df_ashp['elec_ASHP']
-df_ashp = df_ashp.sort_values('deltat', axis=0)
+# ASHP
 
-
-# fit a regression line through the cops
-rmodel = sm.OLS(df_ashp['cop'].to_numpy(), sm.add_constant(df_ashp['deltat'].to_numpy()))
-residual_results = rmodel.fit()
-res_const = residual_results.params[0]
-res_grad = residual_results.params[1]
-x = np.array([df_ashp['deltat'].min(),df_ashp['deltat'].max()])
-y = res_const + res_grad * x
-
-plt.scatter(df_ashp['deltat'], df_ashp['cop'], s=12)
-plt.plot(x, y, color='red')
-plt.title('RHPP ASHP COP vs DELTA T')
-plt.xlabel('Temperature Difference (degrees C)')
-plt.ylabel('COP')
-plt.show()
+df_ashp = cop(df,'ASHP',40.0, 'temperature')
+#df_gshp = daily_cop(df,'GSHP',40.0, 'soiltemp')
+cop_plot(df_ashp, 'ASHP')
 
 # GSHP
 
 df_gshp = cop(df,'GSHP',40.0, 'soiltemp')
+#df_gshp = daily_cop(df,'GSHP',40.0, 'soiltemp')
 cop_plot(df_gshp, 'GSHP')
 
 # convert to daily
@@ -127,6 +140,8 @@ print("Total Real {} Synthetic {} Percentage {}".format(total_real, total_synthe
 
 # output plots
 
+print('COLUMNS')
+print(dfd.columns)
 dfd['synthetic'].plot(label='Synthetic Electicity Time Series', color='blue')
 dfd['real'].plot(label='Real Electicity Time Series', color='red')
 plt.title('Comparison of daily synthetic electric and measured heat pump')
@@ -164,16 +179,16 @@ for hour in range(0,24):
     means['profile'] = means['heat_GSHP'] * 0.1 + means['heat_ASHP'] * 0.9
     # replace NaNs at start and end with nearest values
     profile = means['profile'].fillna(method='bfill').fillna(method='ffill')
-    print(profile)
+#   print(profile)
     hours[str(hour)] = profile
 
 df = pd.DataFrame(data=hours)
 df.index = range(-15,35,5)
-print(df)
+# print(df)
 # swap rows and columns
 df = df.transpose()
 df.index = pd.Index( "{:02d}:00".format(i) for i in range(0,24,1) )
-print(df)
+# print(df)
 
 # normalize
 for column in df:

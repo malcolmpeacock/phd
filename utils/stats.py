@@ -82,8 +82,10 @@ def print_stats(heat, gas, method, nvars=1, plot=False, xl='Heat Demand (from th
     adjusted_rsquared = 1 - ( (1-rsquared)*(n-1) / ( n - k - 1) )
     # predicted R squared
     pr2 = predicted_r2(gas.to_numpy(), fit.to_numpy(), model.exog)
+    # max
+    peak = heat.max() / gas.max()
     # output results
-    print(' {0:15} {1:.2f}    {2:.2f} {3:.2f}   {4:.3f}    {5:.2f}     {6:.2f}   {7:.4f}   {8:.2f}      {9:.3f}        {10:.3f}'. format(method, corr, rmse, nrmse, rsquared, hvar, gvar, res_grad, res_const, adjusted_rsquared, pr2))
+    print(' {0:15} {1:.2f}    {2:.2f} {3:.2f}   {4:.3f}    {5:.2f}     {6:.2f}   {7:.4f}   {8:.2f}      {9:.3f}        {10:.3f}     {11:.3f}'. format(method, corr, rmse, nrmse, rsquared, hvar, gvar, res_grad, res_const, adjusted_rsquared, pr2, peak))
 
 #   all the regression details
 #   print(results.summary())
@@ -117,7 +119,7 @@ def print_stats(heat, gas, method, nvars=1, plot=False, xl='Heat Demand (from th
         plt.show()
 
 def print_stats_header():
-    print(' Method      Correlation RMSE NRMSE R-SQUARED Variance Gas   ResGrad   ResConst Adj-R-SQUARED Pred-R-SQUARED')
+    print(' Method      Correlation RMSE NRMSE R-SQUARED Variance Gas   ResGrad   ResConst Adj-R-SQUARED Pred-R-SQUARED Max')
 
 def print_large_small(heat, gas, method):
     # smallest and largest diffs
@@ -130,3 +132,25 @@ def print_large_small(heat, gas, method):
 def normalize(s):
     s = s * ( 1 / s.max() )
     return s
+
+def monthly_stats(s1,s2,name):
+    errs=[]
+    print('{: <8} '.format(name), end='')
+    for m in range(12):
+        m1 = s1[s1.index.month==m+1]
+        m2 = s2[s2.index.month==m+1]
+        # Root Mean Square Error (RMSE)
+        rmse = ( ( m1 - m2 ) **2 ).mean() ** .5
+        average = s1.mean()
+        # Normalised Root Mean Square Error (nRMSE)
+        nrmse = rmse / average
+        print('{:.2f}  '.format(nrmse), end='' )
+        errs.append(nrmse)
+    print(' ')
+    return errs
+
+def monthly_stats_header():
+    print('Method ', end='')
+    for m in range(12):
+        print('  {}   '.format(m+1), end='' )
+    print(' ')

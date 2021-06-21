@@ -1,6 +1,6 @@
 # python script to create a net demand time series
-# from an input (PV Wind) generation series and an input electric (heat)
-# hourly time series. Then look at storage impact.
+# from an input (PV Wind) generation series and an electric (heat)
+# daily time series generated from gas. Then look at storage impact.
 
 # library stuff
 import sys
@@ -16,13 +16,60 @@ import readers
 from misc import upsample_df
 
 # main program
-# demand_filename = '/home/malcolm/uclan/tools/python/output/2018/heatCopRef2018weather2018HDD15.5.csv'
-# demand_filename = '/home/malcolm/uclan/tools/python/output/2018/heatCopRef2018weather2018Ruhnau.csv'
-# demand_filename = '/home/malcolm/uclan/tools/python/output/2018/heatCopRef2018weather2018Watson.csv'
-# demand_filename = '/home/malcolm/uclan/tools/python/output/2018/Ref2018Weather2018Sbdew.csv'
-# demand_filename = '/home/malcolm/uclan/tools/python/output/2018/Ref2018Weather2018Sbdew.csv'
-demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/2018/Ref2018Weather2018Rbdew.csv'
+weather_year = '2018'
+gas_filename = '/home/malcolm/uclan/data/GasLDZOfftakeEnergy' + weather_year + '.csv'
 supply_filename = '/home/malcolm/uclan/data/ElectricityDemandData_2018.csv'
+demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/2018/Ref2018Weather2018Rbdew.csv'
+
+# read the cop from the heatandcop ouput
+demand = readers.read_copheat(demand_filename, ['ASHP_floor','ASHP_radiator','ASHP_water','GSHP_floor','GSHP_radiator','GSHP_water'])
+
+# convert to daily
+demand = demand.resample('D').mean()
+print(demand)
+
+# read the gas
+gas = readers.read_gas(gas_filename)
+
+# convert to TWh
+gas = gas * 1e-9
+print(gas)
+
+# scale gas by 0.8 to convert to heat
+gas = gas * 0.8
+
+# scale by the annual demand as per the paper
+annual_space = 191 + 56
+annual_water = 56 + 9
+
+# space and water split?
+#space_proportion = 
+# how can we split the gas time series into space and water to apply the COP?
+
+# multiply by cop in proportion for ashp etc to get electric
+sink_radiator = ((temperature - 40.0) * -1.0).clip(15)
+sink_water = temperature*0.0 + 50.0
+dt_radiator = sink_radiator - temperature
+dt_floor = sink_floor - temperature
+dt_water = sink_water - temperature
+# (90%) ASHP = 6.08 - 0.09 DT + 0.0005 DT2
+# space - radiator (90%)
+ashp_space_radiator = space * 0.9 * 0.9 / dt_radiator.apply(cop_ashp)
+# space - floor    (10%)
+ashp_space_floor = space * 0.9 * 0.1 / dt_floor.apply(cop_ashp)
+# water - water    (100%)
+ashp_water = water * 0.9 / dt_water.apply(cop_ashp)
+# (10%) GSHP = 10.29 - 0.21 DT + 0.0012 DT2
+# space - radiator (90%)
+gshp_space_radiator = space * 0.1 * 0.9 / dt_radiator.apply(cop_gshp)
+# space - floor    (10%)
+gshp_space_floor = space * 0.1 * 0.1 / dt_floor.apply(cop_gshp)
+# water - water    (10%)
+gshp_water = water * 0.1 / dt_water.apply(cop_gshp)
+
+electric_heat = ashp_space_radiator + ashp_space_floor + ashp_water + gshp_space_radiator + gshp_space_floor + gshp_water
+print(electric_heat)
+
 
 # read the electricity demand
 demand = readers.read_demand(demand_filename)

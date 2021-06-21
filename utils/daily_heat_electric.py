@@ -40,7 +40,7 @@ def cop_ashp(temperature):
 # demand_filename = '/home/malcolm/uclan/tools/python/output/2018/heatCopRef2018weather2018Ruhnau.csv'
 # demand_filename = '/home/malcolm/uclan/tools/python/output/2018/heatCopRef2018weather2018Watson.csv'
 # demand_filename = '/home/malcolm/uclan/tools/python/output/2018/Ref2018Weather2018Wbdew.csv'
-demand_filename = '/home/malcolm/uclan/tools/python/output/2018/GBRef2018Weather2018I-Sbdew.csv'
+demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/2018/GBRef2018Weather2018I-Sbdew.csv'
 # demand_filename = '/home/malcolm/uclan/tools/python/output/2018/Ref2018Weather2018Sbdew.csv'
 # demand_filename = '/home/malcolm/uclan/tools/python/output/2018/Ref2018Weather2018Rbdew.csv'
 supply_filename = '/home/malcolm/uclan/data/ElectricityDemandData_2018.csv'
@@ -140,6 +140,7 @@ plt.show()
 
 # calculate storage
 store = 0.0
+min_store = 0.0
 eta_charge = 0.75
 eta_discharge = 0.75
 # loop through each hourly value ...
@@ -151,4 +152,6 @@ for index, value in net_demand.items():
     # note: value is negative, so we are adding here!
     else:
         store = store - value * eta_charge
-print('Storage {:.2f} TWh'.format(store/1000.0))
+    if min_store>store:
+        min_store = store
+print('Storage {:.2f} TWh'.format(-min_store/1000.0))
