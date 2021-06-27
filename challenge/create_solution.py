@@ -35,6 +35,8 @@ def peak(c):
 parser = argparse.ArgumentParser(description='Create charging strategy.')
 parser.add_argument('set', help='weather file eg set0')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--perfect', action="store_true", dest="perfect", help='Use actual PV instead of the forecast', default=False)
+parser.add_argument('--capacity', action="store", dest="capacity", help='Battery capacity in 0.5MWhs' , type=float, default=12.0 )
 
 args = parser.parse_args()
 dataset = args.set
@@ -42,6 +44,7 @@ print('Creating soution for set {}'.format(dataset) )
 
 # read in the data
 input_dir = "/home/malcolm/uclan/challenge/output/"
+new_dir = "/home/malcolm/uclan/challenge/input/"
 
 # demand data
 demand_filename = '{}demand_forecast_{}.csv'.format(input_dir, dataset)
@@ -63,6 +66,22 @@ b = gaussian(39, 3)
 gf = filters.convolve1d(pv['prediction'].values, b/b.sum())
 pv['average'] = gf
 
+# create the perfect pv solution from the next set
+if args.perfect:
+    set_num = int(dataset[3:4]) + 1
+    pv_filename = new_dir + 'pv_train_set{}.csv'.format(set_num)
+    pv_new = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+    pv_filename = new_dir + 'pv_train_set{}.csv'.format(set_num-1)
+    pv_old = pd.read_csv(pv_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+    new_start = len(pv_old)
+    if set_num == 5:
+        new_start = 0
+    print('Perfect solution using set {} new_start {}'.format(set_num, new_start))
+#   set forecast to the pv power from the next set.
+    pv['average'] = pv_new['pv_power_mw'].values[new_start:new_start+48*7]
+
+print('PV sum {}'.format(pv['average'].sum()))
+
 # create solution file of zeros
 
 solution = pv.copy()
@@ -83,7 +102,7 @@ for day in days:
     # this is 12 rather than 6 to avoid multiplying by 0.5 all the time
     # ( so its 6 half MWhs )
 #   capacity = 12 - tolerance
-    capacity = 12
+    capacity = args.capacity
 
     # take off anything exceeding the max pv we could have
     cs_ghi = pv_day[pv_day['k'] < 32]['cs_ghi']
@@ -166,7 +185,7 @@ for day in days:
     print('Battery: {} Sum of Charges {}'.format(battery, np.sum(res.x)) )
     solution.loc[solution_krange.index, 'charge_MW'] = res.x
 
-final_score, new_demand = utils.solution_score(solution['charge_MW'], pv['prediction'], demand['prediction'])
+final_score, new_demand = utils.solution_score(solution['charge_MW'], pv['average'], demand['prediction'])
 print('Final Score {}'.format(final_score) )
 
 if args.plot:

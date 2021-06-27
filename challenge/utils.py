@@ -442,7 +442,7 @@ def find_closest(needle, haystack, thresholds, parm):
             quit()
     s = pd.Series(values_in_range)
     prediction = { 'mean' : s.mean(), 'sd' : s.std(), 'n' : len(s) }
-    print(prediction)
+#   print(prediction)
     return prediction
     
 # function to find the closest half hour periods to a given period
@@ -547,6 +547,10 @@ def discharge_pattern(battery, demand):
     x0 = np.array(discharge)
     res = minimize(discharge_peak, x0, args=demand, method='SLSQP', options={'disp': False, 'maxiter':200, 'ftol':1e-11}, constraints=cons, bounds=Bounds(-2.5,0.0) )
     return res.x
+
+def discharge_pattern_simple(battery, demand):
+    pattern = (( demand.sum() + battery ) / len(demand) ) - demand
+    return pattern.clip(-2.5,0.0)
 
 # function to process the day option for demand and pv to determine which
 # data to use and which days to forecast

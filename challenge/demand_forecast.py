@@ -32,7 +32,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.ensemble import GradientBoostingRegressor
 import seaborn as sns
 from sklearn.linear_model import LassoCV, Lasso
-#from sklearn.linear_model import RidgeCV, LassoCV, Ridge, Lasso
+import lightgbm as lgb
 
 # custom code
 import utils
@@ -106,7 +106,23 @@ def period_gbr(input_df, output, input_f):
     print('Fitting model ...')
     model.fit(X_train, y_train)
     sk_pred = model.predict(X_test)
-    print(sk_pred)
+#   print(sk_pred)
+    return sk_pred
+
+# using sklearn LightGBM to predict the demand for one k period
+
+def period_lgbm(input_df, output, input_f):
+    X_train = input_df
+    y_train = output
+    X_test = input_f
+    print('Creating Regressor ...')
+    # num_leaves=31 learning_rate=0.1, n_estimators=100, boosting='gbdt'
+#   model = lgb.LGBMRegressor(num_leaves=41, learning_rate=0.05, n_estimators=200, boosting_type='dart', deterministic=True)
+    model = lgb.LGBMRegressor(num_leaves=31, learning_rate=0.05, n_estimators=200, boosting_type='dart', deterministic=True)
+    print('Fitting model ...')
+    model.fit(X_train, y_train, eval_metric='l1')
+    sk_pred = model.predict(X_test)
+#   print(sk_pred)
     return sk_pred
 
 # using sklearn Random Forest to predict the demand for one k period
@@ -314,7 +330,7 @@ def forecast_closest_day(df, forecast, day):
     days = pd.Series(df.index.date).unique()
     demand_range = forecast['tempm'].max() - forecast['tempm'].min()
     closest_day, closeness = utils.find_closest_day(day, days, forecast, df, 'tempm')
-    print(closest_day)
+#   print(closest_day)
     rows = df.loc[closest_day.strftime('%Y-%m-%d')]
 #       print(rows)
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = rows['demand'].values
@@ -383,14 +399,14 @@ def forecast_svr(df, forecast, day):
     # Step 5: Predict
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     x_f = forecast_day[input_columns].copy().values
-    print(x_f)
+#   print(x_f)
     x_pred = sc_x.transform(x_f)
     y_pred = regressor.predict(x_pred)
     y_pred = sc_y.inverse_transform(y_pred) 
-    print(y_pred)
-    print(len(y_pred))
+#   print(y_pred)
+#   print(len(y_pred))
 
-    print(forecast_day)
+#   print(forecast_day)
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = y_pred
 
 # using SVR to predict the demand for one k period
@@ -465,7 +481,7 @@ def reg_inputs(df_nw1, df_nwn, alg):
     base_columns = ['season', 'week', 'month', 'dailytemp', 'tempyd', 'sh']
     for col in base_columns:
         input_df[col] = dsk_df[col].values
-    print(input_df)
+#   print(input_df)
     return input_df
 
 def forecast_new_inputs(df):
@@ -586,7 +602,7 @@ def forecast_nreg(df, forecast, day, seed, num_epochs, alg):
 
     # set up the values to forecast
     previous_day = utils.get_previous_week_day(dfd, day)
-    print(previous_day)
+#   print(previous_day)
     input_f = reg_inputs(forecast_day, previous_day, alg)
 #   print(input_f)
 
@@ -713,12 +729,12 @@ def set_weight(dfd, forecast_day):
     # subtract from 1 so that higher values have less impact on the loss.
     weight = 1.0 - weight
     dfd['weight'] = weight
-    print(dfd['weight'])
+#   print(dfd['weight'])
 
 def forecast_pub_hol(dsk_df, dsk_f, plot):
     demands = dsk_df['demand'].values
     temps = dsk_df['tempm'].values
-    print('len', len(demands))
+#   print('len', len(demands))
     # Fit line through the points - the add constant bit gives us 
     # the intercept as well as the gradient of the fit line.
     rmodel = sm.OLS(demands, sm.add_constant(temps))
@@ -742,7 +758,7 @@ def forecast_pub_hol(dsk_df, dsk_f, plot):
         plt.show()
 
     f_temp = dsk_f['tempm'].values
-    print(f_temp)
+#   print(f_temp)
     prediction_values = res_const + res_grad * f_temp[0]
     return prediction_values
 
@@ -831,7 +847,9 @@ def forecast_reg(df, forecast, day, method, plot, seed, num_epochs, period, ka, 
             pdf = pd.DataFrame(p_list)
             print(pdf)
             plt.figure(figsize=(12,10))
-            sns.heatmap(pdf, annot=True, cmap=plt.cm.Reds)
+#           sns.heatmap(pdf, annot=True, cmap=plt.cm.Reds, xlabel='Periods of the day (k)')
+            sns.heatmap(pdf, annot=True, cmap=plt.cm.Greys)
+            plt.xlabel('Period of the day (k)', fontsize=15)
             plt.show()
             quit()
         else:
@@ -936,7 +954,7 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ka, 
         features = select_features(input_df,output,plot)
         return features
 
-    if alg == 'svr' or alg == 'gpr' or alg=='rf' or alg=='gbr':
+    if alg == 'svr' or alg == 'gpr' or alg=='rf' or alg=='gbr' or alg=='lgbm':
         input_f = dsk_f[input_columns].copy()
         for lcol in lagged:
             input_f['l'+lcol] = dsk_f1[lcol].values
@@ -952,8 +970,12 @@ def forecast_reg_period(dsk_df, dsk_f, method, plot, seed, num_epochs, dsk, ka, 
                     prediction_values = period_rf(input_df, output, input_f)
                     return prediction_values[0]
                 else:
-                    prediction_values = period_gbr(input_df, output, input_f)
-                    return prediction_values[0]
+                    if alg == 'lgbm':
+                        prediction_values = period_lgbm(input_df, output, input_f)
+                        return prediction_values[0]
+                    else:
+                        prediction_values = period_gbr(input_df, output, input_f)
+                        return prediction_values[0]
     else:
 
         # store maximum values
@@ -1040,7 +1062,7 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
     # set up inputs
     input_columns = ['zenith', 'tempm', 'dsk', 'holiday']
     input_df = df[input_columns].copy()
-    print(input_df)
+#   print(input_df)
 
     # set up output
     output_column = 'demand'
@@ -1066,12 +1088,12 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
         quit()
 
     inputs = torch.tensor(input_df.values.astype(np.float32))
-    print("inputs")
-    print(inputs)
+#   print("inputs")
+#   print(inputs)
 #   The .view seems to tell it what shape the data is
     targets = torch.tensor(output.values.astype(np.float32)).view(-1,1)
-    print("targets")
-    print(targets)
+#   print("targets")
+#   print(targets)
     torch.manual_seed(seed)    # reproducible
     train_ds = TensorDataset(inputs, targets)
 #   train_ds[0:3]
@@ -1098,7 +1120,7 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
 #   loss_fn = F.l1_loss
 
     loss = loss_fn(model(inputs), targets)
-    print(loss)
+#   print(loss)
     losses = fit(num_epochs, model, loss_fn, opt, train_dl)
     print('Training loss: ', loss_fn(model(inputs), targets))
     # prediction
@@ -1107,7 +1129,7 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
     forecast_day = forecast.loc[day.strftime('%Y-%m-%d')].copy()
     day_f = forecast_day[forecast_day['zenith'] < 87]
     input_f = day_f[input_columns].copy()
-    print(input_f)
+#   print(input_f)
     # normalise the inputs (using same max as for the model)
     for column in input_f.columns:
         input_f[column] = input_f[column] / input_max[column]
@@ -1121,7 +1143,7 @@ def forecast_ann(df, forecast, day, seed, num_epochs):
     forecast_day.loc[forecast_day['zenith']<87, 'prediction'] = prediction_values
     forecast.loc[day.strftime('%Y-%m-%d'), 'prediction'] = forecast_day['prediction'].values
 
-    print(forecast)
+#   print(forecast)
     return losses
 # closest 10 hours from each weather grid, then weighted average
 
@@ -1129,7 +1151,7 @@ def forecast_closest_hours(df, forecast, day):
     # for each hour of the day ...
     new_values=[]
     for index, row in forecast.iterrows():
-        print(index)
+#       print(index)
         closest_periods = utils.find_closest_periods(row, df, 'sun2', 10)
         new_values.append( utils.create_half_hour(closest_periods.index, df['demand']) )
 
@@ -1205,7 +1227,7 @@ if args.use > 0:
 # additional values
 additional_values(df)
 
-print(df)
+#print(df)
 
 # weather data (forecast)
 forecast_filename = '{}forecast_{}.csv'.format(output_dir, dataset)
@@ -1249,7 +1271,7 @@ for id in range(len(fdays)):
                 print(window_end, window_start)
                 if window_start>=0:
                     history = df.iloc[window_start:window_end].copy()
-                    print(history)
+#                   print(history)
                 else:
                     print('ERROR: window start negative')
                     quit()
@@ -1333,7 +1355,7 @@ if 'demand' in forecast.columns:
         print_peak_metric(forecast['demand'], forecast['prediction'])
     fpeak = forecast.loc[(forecast['k']>31) & (forecast['k']<43)]
     peak = (fpeak['demand'].max() - fpeak['prediction'].max() ) / fpeak['demand'].max()
-    print('Peak prediction {} '.format(peak) )
+    print('Peak prediction {} actual {} forecast {} '.format(peak, fpeak['demand'].max(), fpeak['prediction'].max()) )
     if args.plot:
         forecast['demand'].plot(label='actual demand', color='blue')
         forecast['prediction'].plot(label='predicted demand', color='red')

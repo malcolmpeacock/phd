@@ -10,6 +10,7 @@ import numpy as np
 import pytz
 import math
 import pvlib
+import scipy.stats as stats
 
 # custom code
 import utils
@@ -30,7 +31,7 @@ def plot_days(df, days, title, dot=False):
             plt.plot(k, demand, label='{}, {:.2f} {}C'.format(day, meantemp, degree_sign) )
 
     plt.title(title)
-    plt.xlabel('Hour of the day', fontsize=15)
+    plt.xlabel('Time Index (half hour period)', fontsize=15)
     plt.ylabel('Demand (MWh)', fontsize=15)
     plt.legend(loc='upper left', fontsize=15)
     plt.show()
@@ -54,6 +55,13 @@ output_dir = "/home/malcolm/uclan/challenge/output/"
 merged_filename = '{}merged_{}.csv'.format(output_dir, dataset)
 df = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 
+alpha = 1e-3
+stat, pvalue = stats.normaltest(df['demand'])
+if pvalue < alpha:
+    print('Demand is not a normal distribution')
+else:
+    print('Demand is a normal distribution')
+
 
 k = range(1,49)
 # plot 
@@ -63,9 +71,12 @@ if args.plot:
     lockdown2 = ['2019-06-21', '2019-06-22', '2019-06-23', '2019-06-24', '2019-06-25', '2019-06-26', '2019-06-27', '2020-06-26', '2020-06-27', '2020-06-28', '2020-06-29', '2020-06-30', '2020-07-01', '2020-07-02']
     plot_days(df, lockdown2, 'Comparison of lockdown end with year before', True)
 
-    demand_bins = pd.cut(df['demand'], bins=10).value_counts()
-    demand_bins.plot()
-    plt.title('Demand distribution')
+    plt.hist(df['demand'], bins=20)
+    plt.gca().set(title='Demand Histogram '+dataset, ylabel='Frequency', xlabel='Demand (MW')
+    plt.show()
+
+    plt.hist(df['demand'].diff(), bins=20)
+    plt.gca().set(title='Demand Slope Histogram '+dataset, ylabel='Frequency', xlabel='Demand slope (MW')
     plt.show()
 
     bank_hols = pd.Series(df[df['dtype'] == 7].index.date).unique()

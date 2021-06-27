@@ -37,6 +37,25 @@ demand = pd.read_csv(demand_filename, header=0, sep=',', parse_dates=[0], index_
 n_missing = utils.missing_times(demand, '30min')
 print('Number of missing demand rows: {}'.format(n_missing) )
 
+print('Before cleaning SMALLEST')
+print(demand.nsmallest())
+print('Before cleaning LARGEST')
+print(demand.nlargest())
+ 
+# plot distribution
+if args.plot:
+    demand_bins = pd.cut(demand, bins=20).value_counts()
+    demand_bins.plot()
+    plt.title('Demand distribution')
+    plt.xlabel('Demand bins (MW)', fontsize=15)
+    plt.ylabel('Number of values', fontsize=15)
+    plt.show()
+
+    plt.hist(demand, bins=20)
+    plt.gca().set(title='Demand Histogram '+dataset, ylabel='Frequency', xlabel='Demand (MW')
+    plt.show()
+
+
 clf = IsolationForest(random_state=0).fit_predict(demand.values.reshape(-1,1))
 print(clf)
 days = pd.Series(demand.index.date).unique()

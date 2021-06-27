@@ -33,6 +33,8 @@ demand = np.sin(t)
 over = demand + error
 battery = 2.0
 discharge = utils.discharge_pattern(battery, demand)
+#discharge = utils.discharge_pattern_simple(battery, demand)
+#print(discharge)
 discharge_over = utils.discharge_pattern(battery, over)
 modified = demand + discharge
 modified_over = demand + discharge_over

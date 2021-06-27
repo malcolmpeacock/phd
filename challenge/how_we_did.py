@@ -22,6 +22,7 @@ import utils
 parser = argparse.ArgumentParser(description='Create charging strategy.')
 parser.add_argument('set', help='eg 0 for set 0 ', type=int)
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--perfect', action="store_true", dest="perfect", help='Use actual PV instead of the forecast', default=False)
 parser.add_argument('--sf', action="store_true", dest="sf", help='Read from set file not u_cvml', default=False)
 
 args = parser.parse_args()
@@ -65,12 +66,16 @@ print(solution)
 #print(data)
 
 pv_new = pv_new.loc[solution.index]
+if args.perfect:
+    pv_forecast['prediction'] = pv_new['pv_power_mw'].values
+
 #print(pv_new)
 demand_new = demand_new.loc[solution.index]
 #print(demand_new)
+print('PV sum {}'.format(pv_new['pv_power_mw'].sum()))
 
 print('PV Forecast')
-utils.print_metrics(pv_new['irradiance_Wm-2'], pv_forecast['prediction'])
+utils.print_metrics(pv_new['pv_power_mw'], pv_forecast['prediction'])
 print('Demand Forecast')
 utils.print_metrics(demand_new, demand_forecast['prediction'])
 
