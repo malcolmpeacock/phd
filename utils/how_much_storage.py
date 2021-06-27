@@ -280,6 +280,12 @@ plt.xlabel('Wind')
 plt.ylabel('Solar PV')
 plt.show()
 
+print('Thing    mean     total')
+print('demand   {}       {}   '.format(demand.mean(), demand.sum()))
+print('pv   {}       {}   '.format(pv.mean(), pv.sum()))
+print('wind   {}       {}   '.format(wind.mean(), wind.sum()))
+
+
 # plot minimum storage line
 ax = df_min.plot(x='Pw', y='Ps',label='minimum generation')
 # calculate storage at grid of Pv and Wind capacities for 75% efficiency

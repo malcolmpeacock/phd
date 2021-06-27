@@ -81,7 +81,7 @@ def read_ninja_country(filename):
     ninja = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], date_parser=lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M:%S'),index_col=0, comment='"')
     # create a datetime index so we can plot
     # (the round stops us getting a 1 in the minutes )
-    ninja.index = pd.DatetimeIndex(pd.to_datetime(ninja.index).round('H'))
+    ninja.index = pd.DatetimeIndex(pd.to_datetime(ninja.index).round('H').tz_localize('UTC'))
     return ninja
 
 # note we only have daily gas
