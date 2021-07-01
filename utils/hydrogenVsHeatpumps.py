@@ -32,7 +32,10 @@ def hydrogen_boiler(heat, efficiency):
 #              years - list of years to do the analysis for
 def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, plot, hourly):
    
-    annual_demand = mod_electric_ref.sum()
+    # factor to normalise by.
+    # If doing daily is the max daily demand so that storage is relative to 
+    # peak daily demand energy.
+    normalise_factor = mod_electric_ref.max()
     total_demand = 0
     # ordinary year
     ordinary_year = mod_electric_ref.values
@@ -44,25 +47,8 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
         leap_year = np.concatenate([mod_electric_ref['2018-01-01 00:00' : '2018-02-28 23:00'].values, feb29.values,  mod_electric_ref['2018-03-01 00:00' : '2018-12-31 23:00'].values])
     else:
         feb29 = (ordinary_year[feb28-1] + ordinary_year[feb28]) * 0.5
-#       ic(feb29)
         feb29a = np.array([feb29])
-#       ic(ordinary_year[0:feb28])
-#       ic(feb29a)
-#       ic(ordinary_year[feb28+1:])
         leap_year = np.concatenate([ordinary_year[0:feb28], feb29a, ordinary_year[feb28:] ] )
-    # calculate the total demand per day or hour (taking account of leap years)
-    # for each weather year ...
-    for year in years:
-        ndays = 365
-        if calendar.isleap(year):
-            print('Leap year {}'.format(year))
-            ndays += 1
-        if hourly:
-            years_demand = annual_demand / (ndays * 24)
-        else:
-            years_demand = annual_demand / ndays
-        total_demand = total_demand + years_demand
-    print('total_demand {}'.format(total_demand) )
     demand_years=[]
     total_heat_demand_years={}
     mean_temp_years={}
@@ -96,7 +82,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
             electric_ref = electric_ref + electric_heat
 
         # normalise and add to the list
-        demand_years.append( electric_ref / total_demand)
+        demand_years.append( electric_ref / normalise_factor)
     # concantonate the demand series
     all_demand = pd.concat(demand_years[year] for year in range(len(years)) )
     if plot:
@@ -104,8 +90,8 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
         pv.plot(color='red', label='Solar PV')
         wind.plot(color='green', label='Wind')
         plt.title('Daily Electricity demand and generation')
-        plt.xlabel('Month', fontsize=15)
-        plt.ylabel('Electricity (Mwh) per day', fontsize=15)
+        plt.xlabel('Year', fontsize=15)
+        plt.ylabel('Normalised daily Electricity', fontsize=15)
         plt.legend(loc='upper right')
         plt.show()
     #
@@ -134,8 +120,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
 
     # calculate storage at grid of Pv and Wind capacities for
     # hydrogen efficiency TODO need a reference
-#   df= storage.storage_grid(all_demand, wind, pv, 0.8)
-    df= storage.storage_grid(all_demand/365.0, wind/365.0, pv/365.0, 0.8)
+    df= storage.storage_grid(all_demand, wind, pv, 0.8, hourly)
     return df
 
 # main program
@@ -182,12 +167,15 @@ daily_electric_ref = mod_electric_ref.resample('D').sum()
 if args.plot:
     daily_electric_ref.plot(color='blue', label='Historic Electric without heating {}'.format(args.reference))
     plt.title('Reference year Daily Electricity with heat removed')
-    plt.xlabel('Month', fontsize=15)
+    plt.xlabel('Year', fontsize=15)
     plt.ylabel('Electricity (Mwh) per day', fontsize=15)
 #plt.legend(loc='upper right')
     plt.show()
 
-years = range(args.start, 2019)
+# weather years from the start to 2019
+# ( need to download more ninja to get up to 2020 )
+last_weather_year = 2019
+years = range(args.start, last_weather_year+1)
 print(years)
 # read ninja
 ninja_start = str(years[0]) + '-01-01 00:00:00'
@@ -222,7 +210,7 @@ if args.plot:
     wind_daily.plot(color='blue', label='Ninja wind generation')
     pv_daily.plot(color='red', label='Ninja pv generation')
     plt.title('Wind and solar generation from ninja')
-    plt.xlabel('Month', fontsize=15)
+    plt.xlabel('Year', fontsize=15)
     plt.ylabel('Electricity generation capacity factor per day', fontsize=15)
     plt.legend(loc='upper right')
     plt.show()
@@ -281,11 +269,12 @@ if args.plot:
     df_min = pd.DataFrame(data=min_energy_line)
 
     # plot minimum generation line TODO
-    ax = df_min.plot(x='Pw', y='Ps',label='minimum generation')
+#   ax = df_min.plot(x='Pw', y='Ps',label='minimum generation')
 
     # calcuate constant storage line for 40 days and plot
     storage_40 = storage.storage_line(df,-40.0)
-    storage_40.plot(x='Pw',y='Ps',ax=ax,label='storage 40 days. 2018 system')
+#   storage_40.plot(x='Pw',y='Ps',ax=ax,label='storage 40 days. 2018 system')
+    ax = storage_40.plot(x='Pw',y='Ps',label='storage 40 days. 2018 system')
 
     # calcuate constant storage line for 25 days and plot
     storage_25 = storage.storage_line(df,-25.0)
@@ -299,7 +288,7 @@ if args.plot:
     storage5_25 = storage.storage_line(df5,-25.0)
     storage5_25.plot(x='Pw',y='Ps',ax=ax,label='storage 25 days, 2018 system with 50% heating by heat pumps')
 
-    plt.title('Constant storage lines with and without heat pumps')
+    plt.title('Constant storage lines with and without heat pumps {} to {}'.format(args.start, last_weather_year) )
     plt.xlabel('Wind ( capacity in proportion to nomalised generation)')
     plt.ylabel('Solar PV ( capacity in proportion to nomalised generation)')
     plt.show()

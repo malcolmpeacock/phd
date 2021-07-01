@@ -43,7 +43,7 @@ def storage(net_demand, eta=0.75):
 def storage_line(df,storage_value):
     x=[]
     y=[]
-    # for each pv value ...
+    # for each wind value ...
     for i_wind in range(0,14):
         f_wind = i_wind * 0.5
         # extract those values with a wind=xs
@@ -62,20 +62,26 @@ def storage_line(df,storage_value):
 
     sline = { 'Pw' : x, 'Ps' :y }
     df = pd.DataFrame(data=sline)
+    print('Line: Pw max {} min {} '.format(df['Pw'].max(), df['Pw'].min() ) )
+    print(df)
     return df
 
-def storage_grid(demand, wind, pv, eta):
-
+def storage_grid(demand, wind, pv, eta, hourly=False):
+    print('storage_grid: demand max {} min {} mean {}'.format(demand.max(), demand.min(), demand.mean()) )
     results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [] }
-    # TODO - why ?
-    ndays = len(demand)
+    # For hourly the storage will be in hours, so divide by 24 to convert to 
+    # days
+    if hourly:
+        store_factor = 1 / 24
+    else:
+        store_factor = 1
 
     # For each percent of PV/Wind
     for i_pv in range(0,14):
         for i_wind in range(0,14):
             f_pv = i_pv * 0.5
             f_wind = i_wind * 0.5
-            print('Calculating f_pv {} f_wind {} '.format(f_pv, f_wind) )
+#           print('Calculating f_pv {} f_wind {} '.format(f_pv, f_wind) )
             # energy supply is calculated using the capacity factors
             supply = (wind * f_wind) + (pv * f_pv)
             net = demand - supply
@@ -85,7 +91,7 @@ def storage_grid(demand, wind, pv, eta):
             store_size, store_hist = storage(net, eta)
             results['f_pv'].append(f_pv)
             results['f_wind'].append(f_wind)
-            results['storage'].append(store_size * ndays)
+            results['storage'].append(store_size * store_factor)
 
     df = pd.DataFrame(data=results)
     return df
