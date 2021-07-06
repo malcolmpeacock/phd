@@ -21,6 +21,24 @@ import stats
 import readers
 import storage
 
+# create regression line for plotting
+
+def list_regression_line(x,y):
+    nx = np.array(list(x))
+    ny = np.array(list(y))
+    return regression_line(nx,ny)
+
+def regression_line(nx,ny):
+    print('DEBUG: {} {}'.format(type(nx), type(ny) ) )
+    rmodel = sm.OLS(ny, sm.add_constant(nx))
+    residual_results = rmodel.fit()
+    print(residual_results.summary())
+    reg_const = residual_results.params[0]
+    reg_grad = residual_results.params[1]
+    x_reg = np.array([nx.min(),nx.max()])
+    y_reg = reg_grad * x_reg + reg_const
+    return x_reg, y_reg
+
 def hydrogen_boiler(heat, efficiency):
     hydrogen = heat / efficiency
     return hydrogen
@@ -52,6 +70,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
     demand_years=[]
     total_heat_demand_years={}
     mean_temp_years={}
+    monthly_temp_years={}
     # for each weather year ...
     for year in years:
         print('Creating demand for {}'.format(year))
@@ -64,6 +83,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
         # store total heat demand
         total_heat_demand_years[year] = demand['heat'].sum() * 1e-6
         mean_temp_years[year] = demand['temperature'].mean()
+        monthly_temp_years[year] = demand['temperature'].resample('M').mean().values
         #  account for leap years.
         #  Need to create a new df with the index same as heat_weather
         #  then create a 29th of Feb by interpolation between 28th and
@@ -109,14 +129,53 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
         plt.title('Heat demand 2018 would have had for different years weather')
         plt.xlabel('Year', fontsize=15)
         plt.ylabel('Heat Demand (Twh) per year', fontsize=15)
+        x_reg, y_reg = list_regression_line(x,y)
+        plt.plot(x_reg, y_reg, color='red')
         plt.show()
+
         x=mean_temp_years.keys()
         y=mean_temp_years.values()
         plt.scatter(x,y)
         plt.title('Mean population weighted temperature against year')
         plt.xlabel('Year', fontsize=15)
         plt.ylabel('Mean population weighted temperature (degrees C)', fontsize=15)
+        x_reg, y_reg = list_regression_line(x,y)
+        plt.plot(x_reg, y_reg, color='red')
         plt.show()
+
+        # monthly mean temperature over the years
+        year_var=monthly_temp_years.keys()
+        for month in range(12):
+            month_values=[]
+            for year in years:
+                month_values.append(monthly_temp_years[year][month])
+            print('Month {} len {}'.format(month, len(month_values) ) )
+            x_reg, y_reg = list_regression_line(year_var,month_values)
+            plt.plot(x_reg, y_reg, label=calendar.month_abbr[month+1])
+        plt.legend(loc='upper right')
+        plt.title('Regression lines of mean monthly temperature for different years')
+        plt.xlabel('Year', fontsize=15)
+        plt.ylabel('Mean population weighted temperature (degrees C)', fontsize=15)
+        plt.show()
+
+    # look at the storage history for 2 wind and 1 pv which is what we have now
+    supply = wind * 2.0  +  pv
+    net = all_demand - supply
+    #  calculate how much storage we need
+    store_size, store_hist = storage.storage(net, 0.8)
+    if plot:
+        yearly_store = store_hist.resample('Y').last()
+        print(yearly_store)
+        yearly_store.plot(color='blue', label='cumulative store size')
+        yearly_diff = yearly_store.diff().fillna(0.0)
+        print(yearly_diff)
+        yearly_diff.plot(color='green', label='yearly store size')
+        plt.legend(loc='upper right')
+        plt.title('Store size at the end of each year: 2 wind to 1 solar')
+        plt.xlabel('Year', fontsize=15)
+        plt.ylabel('Store size in days', fontsize=15)
+        plt.show()
+
 
     # calculate storage at grid of Pv and Wind capacities for
     # hydrogen efficiency TODO need a reference
@@ -201,8 +260,8 @@ wind = ninja_wind['national']
 print('Read PV {} Wind {} '.format(len(pv), len(wind) ) )
 
 if args.plot:
-    print(wind)
-    print(pv)
+#   print(wind)
+#   print(pv)
 
     # daily plot
     wind_daily = wind.resample('D').mean()
@@ -220,7 +279,24 @@ if args.plot:
     pv_yearly = pv.resample('Y').mean()
     wind_yearly.plot(color='blue', label='Ninja wind generation')
     pv_yearly.plot(color='red', label='Ninja pv generation')
+    year_var=wind_yearly.index.year.values.astype(np.float32)
+    values_var = wind_yearly.values
+    x_reg, y_reg = regression_line(year_var,values_var)
+    wind_reg = pd.Series(y_reg, index=[wind_yearly.index.min(),wind_yearly.index.max()])
+    wind_reg.plot(color='green', label='Ninja wind regression')
+    values_var = pv_yearly.values
+    x_reg, y_reg = regression_line(year_var,values_var)
+    pv_reg = pd.Series(y_reg, index=[wind_yearly.index.min(),wind_yearly.index.max()])
+    pv_reg.plot(color='orange', label='Ninja pv regression')
     plt.title('Wind and solar generation from ninja')
+    plt.xlabel('Year', fontsize=15)
+    plt.ylabel('Electricity generation capacity factor per year', fontsize=15)
+    plt.legend(loc='upper right')
+    plt.show()
+
+    # yearly plot PV only
+    pv_yearly.plot(color='red', label='Ninja pv generation')
+    plt.title('Solar generation from ninja')
     plt.xlabel('Year', fontsize=15)
     plt.ylabel('Electricity generation capacity factor per year', fontsize=15)
     plt.legend(loc='upper right')
@@ -250,8 +326,8 @@ if args.plot:
 #   Ls = 1 / pv.mean()
     Lw = wind.mean()
     Ls = pv.mean()
-    ic(Lw)
-    ic(Ls)
+#   ic(Lw)
+#   ic(Ls)
 
     # minimum generation
 

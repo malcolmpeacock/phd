@@ -63,7 +63,7 @@ def storage_line(df,storage_value):
     sline = { 'Pw' : x, 'Ps' :y }
     df = pd.DataFrame(data=sline)
     print('Line: Pw max {} min {} '.format(df['Pw'].max(), df['Pw'].min() ) )
-    print(df)
+#   print(df)
     return df
 
 def storage_grid(demand, wind, pv, eta, hourly=False):
@@ -92,6 +92,11 @@ def storage_grid(demand, wind, pv, eta, hourly=False):
             results['f_pv'].append(f_pv)
             results['f_wind'].append(f_wind)
             results['storage'].append(store_size * store_factor)
+
+            # yearly values
+#           store_max_yearly = store_hist.resample('Y', axis=0).max()
+#           store_min_yearly = store_hist.resample('Y', axis=0).min()
+#           store_diff_yearly = store_max_yearly - store_max_yearly
 
     df = pd.DataFrame(data=results)
     return df
