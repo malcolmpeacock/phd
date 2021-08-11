@@ -21,22 +21,18 @@ from misc import upsample_df
 def storage(net_demand, eta=0.75):
     history = net_demand.copy()
     store = 0.0
-    min_store = 0.0
     eta_charge = eta
     eta_discharge = eta
     count=0
     for index, value in net_demand.items():
-        history.iat[count] = store
-        count += 1
         # Note: both subtract because value is negative in the 2nd one!
         if value > 0.0:
             store = store - value * eta_discharge
         else:
             store = store - value * eta_charge
-        if store < min_store:
-            min_store = store
-#   print('Storage {:.2f} GWh'.format(min_store))
-    return min_store, history
+        history.iat[count] = store
+        count += 1
+    return history
 
 # constant storage line
 
@@ -62,7 +58,7 @@ def storage_line(df,storage_value):
 
     sline = { 'Pw' : x, 'Ps' :y }
     df = pd.DataFrame(data=sline)
-    print('Line: Pw max {} min {} '.format(df['Pw'].max(), df['Pw'].min() ) )
+#   print('Line: Pw max {} min {} '.format(df['Pw'].max(), df['Pw'].min() ) )
 #   print(df)
     return df
 
@@ -87,11 +83,14 @@ def storage_grid(demand, wind, pv, eta, hourly=False):
             net = demand - supply
 
             #  calculate how much storage we need
-
-            store_size, store_hist = storage(net, eta)
+            store_hist = storage(net, eta)
+            store_size = store_hist.min()
             results['f_pv'].append(f_pv)
             results['f_wind'].append(f_wind)
-            results['storage'].append(store_size * store_factor)
+            storage_days = store_size * store_factor * -1.0
+            if store_size == store_hist.iat[-1] or storage_days>200:
+                storage_days = 200
+            results['storage'].append(storage_days)
 
             # yearly values
 #           store_max_yearly = store_hist.resample('Y', axis=0).max()

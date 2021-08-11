@@ -2,6 +2,27 @@ import statsmodels.api as sm
 import matplotlib.pyplot as plt
 import numpy as np
 
+# energy storage metric
+def esm(d_truth, d_pred):
+    # 
+    t = esmv(d_truth)
+    p = esmv(d_pred)
+    return (t - p) / t
+
+# 
+def esmv(d):
+    d = d / d.max()
+    mv = d.mean()
+    d = d - mv
+    store = 0.0
+    min_store = d.sum()
+    for index, value in d.items():
+        # Note: both subtract because value is negative in the 2nd one!
+        store = store - value
+        if store < min_store:
+            min_store = store
+    return -min_store
+
 # could be a way of calculating predicted r2 but I don't understnad what xs is
 def press_statistic(y_true, y_pred, xs):
     """
@@ -84,8 +105,10 @@ def print_stats(heat, gas, method, nvars=1, plot=False, xl='Heat Demand (from th
     pr2 = predicted_r2(gas.to_numpy(), fit.to_numpy(), model.exog)
     # max
     peak = heat.max() / gas.max()
+    # storage metric
+    stor = esm(gas, heat)
     # output results
-    print(' {0:15} {1:.2f}    {2:.2f} {3:.2f}   {4:.3f}    {5:.2f}     {6:.2f}   {7:.4f}   {8:.2f}      {9:.3f}        {10:.3f}     {11:.3f}'. format(method, corr, rmse, nrmse, rsquared, hvar, gvar, res_grad, res_const, adjusted_rsquared, pr2, peak))
+    print(' {0:15} {1:.2f}    {2:.2f} {3:.2f}   {4:.3f}    {5:.2f}     {6:.2f}   {7:.4f}   {8:.2f}      {9:.3f}        {10:.3f}     {11:.3f}   {12:.2f}'. format(method, corr, rmse, nrmse, rsquared, hvar, gvar, res_grad, res_const, adjusted_rsquared, pr2, peak, stor))
 
 #   all the regression details
 #   print(results.summary())
@@ -119,7 +142,7 @@ def print_stats(heat, gas, method, nvars=1, plot=False, xl='Heat Demand (from th
         plt.show()
 
 def print_stats_header():
-    print(' Method      Correlation RMSE NRMSE R-SQUARED Variance Gas   ResGrad   ResConst Adj-R-SQUARED Pred-R-SQUARED Max')
+    print(' Method      Correlation RMSE NRMSE R-SQUARED Variance Gas   ResGrad   ResConst Adj-R-SQUARED Pred-R-SQUARED Max  ESM')
 
 def print_large_small(heat, gas, method):
     # smallest and largest diffs

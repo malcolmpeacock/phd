@@ -29,10 +29,9 @@ def list_regression_line(x,y):
     return regression_line(nx,ny)
 
 def regression_line(nx,ny):
-    print('DEBUG: {} {}'.format(type(nx), type(ny) ) )
     rmodel = sm.OLS(ny, sm.add_constant(nx))
     residual_results = rmodel.fit()
-    print(residual_results.summary())
+#   print(residual_results.summary())
     reg_const = residual_results.params[0]
     reg_grad = residual_results.params[1]
     x_reg = np.array([nx.min(),nx.max()])
@@ -71,6 +70,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
     total_heat_demand_years={}
     mean_temp_years={}
     monthly_temp_years={}
+    monthly_sd_years={}
     # for each weather year ...
     for year in years:
         print('Creating demand for {}'.format(year))
@@ -84,6 +84,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
         total_heat_demand_years[year] = demand['heat'].sum() * 1e-6
         mean_temp_years[year] = demand['temperature'].mean()
         monthly_temp_years[year] = demand['temperature'].resample('M').mean().values
+        monthly_sd_years[year] = demand['temperature'].resample('M').std().values
         #  account for leap years.
         #  Need to create a new df with the index same as heat_weather
         #  then create a 29th of Feb by interpolation between 28th and
@@ -149,7 +150,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
             month_values=[]
             for year in years:
                 month_values.append(monthly_temp_years[year][month])
-            print('Month {} len {}'.format(month, len(month_values) ) )
+#           print('Month {} len {}'.format(month, len(month_values) ) )
             x_reg, y_reg = list_regression_line(year_var,month_values)
             plt.plot(x_reg, y_reg, label=calendar.month_abbr[month+1])
         plt.legend(loc='upper right')
@@ -158,17 +159,33 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
         plt.ylabel('Mean population weighted temperature (degrees C)', fontsize=15)
         plt.show()
 
+        # monthly standard deviation of temperature over the years
+        for month in range(12):
+            std_values=[]
+            for year in years:
+                std_values.append(monthly_sd_years[year][month])
+#           print('Month {} len {}'.format(month, len(month_values) ) )
+            x_reg, y_reg = list_regression_line(year_var,std_values)
+            plt.plot(x_reg, y_reg, label=calendar.month_abbr[month+1])
+        plt.legend(loc='upper right')
+        plt.title('Regression lines of standard deviation of monthly temperature for different years')
+        plt.xlabel('Year', fontsize=15)
+        plt.ylabel('Mean population weighted temperature (degrees C)', fontsize=15)
+        plt.show()
+
     # look at the storage history for 2 wind and 1 pv which is what we have now
     supply = wind * 2.0  +  pv
     net = all_demand - supply
+
     #  calculate how much storage we need
-    store_size, store_hist = storage.storage(net, 0.8)
+    store_hist = storage.storage(net, 0.8)
+
     if plot:
         yearly_store = store_hist.resample('Y').last()
-        print(yearly_store)
+#       print(yearly_store)
         yearly_store.plot(color='blue', label='cumulative store size')
         yearly_diff = yearly_store.diff().fillna(0.0)
-        print(yearly_diff)
+#       print(yearly_diff)
         yearly_diff.plot(color='green', label='yearly store size')
         plt.legend(loc='upper right')
         plt.title('Store size at the end of each year: 2 wind to 1 solar')
@@ -317,7 +334,18 @@ df5 = supply_and_storage(mod_electric_ref, wind, pv, 0.5, years, args.plot, args
 print("50% heat pumps: Max storage {} Min Storage {}".format(df5['storage'].max(), df5['storage'].min()) )
 
 if args.plot:
-    ax2 = df.plot.scatter(x='f_wind', y='f_pv', c='storage', colormap='viridis')
+    df.plot.scatter(x='f_wind', y='f_pv', c='storage', colormap='viridis')
+#   plt.colorbar(label='Storage (days)')
+    plt.xlabel('Proportion of wind')
+    plt.ylabel('Porportion of solar')
+    plt.title('Storage in days for different proportions of wind and solar (no heat pumps).')
+    plt.show()
+
+    df5.plot.scatter(x='f_wind', y='f_pv', c='storage', colormap='viridis')
+#   plt.colorbar(label='Storage (days)')
+    plt.xlabel('Proportion of wind')
+    plt.ylabel('Porportion of solar')
+    plt.title('Storage in days for different proportions of wind and solar (50% heat pumps).')
     plt.show()
 
 #   Lw = 0.28
@@ -348,20 +376,20 @@ if args.plot:
 #   ax = df_min.plot(x='Pw', y='Ps',label='minimum generation')
 
     # calcuate constant storage line for 40 days and plot
-    storage_40 = storage.storage_line(df,-40.0)
+    storage_40 = storage.storage_line(df,40.0)
 #   storage_40.plot(x='Pw',y='Ps',ax=ax,label='storage 40 days. 2018 system')
     ax = storage_40.plot(x='Pw',y='Ps',label='storage 40 days. 2018 system')
 
     # calcuate constant storage line for 25 days and plot
-    storage_25 = storage.storage_line(df,-25.0)
+    storage_25 = storage.storage_line(df,25.0)
     storage_25.plot(x='Pw',y='Ps',ax=ax,label='storage 25 days. 2018 system')
 
     # calcuate constant storage line for 40 days and plot
-    storage5_40 = storage.storage_line(df5,-40.0)
+    storage5_40 = storage.storage_line(df5,40.0)
     storage5_40.plot(x='Pw',y='Ps',ax=ax,label='storage 40 days. 2018 system with 50% heating by heat pumps')
 
     # calcuate constant storage line for 25 days and plot
-    storage5_25 = storage.storage_line(df5,-25.0)
+    storage5_25 = storage.storage_line(df5,25.0)
     storage5_25.plot(x='Pw',y='Ps',ax=ax,label='storage 25 days, 2018 system with 50% heating by heat pumps')
 
     plt.title('Constant storage lines with and without heat pumps {} to {}'.format(args.start, last_weather_year) )

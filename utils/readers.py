@@ -252,3 +252,9 @@ def read_advm(filename, location):
     fnans = advm['value'].isna().sum()
     analysis = { 'nans' : nans, 'location' : location, 'fixed' : fnans }
     return advm, analysis
+
+def read_espeni(filename, year):
+    espini = pd.read_csv(filename, header=0, parse_dates=[0], index_col=0, usecols=['ELEXM_utc', 'POWER_ESPENI_MW'], squeeze=True)
+    hourly = espini.resample('H').sum() * 0.5
+    hourly.index = pd.DatetimeIndex(pd.to_datetime(hourly.index.strftime("%Y-%m-%d %H") )).tz_localize('UTC')
+    return hourly.loc[year+'-01-01 00:00:00' : year + '-12-31 23:00:00']

@@ -1,24 +1,12 @@
 import cdsapi
 
-# Possible PARMS - NOTE : humidity depends on dew point temp, surface press, 2-m temp
-# instantaneous
-# 2m_dewpoint_temperature
-#  total_precipitation
-# cloud_base_height surface_pressure snow_depth total_cloud_cover 2m_temperature 2m_dewpoint_temperature instantaneous_large_scale_surface_precipitation_fraction large_scale_rain_rate large_scale_snowfall_rate_water_equivalent
-
-# accumulations:
-#  large_scale_precipitation_fraction
-#  surface_net_solar_radiation
-#  surface_net_thermal_radiation
-#  specific_humidity
-#  relative_humidity
+# Download various ERA5 weather parameters for 2018 for EU
 #  
 
-def get_era5_parms(filename):
+def get_era5_parms(filename, year):
     
     # Create list of times
     hours = 1             # hourly
-    year = '2018'
     months=[]
     for month in range(12):
             months.append("{:02d}".format(month+1))
@@ -47,7 +35,7 @@ def get_era5_parms(filename):
         '31',
         ],
         'time': times,
-#       'area': [ 72, -10.5, 36.75, 25.5, ],
+        'area': [ 72, -10.5, 36.75, 25.5, ],
 #       'area': [ 61, -2.0, 50.0, 8.0, ],
 #       'grid': ['0.25', '0.25'],
         'grid': ['0.75', '0.75'],
@@ -59,4 +47,6 @@ def get_era5_parms(filename):
     c = cdsapi.Client()
     c.retrieve( 'reanalysis-era5-single-levels', request, filename)
 
-get_era5_parms("/home/malcolm/uclan/tools/python/scripts/heat/input/weather/ERA5_parms2018.nc")
+#year = '2018'
+year = '2009'
+get_era5_parms("/home/malcolm/uclan/tools/python/scripts/heat/input/weather/ERA5_parms{}.nc".format(year), year)
