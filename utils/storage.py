@@ -26,7 +26,7 @@ def storage(net_demand, eta=0.75):
     count=0
     for index, value in net_demand.items():
         # Note: both subtract because value is negative in the 2nd one!
-        if value > 0.0:
+        if value > 0.0:        # demand exceeds supply
             store = store - value * eta_discharge
         else:
             store = store - value * eta_charge
@@ -62,7 +62,7 @@ def storage_line(df,storage_value):
 #   print(df)
     return df
 
-def storage_grid(demand, wind, pv, eta, hourly=False):
+def storage_grid(demand, wind, pv, eta, hourly=False, grid=7):
     print('storage_grid: demand max {} min {} mean {}'.format(demand.max(), demand.min(), demand.mean()) )
     results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [] }
     # For hourly the storage will be in hours, so divide by 24 to convert to 
@@ -73,8 +73,8 @@ def storage_grid(demand, wind, pv, eta, hourly=False):
         store_factor = 1
 
     # For each percent of PV/Wind
-    for i_pv in range(0,14):
-        for i_wind in range(0,14):
+    for i_pv in range(0,grid*2):
+        for i_wind in range(0,grid*2):
             f_pv = i_pv * 0.5
             f_wind = i_wind * 0.5
 #           print('Calculating f_pv {} f_wind {} '.format(f_pv, f_wind) )

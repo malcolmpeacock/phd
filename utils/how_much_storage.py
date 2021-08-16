@@ -65,7 +65,7 @@ def storage_line(df,storage_value):
     return df
 
 def storage_grid(demand, wind, pv, Lw, Ls, eta):
-
+    print('storage_grid: demand max {} min {} mean {}'.format(demand.max(), demand.min(), demand.mean()) )
     results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [] }
     ndays = len(demand)
 

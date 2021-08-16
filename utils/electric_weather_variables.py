@@ -17,6 +17,7 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import MaxAbsScaler
+import calendar
 
 # custom code
 import stats
@@ -73,7 +74,8 @@ def augment(df):
     df['hour'] = df.index.hour
 
     # cooling degree hours
-    df['cdh'] = (df['temp'] - 22.0).clip(0.0)
+#   df['cdh'] = (df['temp'] - 22.0).clip(0.0)
+    df['cdh'] = (df['temp'] - 20.0).clip(0.0)
     # heating degree hours
     df['hdh'] = (14.8 - df['temp']).clip(0.0)
     print(df[['cdh', 'hdh']])
@@ -260,7 +262,9 @@ augment(weather09)
 # use it to predict what if we'd had 2017 weather. ( needs weather vars for 2017 )
 # NOTES: only using dailytemp gives R=0.78 for daily, need hour for hourly 
 #variables = ['dailytemp', 'hour', 'temp_dp']
-variables = ['dailytemp', 'hour']
+#variables = ['dailytemp', 'hour', 'temp_dp', 'hdh', 'temp']
+variables = ['dailytemp', 'hour', 'temp_dp', 'hdh', 'temp', 'cdh']
+#variables = ['dailytemp', 'hour']
 #variables = ['dailytemp']
 #variables = weather.columns
 predicted17 = forecast_demand(weather18[variables], electric_2018, weather17[variables])
@@ -491,3 +495,67 @@ print('Hourly Lasso for 2009')
 coeffs = lasso(weather09, electric_2009, plot=True)
 for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
     print('{:15}         {:.3f}'.format(col,value))
+
+# Assess the synthetic time series for a number of years
+print('Historic and Synthetic series')
+mod_electric_ref = electric_2018 - (resistive_heat_2018 * heat_that_is_electric_2018)
+
+# ordinary year
+ordinary_year = mod_electric_ref.values
+print(ordinary_year)
+feb28 = mod_electric_ref['2018-02-28'].values
+mar1 = mod_electric_ref['2018-03-01'].values
+feb29 = np.add(feb28, mar1) * 0.5
+print(feb29)
+before_feb29 = mod_electric_ref['2018-01-01 00:00' : '2018-02-28 23:00'].values
+print(before_feb29)
+after_feb29 = mod_electric_ref['2018-03-01 00:00' : '2018-12-31 23:00'].values
+print(after_feb29)
+leap_year = np.concatenate([before_feb29, feb29, after_feb29])
+print(leap_year)
+print(len(feb29), len(before_feb29), len(after_feb29))
+print('Ordinary year {} leap year {}'.format(len(ordinary_year), len(leap_year) ) )
+
+stats.print_stats_header()
+years = ['2015', '2016', '2017', '2018', '2019']
+#years = ['2017', '2018']
+synthetics = {}
+historics = {}
+# for each weather year ...
+for year in years:
+    # read historic electric 
+    historic = get_demand(year, True)
+    # read resistive heat demand for the year.
+    demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{}/GBRef2018Weather{}I-Bbdew_resistive.csv'.format(year, year)
+    heat_series = readers.read_copheat(demand_filename, ['electricity', 'temperature'])
+    heat_electric = heat_series['electricity'] * 1e-6
+#   print(heat_electric)
+    # use leap year data or ordinary year data
+    if calendar.isleap(int(year)):
+        electric_ref = pd.Series(leap_year, index=historic.index)
+    else:
+        electric_ref = pd.Series(ordinary_year, index=historic.index)
+#   print(electric_ref)
+    # add the resistive heat on the base synthetic time series
+    synthetic = electric_ref + (heat_electric * heat_that_is_electric_2018)
+#   print(synthetic)
+    synthetics[year] = synthetic
+#   print(historic)
+    historics[year] = historic
+
+    # print status
+    stats.print_stats(historic, synthetic, year, nvars=1, plot=True, xl='Electricity demand historic', yl='Electricity demand synthetic')
+
+# concantonate the demand series
+all_synthetic = pd.concat(synthetics[year] for year in years)
+all_historic = pd.concat(historics[year] for year in years)
+daily_synthetic = all_synthetic.resample('D').sum()
+daily_historic = all_historic.resample('D').sum()
+
+daily_synthetic.plot(color='green', label='Synthetic electricity time series')
+daily_historic.plot(color='blue', label='Historic electricity time series')
+plt.title('Synthetic and historic electricity demand')
+plt.xlabel('day', fontsize=15)
+plt.ylabel('Energy (Twh) per day', fontsize=15)
+plt.legend(loc='upper center')
+plt.show()

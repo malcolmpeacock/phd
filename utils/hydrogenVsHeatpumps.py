@@ -1,8 +1,6 @@
-# Create a 2050 electric time series from:
-#  reference year heat demand
-#  weather year heat demand
-#  reference year electricity time series
-# And assumption from various sources, such as FES 2019
+# Look at the impact of 50% heat pumps on the electricity demand
+# using 40 years weather
+# and justify using the 2018 electricity series 
 
 # library stuff
 import sys
@@ -14,6 +12,7 @@ import statsmodels.api as sm
 import argparse
 import calendar
 import numpy as np
+from scipy.stats import wasserstein_distance
 from icecream import ic 
 
 # custom code
@@ -36,6 +35,7 @@ def regression_line(nx,ny):
     reg_grad = residual_results.params[1]
     x_reg = np.array([nx.min(),nx.max()])
     y_reg = reg_grad * x_reg + reg_const
+    print('Regression grad {} const {}'.format(reg_grad, reg_const) )
     return x_reg, y_reg
 
 def hydrogen_boiler(heat, efficiency):
@@ -47,7 +47,7 @@ def hydrogen_boiler(heat, efficiency):
 #                pv  - pv capacity factor time series
 # percent_heat_pumps - percentage of heating from heat pumps
 #              years - list of years to do the analysis for
-def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, plot, hourly):
+def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, plot, hourly, ref_temp):
    
     # factor to normalise by.
     # If doing daily is the max daily demand so that storage is relative to 
@@ -60,17 +60,22 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
     # find doy for feb 28th ( 31 days in jan )
     feb28 = 31 + 28
     if hourly:
-        feb29 = 0.5*(mod_electric_ref['2018-02-28'] + mod_electric_ref['2018-03-01'])
-        leap_year = np.concatenate([mod_electric_ref['2018-01-01 00:00' : '2018-02-28 23:00'].values, feb29.values,  mod_electric_ref['2018-03-01 00:00' : '2018-12-31 23:00'].values])
+        feb28 = mod_electric_ref['2018-02-28'].values
+        mar1 = mod_electric_ref['2018-03-01'].values
+        feb29 = np.add(feb28, mar1) * 0.5
+        leap_year = np.concatenate([mod_electric_ref['2018-01-01 00:00' : '2018-02-28 23:00'].values, feb29,  mod_electric_ref['2018-03-01 00:00' : '2018-12-31 23:00'].values])
     else:
         feb29 = (ordinary_year[feb28-1] + ordinary_year[feb28]) * 0.5
         feb29a = np.array([feb29])
         leap_year = np.concatenate([ordinary_year[0:feb28], feb29a, ordinary_year[feb28:] ] )
+
+
     demand_years=[]
     total_heat_demand_years={}
     mean_temp_years={}
     monthly_temp_years={}
     monthly_sd_years={}
+    yearly_wd={}
     # for each weather year ...
     for year in years:
         print('Creating demand for {}'.format(year))
@@ -85,6 +90,8 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
         mean_temp_years[year] = demand['temperature'].mean()
         monthly_temp_years[year] = demand['temperature'].resample('M').mean().values
         monthly_sd_years[year] = demand['temperature'].resample('M').std().values
+        # wasserstein distance between temperatures
+        yearly_wd[year] = wasserstein_distance(ref_temp, demand['temperature'])
         #  account for leap years.
         #  Need to create a new df with the index same as heat_weather
         #  then create a 29th of Feb by interpolation between 28th and
@@ -120,8 +127,8 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
     print('demand   {}       {}   '.format(all_demand.mean(), all_demand.sum()))
     print('pv   {}       {}   '.format(pv.mean(), pv.sum()))
     print('wind   {}       {}   '.format(wind.mean(), wind.sum()))
-    print(total_heat_demand_years)
-    print(mean_temp_years)
+#   print(total_heat_demand_years)
+#   print(mean_temp_years)
    
     if plot:
         x=total_heat_demand_years.keys()
@@ -131,6 +138,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
         plt.xlabel('Year', fontsize=15)
         plt.ylabel('Heat Demand (Twh) per year', fontsize=15)
         x_reg, y_reg = list_regression_line(x,y)
+        print('Heat demand regression start {} end {}'.format(y_reg[0], y_reg[1]) )
         plt.plot(x_reg, y_reg, color='red')
         plt.show()
 
@@ -141,6 +149,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
         plt.xlabel('Year', fontsize=15)
         plt.ylabel('Mean population weighted temperature (degrees C)', fontsize=15)
         x_reg, y_reg = list_regression_line(x,y)
+        print('Temerature regression start {} end {}'.format(y_reg[0], y_reg[1]) )
         plt.plot(x_reg, y_reg, color='red')
         plt.show()
 
@@ -174,25 +183,61 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
         plt.show()
 
     # look at the storage history for 2 wind and 1 pv which is what we have now
-    supply = wind * 2.0  +  pv
+    # look at the storage history for 3 wind and 1 pv
+    f_wind = 1.8
+    f_pv = 1.0
+    supply = wind * f_wind  +  pv * f_pv
     net = all_demand - supply
+#   print('NET')
+#   print(net)
 
     #  calculate how much storage we need
     store_hist = storage.storage(net, 0.8)
+#   print(store_hist)
+    store_size = store_hist.min()
+    storage_days = round(store_size * -1.0)
+    # if minimum value was the last one then store is just emptying more and
+    # more so we didn't find out the size
+    last_one = store_hist.iat[-1]
+    if store_size == store_hist.iat[-1] or storage_days>200:
+        storage_days = 200
+    if storage_days <0.0:
+        storage_days = 0.0
+    print('Storage for {} wind {} pv size {} is {} days. last_one {}'.format(f_wind, f_pv, store_size, storage_days, last_one) )
+    period_hist = store_hist + storage_days
+    period_hist = period_hist.clip(0.0, storage_days)
+#   print(period_hist)
 
     if plot:
-        yearly_store = store_hist.resample('Y').last()
-#       print(yearly_store)
-        yearly_store.plot(color='blue', label='cumulative store size')
-        yearly_diff = yearly_store.diff().fillna(0.0)
-#       print(yearly_diff)
+        period_hist.plot()
+        plt.title('Daily store size: wind {} pv {} days {} '.format(f_wind, f_pv, storage_days))
+        plt.xlabel('day', fontsize=15)
+        plt.ylabel('Store size in days', fontsize=15)
+        plt.show()
+
+        yearly_start = store_hist.resample('Y').first()
+        print(yearly_start)
+        yearly_max = store_hist.resample('Y').max()
+        print(yearly_max)
+        yearly_min = store_hist.resample('Y').min()
+        print(yearly_min)
+#       yearly_diff = yearly_max - yearly_min
+        yearly_diff = yearly_start - yearly_min
+        print(yearly_diff)
         yearly_diff.plot(color='green', label='yearly store size')
         plt.legend(loc='upper right')
-        plt.title('Store size at the end of each year: 2 wind to 1 solar')
+        plt.title('Store size at the end of each year: {} wind to {} solar'.format(f_wind, f_pv) )
         plt.xlabel('Year', fontsize=15)
         plt.ylabel('Store size in days', fontsize=15)
         plt.show()
 
+        # plot the wasserstein distances
+        plt.scatter(list(year_var), yearly_wd.values())
+        plt.title('Wasserstien distance of temperature distributions from 2018' )
+        plt.xlabel('Year', fontsize=15)
+        plt.ylabel('Wasserstien distance', fontsize=15)
+        plt.show()
+        
 
     # calculate storage at grid of Pv and Wind capacities for
     # hydrogen efficiency TODO need a reference
@@ -227,10 +272,11 @@ electric_ref = demand_ref['ENGLAND_WALES_DEMAND'] * scotland_factor
 
 # read reference year electric heat series based on purely resistive heating
 # so that it can be removed from the reference year series. 
-# TODO - recaluate this using BDEW method?
 
-demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{0:}Weather{0:}I-Sbdew_resistive.csv'.format(args.reference) 
-ref_resistive_heat = readers.read_demand(demand_filename)
+demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{0:}Weather{0:}I-Bbdew_resistive.csv'.format(args.reference) 
+ref_resistive = readers.read_copheat(demand_filename, ['electricity', 'temperature'])
+ref_resistive_heat = ref_resistive['electricity']
+ref_temperature = ref_resistive['temperature']
 
 #  To remove existing space and water heating from the electricity demand time 
 #  series for the reference year - subtract the resistive heat series
@@ -299,10 +345,12 @@ if args.plot:
     year_var=wind_yearly.index.year.values.astype(np.float32)
     values_var = wind_yearly.values
     x_reg, y_reg = regression_line(year_var,values_var)
+    print('Wind regression start {} end {}'.format(y_reg[0], y_reg[1]) )
     wind_reg = pd.Series(y_reg, index=[wind_yearly.index.min(),wind_yearly.index.max()])
     wind_reg.plot(color='green', label='Ninja wind regression')
     values_var = pv_yearly.values
     x_reg, y_reg = regression_line(year_var,values_var)
+    print('PV regression start {} end {}'.format(y_reg[0], y_reg[1]) )
     pv_reg = pd.Series(y_reg, index=[wind_yearly.index.min(),wind_yearly.index.max()])
     pv_reg.plot(color='orange', label='Ninja pv regression')
     plt.title('Wind and solar generation from ninja')
@@ -327,10 +375,10 @@ else:
     wind = wind.resample('D').mean()
     pv = pv.resample('D').mean()
 
-df = supply_and_storage(mod_electric_ref, wind, pv, 0.0, years, args.plot, args.hourly)
+df = supply_and_storage(mod_electric_ref, wind, pv, 0.0, years, args.plot, args.hourly, ref_temperature)
 print("Zero heat pumps: Max storage {} Min Storage {}".format(df['storage'].max(), df['storage'].min()) )
 
-df5 = supply_and_storage(mod_electric_ref, wind, pv, 0.5, years, args.plot, args.hourly)
+df5 = supply_and_storage(mod_electric_ref, wind, pv, 0.5, years, args.plot, args.hourly, ref_temperature)
 print("50% heat pumps: Max storage {} Min Storage {}".format(df5['storage'].max(), df5['storage'].min()) )
 
 if args.plot:
@@ -392,7 +440,17 @@ if args.plot:
     storage5_25 = storage.storage_line(df5,25.0)
     storage5_25.plot(x='Pw',y='Ps',ax=ax,label='storage 25 days, 2018 system with 50% heating by heat pumps')
 
+    # calcuate constant storage line for 2 days and plot
+    storage5_2 = storage.storage_line(df5,2.0)
+    storage5_2.plot(x='Pw',y='Ps',ax=ax,label='storage 2 days, 2018 system with 50% heating by heat pumps')
+
     plt.title('Constant storage lines with and without heat pumps {} to {}'.format(args.start, last_weather_year) )
-    plt.xlabel('Wind ( capacity in proportion to nomalised generation)')
-    plt.ylabel('Solar PV ( capacity in proportion to nomalised generation)')
+    plt.xlabel('Wind ( capacity in proportion to nomarlised demand)')
+    plt.ylabel('Solar PV ( capacity in proportion to normalised demand)')
     plt.show()
+
+## TODO wasserstein distance of heat demand to see if it changes over the
+##      years.
+## and for wind speed and solar irradiance.
+
+
