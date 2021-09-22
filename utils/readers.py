@@ -230,8 +230,13 @@ def read_rhpp(filename, location):
 #   print('Start {} End {} Nans Hhp {} Ehp {} Tin {} Tsf {}'.format(start, end, heat_nans, elec_nans, tin_nans, tsf_nans) )
     analysis = { 'start' : start, 'end': end, 'nans_Hhp': heat_nans, 'nans_Ehp': elec_nans, 'nans_tin': tin_nans, 'nans_tsf': tsf_nans, 'location' : location }
     rhpp = rhpp.interpolate()
+    # mean temperatures
+    mean_tsf = rhpp['Tsf'].resample('H').mean()
+    mean_tin = rhpp['Tin'].resample('H').mean()
     # the units are Wh per 2 mins - so just summing should be ok? right?
     rhpp = rhpp.resample('H').sum()
+    rhpp['Tsf'] = mean_tsf
+    rhpp['Tin'] = mean_tin
     
     return rhpp, analysis
 
@@ -258,3 +263,12 @@ def read_espeni(filename, year):
     hourly = espini.resample('H').sum() * 0.5
     hourly.index = pd.DatetimeIndex(pd.to_datetime(hourly.index.strftime("%Y-%m-%d %H") )).tz_localize('UTC')
     return hourly.loc[year+'-01-01 00:00:00' : year + '-12-31 23:00:00']
+
+# DESINTEE saved as csv.
+
+def read_destinee(filename):
+    destinee = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], date_parser=lambda x: datetime.strptime(x, '%d/%m/%Y %H:%M'),index_col=0, squeeze=True)
+    # create a datetime index so we can plot
+    # (the round stops us getting a 1 in the minutes )
+#   destinee.index = pd.DatetimeIndex(pd.to_datetime(ninja.index).round('H'))
+    return destinee

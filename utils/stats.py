@@ -87,8 +87,8 @@ def print_stats(heat, gas, method, nvars=1, plot=False, xl='Heat Demand (from th
     # check if residual and fit are the same size
     if len(residual) != len(fit):
         print('ERROR: different sized series {} {} {}'.format(method, len(residual), len(fit)))
-        print(heat.index)
-        print(gas.index)
+        print(residual.index)
+        print(fit.index)
         quit()
     # Fit line through the residuals - the add constant bit gives us 
     #  the intercept as well as the gradient of the fit line.

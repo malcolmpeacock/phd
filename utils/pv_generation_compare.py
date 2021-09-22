@@ -51,7 +51,7 @@ power_era_c = era['power_c'] * 0.001
 power_mid_c = midas['power_c'] * 0.001
 # power_nin_c = ninja * 0.001
 power_nin_c = ninja
-pv_generation_compare.py
+#pv_generation_compare.py
 power_era_c.plot(label='era5')
 power_mid_c.plot(label='midas')
 power_nin_c.plot(label='ninja')
@@ -67,7 +67,7 @@ ninja.index = ninja.index.tz_localize('Europe/London')
 stats.print_stats_header()
 stats.print_stats(era['ghi_c'], midas['ghi_c'], 'era and midas ghi')
 stats.print_stats(era['power_c'], midas['power_c'], 'era and midas power')
-stats.print_stats(era['power_c'], ninja, 'era and ninja power')
+#stats.print_stats(era['power_c'], ninja, 'era and ninja power')
 
 annual_era = {}
 annual_midas = {}
@@ -128,7 +128,8 @@ plt.legend(loc='upper right')
 plt.show()
 
 # do stats for all 3
-ninja.index = ninja.index.tz_localize('Europe/London')
+#ninja.index = ninja.index.tz_localize('Europe/London')
+ninja.index = ninja.index.tz_convert('Europe/London')
 print('Stats compared to national grid')
 stats.print_stats_header()
 stats.print_stats(era_total, national_grid_cf, 'era')

@@ -10,6 +10,7 @@ import statsmodels.api as sm
 import argparse
 import numpy as np
 import math
+from sklearn.ensemble import IsolationForest
 # custom code
 import stats
 
@@ -19,24 +20,33 @@ def cop_plot(df_cop, hp):
     residual_results = rmodel.fit()
     res_const = residual_results.params[0]
     res_grad = residual_results.params[1]
+    print('COP Regression gradient {} const {}'.format(res_const, res_grad))
     x = np.array([df_cop['deltat'].min(),df_cop['deltat'].max()])
     y = res_const + res_grad * x
+
+    # polynomial of degree 2 fit
+#   coeffs = np.polynomial.polynomial.polyfit(df_cop['cop'].to_numpy(), df_cop['deltat'].to_numpy(), 2)
+    coeffs = np.polynomial.polynomial.polyfit(df_cop['deltat'].to_numpy(), df_cop['cop'].to_numpy(), 2)
+    print(coeffs)
+    y = coeffs[0] + coeffs[1] * x + coeffs[2] * x * x
 
     range_start = math.floor(df_cop['deltat'].min())
     range_end = math.ceil(df_cop['deltat'].max())
     bins = pd.cut(df_cop['deltat'], range(range_start,range_end,2) )
-    print(bins)
+#   print(bins)
     means = df_cop.groupby(bins).mean()
-    print(means)
+#   print(means)
 
-    plt.scatter(df_cop['deltat'], df_cop['cop'], s=12)
+    plt.scatter(df_cop['deltat'], df_cop['cop'], s=12, label='cop vs deltat')
     # regression line
-    plt.plot(x, y, color='red')
+    plt.plot(x, y, color='red', label='regression line')
     # line of COPs calculated using mean cop in bins
-    plt.plot(means['deltat'], means['cop'], color='green')
+#   plt.plot(means['deltat'], means['cop'], color='green', label='mean cop')
+
     plt.title('RHPP {} COP vs DELTA T'.format(hp))
     plt.xlabel('Temperature Difference (degrees C)')
     plt.ylabel('COP')
+    plt.legend(loc='upper right', fontsize=15)
     plt.show()
 
 # cop calculation
@@ -114,16 +124,43 @@ plt.ylabel('Electricity Demand (kWh)', fontsize=15)
 plt.legend(loc='upper right', fontsize=15)
 plt.show()
 
+output_dir = "/home/malcolm/uclan/data/rhpp-heatpump/testing/"
 # ASHP
 
-df_ashp = cop(df,'ASHP',40.0, 'temperature')
+#df_ashp = cop(df,'ASHP',40.0, 'temperature')
 #df_gshp = daily_cop(df,'GSHP',40.0, 'soiltemp')
+filename = output_dir + 'ashp.csv'
+df_ashp = pd.read_csv(filename, header=0, sep=',', index_col=0, squeeze=True)
+count_raw = len(df_ashp)
+# replace NaNs by interpolation
+df_ashp = df_ashp.dropna()
+count_nan = len(df_ashp)
+# remove stuff that physically doesn't make sense
+df_ashp = df_ashp[(df_ashp['cop'] < 10.0) & (df_ashp['cop'] > 0.001)]
+count_phys = len(df_ashp)
+# remove outliers using Isolation Forrest
+print('Isolation Forrest on ASHP')
+outliers = IsolationForest(random_state=0).fit_predict(df_ashp)
+df_ashp = df_ashp.loc[outliers!=-1]
+count_isol = len(df_ashp)
+print('Original cop {} remove NaN {} remove >10 and <0.001 {} Isolation Forrest {}'.format(count_raw, count_nan, count_phys, count_isol))
+
 cop_plot(df_ashp, 'ASHP')
 
 # GSHP
 
-df_gshp = cop(df,'GSHP',40.0, 'soiltemp')
+#df_gshp = cop(df,'GSHP',40.0, 'soiltemp')
 #df_gshp = daily_cop(df,'GSHP',40.0, 'soiltemp')
+filename = output_dir + 'gshp.csv'
+df_gshp = pd.read_csv(filename, header=0, sep=',', index_col=0, squeeze=True)
+# replace NaNs by interpolation
+df_gshp = df_gshp.interpolate()
+# remove stuff that physically doesn't make sense
+df_gshp = df_gshp[(df_gshp['cop'] < 10.0) & (df_gshp['cop'] > 0.001)]
+# remove outliers using Isolation Forrest
+print('Isolation Forrest on GSHP')
+outliers = IsolationForest(random_state=0).fit_predict(df_gshp)
+df_gshp = df_gshp.loc[outliers!=-1]
 cop_plot(df_gshp, 'GSHP')
 
 # convert to daily
@@ -207,3 +244,11 @@ plt.show()
 
 output_filename = "/home/malcolm/uclan/data/rhpp-heatpump/testing/hourly_factors.csv"
 df.to_csv(output_filename, float_format='%g');
+
+# sink tmperatures
+# read in the data
+output_dir = "/home/malcolm/uclan/data/rhpp-heatpump/testing/"
+filename = output_dir + 'sinks.csv'
+df = pd.read_csv(filename, header=0, sep=',', index_col=0, squeeze=True)
+print(df)
+print('SINKS: min {} max {} mean {}'.format(df['min'].min(), df['max'].max(), df['mean'].mean() ) )
