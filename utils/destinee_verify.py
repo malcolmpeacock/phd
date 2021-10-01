@@ -90,3 +90,26 @@ plt.xlabel('Hour of the year')
 plt.ylabel('Demand (MWh)')
 plt.legend(loc='upper right')
 plt.show()
+
+# read destinee electric heat only
+destinee_filename = '/home/malcolm/uclan/data/destinee/heat.csv'
+destinee_heat = readers.read_destinee(destinee_filename)
+print(destinee_heat)
+# convert from TJ to Kwh then to GWh
+# destinee_electric_heat = destinee_heat['electric'] * 277777.77777778 * 1e-6
+# convert from TWh to GWh
+destinee_electric_heat = destinee_heat['electric'] * 1e+3
+
+print('Electric heat annual mine: {} destinee: {}'.format(heat.sum(), destinee_electric_heat.sum() ) )
+
+daily_heat = heat.resample('D').sum()
+daily_destinee_electric_heat = destinee_electric_heat.resample('D').sum()
+
+# daily  plot of historic and electric
+daily_heat.plot(label='BDEW')
+daily_destinee_electric_heat.plot(label='DESTINEE')
+plt.title('Daily UK Electric Heat 2010 BDEW and DESTINEE')
+plt.xlabel('Day of the year')
+plt.ylabel('Demand (MWh)')
+plt.legend(loc='upper right')
+plt.show()

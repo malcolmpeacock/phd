@@ -377,8 +377,11 @@ for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True 
 # calculate 2018 cooling TWh
 #  2018 enery for cooling and ventillation is 12.4 TWh but what it the split?
 #  2050 Pathway says in 2007 cooling was 9TWh
+#  DESTINEE says 2.3
+#  Regression in here says 0.7
 #cooling_energy_2018 = 12.4
-cooling_energy_2018 = 9
+#cooling_energy_2018 = 9
+cooling_energy_2018 = 2.3
 cooling2018 = cooling(temperature_2018, cooling_energy_2018)
 electric2018_no_heat_or_cooling = electric2018_no_heat - cooling2018
 
