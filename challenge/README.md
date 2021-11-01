@@ -21,3 +21,7 @@ The programs would be run in the following order to create a solution
 * **how_we_did.py** calculates the score from the next set of data and creates a plot to see how it performed.
 * **utils.py** common utility functions
 
+## Example of use
+  python demand_forecast.py set3 --method regs --alg lgbm
+  python create_solution.py set3
+  python how_we_did.py 3 --sf --plot

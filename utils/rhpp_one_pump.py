@@ -10,21 +10,42 @@ import statsmodels.api as sm
 import glob
 import os.path
 import numpy as np
+import argparse
+from sklearn.ensemble import IsolationForest
 
 # custom code
 import stats
 import readers
 
 # main program
+# T_co temperature of water leaving condenser
+# T_in input temp ( ASHP refrigerant, GSHP ground loop water )
+#        - so maybe not exactly same as source temp ?
+# Tsf space heating water
+# Twf cylinder (tap) hot water
+
+# process command line
+parser = argparse.ArgumentParser(description='COP for one house.')
+parser.add_argument('--house', action="store", dest="house", help='House', default='5299' )
+parser.add_argument('--sink', action="store_true", dest="sink", help='Use measured sink temp for space heating.', default=False)
+parser.add_argument('--isf', action="store_true", dest="isf", help='Remove outliers using Isolation Forrest.', default=False)
+parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+args = parser.parse_args()
+
+# input data
 
 heat_dir = "/home/malcolm/uclan/tools/python/scripts/heat/output/"
 
 years = ['2012', '2013', '2014', '2015' ]
 method = 'W'
 # 5299 COP curve is wrong way!
-location = '5299'
-# 5311 COP curver is OK
+#location = '5299'
+location = args.house
+# 5311 COP curve is OK
 #location = '5311'
+
+radiator_sink = 40
+floor_sink = 30
 
 years_dfs = []
 # for each year ...
@@ -59,8 +80,18 @@ house = house.join(df, how='left')
 house = house[ house['Ehp'] > 0.0]
 # only include the points with some heat
 house = house[ house['Hhp'] > 0.0]
+# remove outliers using Isolation Forrest
+if args.isf:
+    print('Isolation Forrest on GSHP')
+    outliers = IsolationForest(random_state=0).fit_predict(house)
+    house = house.loc[outliers!=-1]
 
 print(house) 
+if args.sink:
+    mean_tsf = house['Tsf'].mean()
+    print('Using Mean TSF of {} '.format(mean_tsf) )
+    radiator_sink = mean_tsf
+    floor_sink = mean_tsf
 
 ax = house['temperature'].plot(label='Reanalysis temperature', color='green')
 plt.ylabel('Temperature (degrees C)', fontsize=15)
@@ -82,14 +113,14 @@ print('HP {} sink {}'.format(hp, sink) )
 # TODO should use soiltemp for gshp, first example is ASHP
 # if both underfloor and radiators then assume 50-50
 if sink == 'Both':
-    sink_temp = 35.0
+    sink_temp = 0.5 * ( radiator_sink + floor_sink )
     print('BOTH')
 else:
     if sink == 'Radiators':
-        sink_temp = 40.0
+        sink_temp = radiator_sink
         print('Radiators')
     else:
-        sink_temp = 30.0
+        sink_temp = floor_sink
         print('Floor')
 
 # delta T

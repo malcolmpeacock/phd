@@ -107,9 +107,16 @@ daily_destinee_electric_heat = destinee_electric_heat.resample('D').sum()
 
 # daily  plot of historic and electric
 daily_heat.plot(label='BDEW')
-daily_destinee_electric_heat.plot(label='DESTINEE')
-plt.title('Daily UK Electric Heat 2010 BDEW and DESTINEE')
+daily_destinee_electric_heat.plot(label='DESSTINEE')
+plt.title('Daily UK Electric Heat 2010 BDEW and DESSTINEE')
 plt.xlabel('Day of the year')
 plt.ylabel('Demand (MWh)')
 plt.legend(loc='upper right')
 plt.show()
+
+#print(daily_heat.index)
+#print(daily_destinee_electric_heat.index)
+daily_destinee_electric_heat.index = daily_heat.index
+
+stats.print_stats_header()
+stats.print_stats(daily_heat, daily_destinee_electric_heat, 'DESSTINEE', 2, True)

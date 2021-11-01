@@ -80,7 +80,7 @@ def daily_cop(df, hp, sink_temp,source_name):
     heat = df['heat_'+hp].resample('D').sum()
  
     df_hp = pd.concat([source_temp, elec, heat], axis=1,keys=[source_name, 'elec_'+hp, 'heat_'+hp ])
-    print(df_hp)
+#   print(df_hp)
     # only include points where there is some electricity
     # put in some minimum as it may consume some when not heating?
     df_hp = df_hp[ df_hp['elec_'+hp] > 200.0]
@@ -95,6 +95,12 @@ def daily_cop(df, hp, sink_temp,source_name):
 
 # main program
 
+# process command line
+parser = argparse.ArgumentParser(description='Validate electricity demand.')
+parser.add_argument('--scale', action="store", dest="scale", help='Amount to scale by to fix the bias', default=1.0, type=float )
+parser.add_argument('--cop', action="store_true", dest="cop", help='Do COP plots', default=False)
+args = parser.parse_args()
+
 # read in the data
 output_dir = "/home/malcolm/uclan/data/rhpp-heatpump/testing/"
 filename = output_dir + 'electric.csv'
@@ -108,90 +114,110 @@ df['real'] = df['real'] * 0.001
 synthetic = df['synthetic']
 real = df['real']
 
+# scale the synthetic to correct the bias
+
+synthetic = synthetic * args.scale
+
 # extract a sample few days to look at hourly
 synthetic = synthetic['2014-01-01 00:00:00':'2014-01-04 23:00:00']
 real = real['2014-01-01 00:00:00':'2014-01-04 23:00:00']
-print('synthetic')
-print(synthetic)
-print('real')
-print(real)
+# print('synthetic')
+# print(synthetic)
+# print('real')
+# print(real)
 
-synthetic.plot(label='Synthetic Electicity Time Series', color='blue')
-real.plot(label='Real Electicity Time Series', color='red')
+synthetic.plot(label='Predicted Electricity Time Series BDEW method', color='blue')
+real.plot(label='Actual Electricity Time Series (measured heat pumps)', color='red')
 plt.title('Hourly synthetic electric heat vs measured data 4 days')
 plt.xlabel('Hour of the day', fontsize=15)
 plt.ylabel('Electricity Demand (kWh)', fontsize=15)
 plt.legend(loc='upper right', fontsize=15)
 plt.show()
 
+# COP calculation
 output_dir = "/home/malcolm/uclan/data/rhpp-heatpump/testing/"
+if args.cop:
+
 # ASHP
 
 #df_ashp = cop(df,'ASHP',40.0, 'temperature')
 #df_gshp = daily_cop(df,'GSHP',40.0, 'soiltemp')
-filename = output_dir + 'ashp.csv'
-df_ashp = pd.read_csv(filename, header=0, sep=',', index_col=0, squeeze=True)
-count_raw = len(df_ashp)
-# replace NaNs by interpolation
-df_ashp = df_ashp.dropna()
-count_nan = len(df_ashp)
-# remove stuff that physically doesn't make sense
-df_ashp = df_ashp[(df_ashp['cop'] < 10.0) & (df_ashp['cop'] > 0.001)]
-count_phys = len(df_ashp)
-# remove outliers using Isolation Forrest
-print('Isolation Forrest on ASHP')
-outliers = IsolationForest(random_state=0).fit_predict(df_ashp)
-df_ashp = df_ashp.loc[outliers!=-1]
-count_isol = len(df_ashp)
-print('Original cop {} remove NaN {} remove >10 and <0.001 {} Isolation Forrest {}'.format(count_raw, count_nan, count_phys, count_isol))
+    filename = output_dir + 'ashp.csv'
+    df_ashp = pd.read_csv(filename, header=0, sep=',', index_col=0, squeeze=True)
+    count_raw = len(df_ashp)
+    # replace NaNs by interpolation
+    df_ashp = df_ashp.dropna()
+    count_nan = len(df_ashp)
+    # remove stuff that physically doesn't make sense
+    df_ashp = df_ashp[(df_ashp['cop'] < 10.0) & (df_ashp['cop'] > 0.001)]
+    count_phys = len(df_ashp)
+    # remove outliers using Isolation Forrest
+    print('Isolation Forrest on ASHP')
+    outliers = IsolationForest(random_state=0).fit_predict(df_ashp)
+    df_ashp = df_ashp.loc[outliers!=-1]
+    count_isol = len(df_ashp)
+    print('Original cop {} remove NaN {} remove >10 and <0.001 {} Isolation Forrest {}'.format(count_raw, count_nan, count_phys, count_isol))
 
-cop_plot(df_ashp, 'ASHP')
+    cop_plot(df_ashp, 'ASHP')
 
 # GSHP
 
-#df_gshp = cop(df,'GSHP',40.0, 'soiltemp')
-#df_gshp = daily_cop(df,'GSHP',40.0, 'soiltemp')
-filename = output_dir + 'gshp.csv'
-df_gshp = pd.read_csv(filename, header=0, sep=',', index_col=0, squeeze=True)
-# replace NaNs by interpolation
-df_gshp = df_gshp.interpolate()
-# remove stuff that physically doesn't make sense
-df_gshp = df_gshp[(df_gshp['cop'] < 10.0) & (df_gshp['cop'] > 0.001)]
-# remove outliers using Isolation Forrest
-print('Isolation Forrest on GSHP')
-outliers = IsolationForest(random_state=0).fit_predict(df_gshp)
-df_gshp = df_gshp.loc[outliers!=-1]
-cop_plot(df_gshp, 'GSHP')
+    #df_gshp = cop(df,'GSHP',40.0, 'soiltemp')
+    #df_gshp = daily_cop(df,'GSHP',40.0, 'soiltemp')
+    filename = output_dir + 'gshp.csv'
+    df_gshp = pd.read_csv(filename, header=0, sep=',', index_col=0, squeeze=True)
+    # replace NaNs by interpolation
+    df_gshp = df_gshp.interpolate()
+    # remove stuff that physically doesn't make sense
+    df_gshp = df_gshp[(df_gshp['cop'] < 10.0) & (df_gshp['cop'] > 0.001)]
+    # remove outliers using Isolation Forrest
+    print('Isolation Forrest on GSHP')
+    outliers = IsolationForest(random_state=0).fit_predict(df_gshp)
+    df_gshp = df_gshp.loc[outliers!=-1]
+    cop_plot(df_gshp, 'GSHP')
 
 # convert to daily
 dfd = df.resample('D').sum()
+daily_synthetic = dfd['synthetic'] * args.scale
+daily_real = dfd['real']
+
+# correction factor between sereis
+total_real = daily_real.sum()
+total_synthetic = daily_synthetic.sum()
+percent = (total_real - total_synthetic) / total_real
+mean_factor =  daily_real.mean() / daily_synthetic.mean()
+print("Total Real {} Synthetic {} Percentage {} Mean Factor {}".format(total_real, total_synthetic, percent, mean_factor) )
+#fixed_synthetic = daily_synthetic  * mean_factor
+#fixed_synthetic = (daily_synthetic * 0.4669) + 38.36
+#fixed_synthetic = (daily_synthetic / 0.4669) - 38.36
+#fixed_synthetic = (daily_synthetic - 38.36) / 0.4669
+#fixed_synthetic = (daily_synthetic - 38.36) * 0.4669
+#fixed_synthetic = (daily_synthetic + 38.36) * 0.4669
+fixed_synthetic = (daily_synthetic * 1.4669) + 38.36
 
 # compute R2 and correlation
 
 stats.print_stats_header()
-stats.print_stats(dfd['synthetic'], dfd['real'], 'Electric Daily', 1, True)
-total_real = dfd['real'].sum()
-total_synthetic = dfd['synthetic'].sum()
-percent = (total_real - total_synthetic) / total_real
-print("Total Real {} Synthetic {} Percentage {}".format(total_real, total_synthetic, percent) )
+stats.print_stats(daily_synthetic, daily_real, 'Electric Daily', 1, True)
+stats.print_stats(fixed_synthetic  * mean_factor, daily_real, 'Electric Fixed', 1, True)
 
 # output plots
 
-print('COLUMNS')
-print(dfd.columns)
-dfd['synthetic'].plot(label='Synthetic Electicity Time Series', color='blue')
-dfd['real'].plot(label='Real Electicity Time Series', color='red')
-plt.title('Comparison of daily synthetic electric and measured heat pump')
+#print('COLUMNS')
+#print(dfd.columns)
+daily_synthetic.plot(label='Modelled Electricity Time Series', color='blue')
+daily_real.plot(label='Actual Measured Electricity Time Series', color='red')
+fixed_synthetic.plot(label='Fixed Electricity Time Series', color='green')
+plt.title('Comparison of predicted electricty demand and measured from heat pumps')
 plt.xlabel('Day of the year', fontsize=15)
 plt.ylabel('Electricity Demand (kWh)', fontsize=15)
 plt.legend(loc='upper right', fontsize=15)
 plt.show()
 
-
 # load duration curves
 
-sorted_real = dfd['real'].sort_values(ascending=False)
-sorted_synthetic = dfd['synthetic'].sort_values(ascending=False)
+sorted_real = daily_real.sort_values(ascending=False)
+sorted_synthetic = daily_synthetic.sort_values(ascending=False)
 
 sorted_real.plot(label='Electricity Demand Measured)', use_index=False, color='blue')
 sorted_synthetic.plot(label='Electricity Demand Modelled)', use_index=False, color='red')
@@ -250,5 +276,5 @@ df.to_csv(output_filename, float_format='%g');
 output_dir = "/home/malcolm/uclan/data/rhpp-heatpump/testing/"
 filename = output_dir + 'sinks.csv'
 df = pd.read_csv(filename, header=0, sep=',', index_col=0, squeeze=True)
-print(df)
+#print(df)
 print('SINKS: min {} max {} mean {}'.format(df['min'].min(), df['max'].max(), df['mean'].mean() ) )

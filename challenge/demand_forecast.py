@@ -118,7 +118,8 @@ def period_lgbm(input_df, output, input_f):
     print('Creating Regressor ...')
     # num_leaves=31 learning_rate=0.1, n_estimators=100, boosting='gbdt'
 #   model = lgb.LGBMRegressor(num_leaves=41, learning_rate=0.05, n_estimators=200, boosting_type='dart', deterministic=True)
-    model = lgb.LGBMRegressor(num_leaves=31, learning_rate=0.05, n_estimators=200, boosting_type='dart', deterministic=True)
+#   model = lgb.LGBMRegressor(num_leaves=31, learning_rate=0.05, n_estimators=200, boosting_type='dart', deterministic=True)
+    model = lgb.LGBMRegressor(num_leaves=8, learning_rate=0.08, n_estimators=200, boosting_type='gbdt', deterministic=True)
     print('Fitting model ...')
     model.fit(X_train, y_train, eval_metric='l1')
     sk_pred = model.predict(X_test)

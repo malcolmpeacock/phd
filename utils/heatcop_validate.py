@@ -42,12 +42,15 @@ def get_heat(filename, year):
     # read when2heat demand for GB space total
     demand = read_mycsv(filename)
 
+    print('Total space {} water {}'.format(demand['space'].sum(), demand['water'].sum() ) )
 # wrongly based on fuel energy not heat demand but in the IECSF20 paper
 #   space_that_is_gas = {"2018" : 0.72, "2017" : 0.72, "2016" : 0.72}
 #   water_that_is_gas = {"2018" : 0.81, "2017" : 0.81, "2016" : 0.81}
 # new corrected values
+    # 
     space_that_is_gas = {"2018" : 0.70, "2017" : 0.70, "2016" : 0.70}
     water_that_is_gas = {"2018" : 0.79, "2017" : 0.78, "2016" : 0.79}
+    #
     # 70% of the space heat demand comes from gas
     demand['space'] = demand['space'] * space_that_is_gas[year]
     # 79% of the water heat demand comes from gas
@@ -120,6 +123,8 @@ space_and_waterW = get_heat(watson_filename, reference_year)
 space_and_waterH = get_heat(hdd128_filename, reference_year)
 space_and_waterS = get_heat(hdd155_filename, reference_year)
 
+print('Annual heat BDEW {} Watson {} HDD128 {} HDD155 {}'.format(space_and_waterR.sum(), space_and_waterW.sum(), space_and_waterH.sum(), space_and_waterS.sum()) )
+
 # fix watson from regression
 # wtotal = space_and_waterW.sum()
 # g = -0.1288
@@ -151,7 +156,7 @@ unknown_gas = total_gas - space_and_water_gas[reference_year]
 gas_energy_smallest = gas_energy.nsmallest(1)[0]
 non_heat_gas_per_day = min(gas_energy_smallest, unknown_gas/365.0)
 nvalues = len(gas_energy.index)
-print('total_gas: {0:.2f} number of values: {1:6d} unknown gas: {2:.2f} non_heat_gas_per_day {3:.2f} '. format(total_gas, nvalues, unknown_gas, non_heat_gas_per_day))
+print('total_gas: {0:.2f} number of values: {1:6d} unknown gas: {2:.2f} non_heat_gas_per_day {3:.2f} space and water gas {4:.2f} '. format(total_gas, nvalues, unknown_gas, non_heat_gas_per_day, space_and_water_gas[reference_year]))
 
 # gas energy by scaling assuming all the unknown is temperature dependent
 gas_energy_temp = scale_to(gas_energy, space_and_water_gas[reference_year])
@@ -240,10 +245,10 @@ space_and_waterS.sort_values(ascending=False, inplace=True)
 
 # gas_energy.plot(label='Gas Energy', use_index=False, style='--', fontsize=18)
 # fontsize here only affects the numbers
-#gas_energy_comp.plot(label='Heat Demand Gas (compromise)', use_index=False, color='blue')
-#gas_energy_const.plot(label='Heat Demand Gas (not temp)', use_index=False, style='--', color='blue')
-#gas_energy_temp.plot(label='Heat Demand Gas (all temp)', use_index=False, style='.', color='blue')
-gas_energy_temp.plot(label='Heat Demand Gas', use_index=False, color='blue')
+gas_energy_comp.plot(label='Heat Demand Gas (compromise)', use_index=False, color='blue')
+gas_energy_const.plot(label='Heat Demand Gas (not temp)', use_index=False, style='--', color='blue')
+gas_energy_temp.plot(label='Heat Demand Gas (all temp)', use_index=False, style='.', color='blue')
+#gas_energy_temp.plot(label='Heat Demand Gas', use_index=False, color='blue')
 space_and_waterR.plot(label='Heat Demand BDEW', use_index=False, color='red')
 space_and_waterW.plot(label='Heat Demand Watson', use_index=False, color='green')
 space_and_waterH.plot(label='Heat Demand HDD 12.8', use_index=False, color='purple')

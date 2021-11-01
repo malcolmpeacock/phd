@@ -47,7 +47,7 @@ def hydrogen_boiler(heat, efficiency):
 #                pv  - pv capacity factor time series
 # percent_heat_pumps - percentage of heating from heat pumps
 #              years - list of years to do the analysis for
-def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, plot, hourly, ref_temp):
+def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, plot, hourly, ref_temp, climate):
    
     # factor to normalise by.
     # If doing daily is the max daily demand so that storage is relative to 
@@ -80,10 +80,11 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
     for year in years:
         print('Creating demand for {}'.format(year))
 
-        # read weather year electric heat for ref year
-#       demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{1:}Weather{0:}I-Bbdew.csv'.format(year, args.reference)
         # rhpp heat pump profile
-        demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{1:}Weather{0:}I-Brhpp.csv'.format(year, args.reference)
+        file_base = 'Brhpp'
+        if climate:
+            file_base = 'BrhppC'
+        demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{1:}Weather{0:}I-{2:}.csv'.format(year, args.reference, file_base)
         demand = readers.read_copheat(demand_filename,['electricity','heat','temperature'])
         # store total heat demand
         total_heat_demand_years[year] = demand['heat'].sum() * 1e-6
@@ -215,15 +216,18 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
         plt.ylabel('Store size in days', fontsize=15)
         plt.show()
 
-        yearly_start = store_hist.resample('Y').first()
-        print(yearly_start)
-        yearly_max = store_hist.resample('Y').max()
-        print(yearly_max)
-        yearly_min = store_hist.resample('Y').min()
-        print(yearly_min)
-#       yearly_diff = yearly_max - yearly_min
-        yearly_diff = yearly_start - yearly_min
-        print(yearly_diff)
+#   Calculate storage for different years for plotting
+    yearly_start = store_hist.resample('Y').first()
+#   print(yearly_start)
+    yearly_max = store_hist.resample('Y').max()
+#   print(yearly_max)
+    yearly_min = store_hist.resample('Y').min()
+#   print(yearly_min)
+#   yearly_diff = yearly_max - yearly_min
+    yearly_diff = yearly_start - yearly_min
+#   print('YEARLY_DIFF')
+#   print(yearly_diff)
+    if plot:
         yearly_diff.plot(color='green', label='yearly store size')
         plt.legend(loc='upper right')
         plt.title('Store size at the end of each year: {} wind to {} solar'.format(f_wind, f_pv) )
@@ -242,7 +246,15 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
     # calculate storage at grid of Pv and Wind capacities for
     # hydrogen efficiency TODO need a reference
     df= storage.storage_grid(all_demand, wind, pv, 0.8, hourly)
-    return df
+
+    # store yearly values
+    yearly_data = { 'year'   : total_heat_demand_years.keys(),
+                    'heat'   : total_heat_demand_years.values(),
+                    'temp'   : mean_temp_years.values(),
+                    'wd'     : yearly_wd.values(),
+                    'storage'     : yearly_diff }
+    yd = pd.DataFrame(yearly_data).set_index('year')
+    return df, yd
 
 # main program
 
@@ -252,6 +264,7 @@ parser.add_argument('--start', action="store", dest="start", help='Start Year', 
 parser.add_argument('--reference', action="store", dest="reference", help='Reference Year', default='2018' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--hourly', action="store_true", dest="hourly", help='Use hourly time series', default=False)
+parser.add_argument('--climate', action="store_true", dest="climate", help='Use climate change adjusted time series', default=False)
 args = parser.parse_args()
 
 # print arguments
@@ -375,11 +388,18 @@ else:
     wind = wind.resample('D').mean()
     pv = pv.resample('D').mean()
 
-df = supply_and_storage(mod_electric_ref, wind, pv, 0.0, years, args.plot, args.hourly, ref_temperature)
+df, yd = supply_and_storage(mod_electric_ref, wind, pv, 0.0, years, args.plot, args.hourly, ref_temperature, args.climate)
 print("Zero heat pumps: Max storage {} Min Storage {}".format(df['storage'].max(), df['storage'].min()) )
 
-df5 = supply_and_storage(mod_electric_ref, wind, pv, 0.5, years, args.plot, args.hourly, ref_temperature)
+df5, yd5 = supply_and_storage(mod_electric_ref, wind, pv, 0.5, years, args.plot, args.hourly, ref_temperature, args.climate)
 print("50% heat pumps: Max storage {} Min Storage {}".format(df5['storage'].max(), df5['storage'].min()) )
+
+output_dir = "/home/malcolm/uclan/output/40years"
+output_file = 'yearly'
+if args.climate:
+    output_file = 'yearlyC'
+yd5.to_csv('{}/{}.csv'.format(output_dir, output_file))
+
 
 if args.plot:
     df.plot.scatter(x='f_wind', y='f_pv', c='storage', colormap='viridis')

@@ -12,17 +12,41 @@ import statsmodels.api as sm
 import glob
 import os.path
 import numpy as np
+import argparse
 
 # custom code
 import stats
 import readers
 
+# fit a regression line through the cops
+def cop_reg(deltat, cop):
+    cdf = pd.concat([deltat, cop], axis=1,keys=['deltat', 'cop'])
+    cdf = cdf[cdf['cop']>0.01]
+    if len(cdf)<3:
+        return 10
+    cdf = cdf.dropna()
+    if len(cdf)<3:
+        return 10
+    rmodel = sm.OLS(cdf['cop'].to_numpy(), sm.add_constant(cdf['deltat'].to_numpy()))
+    residual_results = rmodel.fit()
+    res_const = residual_results.params[0]
+    res_grad = residual_results.params[1]
+    print('COP grad {}'.format(res_grad) )
+    return res_grad
+
 # main program
+
+# process command line
+parser = argparse.ArgumentParser(description='COP for one house.')
+parser.add_argument('--method', action="store", dest="method", help='method', default='W' )
+parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--rc', action="store_true", dest="rc", help='Remove bad cop houses', default=False)
+args = parser.parse_args()
 
 heat_dir = "/home/malcolm/uclan/tools/python/scripts/heat/output/"
 
 years = ['2012', '2013', '2014', '2015' ]
-method = 'W'
+method = args.method
 
 years_dfs = []
 # for each year ...
@@ -65,6 +89,7 @@ gshp_cops = np.empty(0)
 gshp_deltat = np.empty(0)
 ashp_cops = np.empty(0)
 ashp_deltat = np.empty(0)
+nbad=0
 
 # process the houses
 rhpp_dir = '/home/malcolm/uclan/data/rhpp-heatpump/UKDA-8151-csv/csv/'
@@ -100,6 +125,7 @@ for name in glob.glob(rhpp_dir + 'processed*'):
         print('Ehp Zero {}'.format(len(house[house['Ehp'] < 0.0000001])))
         # get the cops and deltats
         house_cop = house['Hhp'] / house['Ehp']
+        house_cop = house_cop.replace(np.inf, 0.0)
 #       house_cop = house_cop[~house_cop.isin([np.nan, np.inf, -np.inf]).any()]
 #       house_cop = house_cop.dropna()
 #       n_gt10 = len(house_cop[house_cop > 10.0])
@@ -110,13 +136,25 @@ for name in glob.glob(rhpp_dir + 'processed*'):
 #       print(house_cop.values)
 #       print(df.loc[house.index])
         if hp == 'GSHP':
-            gshp_cops = np.concatenate([gshp_cops, house_cop.replace(np.inf, 0).values])
             house_deltat = house['Tsf'] - df.loc[house.index]['soiltemp']
-            gshp_deltat = np.concatenate([gshp_deltat, house_deltat.values])
+            if args.rc:
+                cop_grad = cop_reg(house_deltat, house_cop)
+                if cop_grad>0.0:
+                    print('BAD COP ignored : {}'.format(location))
+                    nbad+=1
+                else:
+                    gshp_cops = np.concatenate([gshp_cops, house_cop.values])
+                    gshp_deltat = np.concatenate([gshp_deltat, house_deltat.values])
         else:
-            ashp_cops = np.concatenate([ashp_cops, house_cop.replace(np.inf, 0).values])
             house_deltat = house['Tsf'] - df.loc[house.index]['temperature']
-            ashp_deltat = np.concatenate([ashp_deltat, house_deltat.values])
+            if args.rc:
+                cop_grad = cop_reg(house_deltat, house_cop)
+                if cop_grad>0.0:
+                    print('BAD COP ignored : {}'.format(location))
+                    nbad+=1
+                else:
+                    ashp_cops = np.concatenate([ashp_cops, house_cop.values])
+                    ashp_deltat = np.concatenate([ashp_deltat, house_deltat.values])
 #       print(house_deltat)
 #       print(all_deltat)
        
@@ -158,7 +196,8 @@ for name in glob.glob(rhpp_dir + 'processed*'):
         df['elec_'+hp] = df['elec_'+hp] + house_electric
         df['heat_'+hp] = df['heat_'+hp] + house_heat
 
-print(df)
+#print(df)
+print('Number of bad cops {}'.format(nbad))
 
 output_dir = "/home/malcolm/uclan/data/rhpp-heatpump/testing/"
 df.to_csv(output_dir + 'electric.csv')

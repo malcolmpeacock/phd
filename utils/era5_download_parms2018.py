@@ -48,5 +48,6 @@ def get_era5_parms(filename, year):
     c.retrieve( 'reanalysis-era5-single-levels', request, filename)
 
 #year = '2018'
-year = '2009'
+#year = '2009'
+year = '2019'
 get_era5_parms("/home/malcolm/uclan/tools/python/scripts/heat/input/weather/ERA5_parms{}.nc".format(year), year)
