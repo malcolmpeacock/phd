@@ -47,27 +47,32 @@ def hydrogen_boiler(heat, efficiency):
 #                pv  - pv capacity factor time series
 # percent_heat_pumps - percentage of heating from heat pumps
 #              years - list of years to do the analysis for
-def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, plot, hourly, ref_temp, climate):
-   
+def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly, ref_temp, climate, historic, heat_that_is_electric, normalise_factor):
+#   normalise_factor = mod_electric_ref.max()
+    heat_pump_share = 0.0
+    if scenario == 'H':
+        heat_pump_share = 0.5
+    if scenario == 'P':
+        heat_pump_share = 1.0
     # factor to normalise by.
     # If doing daily is the max daily demand so that storage is relative to 
     # peak daily demand energy.
-    normalise_factor = mod_electric_ref.max()
     total_demand = 0
-    # ordinary year
-    ordinary_year = mod_electric_ref.values
-    # leap year
-    # find doy for feb 28th ( 31 days in jan )
-    feb28 = 31 + 28
-    if hourly:
-        feb28 = mod_electric_ref['2018-02-28'].values
-        mar1 = mod_electric_ref['2018-03-01'].values
-        feb29 = np.add(feb28, mar1) * 0.5
-        leap_year = np.concatenate([mod_electric_ref['2018-01-01 00:00' : '2018-02-28 23:00'].values, feb29,  mod_electric_ref['2018-03-01 00:00' : '2018-12-31 23:00'].values])
-    else:
-        feb29 = (ordinary_year[feb28-1] + ordinary_year[feb28]) * 0.5
-        feb29a = np.array([feb29])
-        leap_year = np.concatenate([ordinary_year[0:feb28], feb29a, ordinary_year[feb28:] ] )
+    if not historic:
+        # ordinary year
+        ordinary_year = mod_electric_ref.values
+        # leap year
+        # find doy for feb 28th ( 31 days in jan )
+        feb28 = 31 + 28
+        if hourly:
+            feb28 = mod_electric_ref['2018-02-28'].values
+            mar1 = mod_electric_ref['2018-03-01'].values
+            feb29 = np.add(feb28, mar1) * 0.5
+            leap_year = np.concatenate([mod_electric_ref['2018-01-01 00:00' : '2018-02-28 23:00'].values, feb29,  mod_electric_ref['2018-03-01 00:00' : '2018-12-31 23:00'].values])
+        else:
+            feb29 = (ordinary_year[feb28-1] + ordinary_year[feb28]) * 0.5
+            feb29a = np.array([feb29])
+            leap_year = np.concatenate([ordinary_year[0:feb28], feb29a, ordinary_year[feb28:] ] )
 
 
     demand_years=[]
@@ -78,7 +83,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
     yearly_wd={}
     # for each weather year ...
     for year in years:
-        print('Creating demand for {}'.format(year))
+#       print('Creating demand for {}'.format(year))
 
         # rhpp heat pump profile
         file_base = 'Brhpp'
@@ -100,22 +105,34 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
         if not hourly:
             demand = demand.resample('D').sum()
         heat_weather = demand['heat']
-        # use leap year data or ordinary year data
-        if calendar.isleap(year):
-            electric_ref = pd.Series(leap_year, index=heat_weather.index)
-        else:
-            electric_ref = pd.Series(ordinary_year, index=heat_weather.index)
-        if percent_heat_pumps > 0:
-            # electric heat series
-            electric_heat = demand['electricity'] * percent_heat_pumps
-            electric_ref = electric_ref + electric_heat
 
+        if historic:
+            electric_ref = mod_electric_ref[str(year) + '-01-01' : str(year) + '-12-31']
+            electric_ref.index = heat_weather.index
+        else:
+            # use leap year data or ordinary year data
+            if calendar.isleap(year):
+                electric_ref = pd.Series(leap_year, index=heat_weather.index)
+            else:
+                electric_ref = pd.Series(ordinary_year, index=heat_weather.index)
+        heat_added = 0.0
+        if scenario == 'H' or scenario == 'P':
+            # electric heat series
+            electric_heat = demand['electricity'] * heat_pump_share
+            electric_ref = electric_ref + electric_heat
+            heat_added = electric_heat.sum()
+        if scenario == 'E' :
+            electric_heat = heat_weather * heat_that_is_electric
+            electric_ref = electric_ref + electric_heat
+            heat_added = electric_heat.sum()
+
+        print('Demand for {} total {} heat {}'.format(year, electric_ref.sum(), heat_added ))
         # normalise and add to the list
         demand_years.append( electric_ref / normalise_factor)
     # concantonate the demand series
     all_demand = pd.concat(demand_years[year] for year in range(len(years)) )
     if plot:
-        all_demand.plot(color='blue', label='Electric with {} heating'.format(percent_heat_pumps))
+        all_demand.plot(color='blue', label='Electric with {} heating'.format(heat_pump_share))
         pv.plot(color='red', label='Solar PV')
         wind.plot(color='green', label='Wind')
         plt.title('Daily Electricity demand and generation')
@@ -254,21 +271,36 @@ def supply_and_storage(mod_electric_ref, wind, pv, percent_heat_pumps, years, pl
                     'wd'     : yearly_wd.values(),
                     'storage'     : yearly_diff }
     yd = pd.DataFrame(yearly_data).set_index('year')
-    return df, yd
+    return df, yd, all_demand
 
 # main program
+
+# Scenarios
+scenarios = { 'P' : 'All Heat Pumps', 
+              'F' : 'FES Net Zero Hybrid Heat Pumps',
+              'H' : 'Half Heat Pumps',
+              'B' : 'All Hydrgoen Boilers',
+              'N' : 'No heating',
+              'E' : 'Existing Heating based on weather' }
 
 # process command line
 parser = argparse.ArgumentParser(description='Show the impact of heat pumps or hydrogen on different shares of wind and solar')
 parser.add_argument('--start', action="store", dest="start", help='Start Year', type=int, default=2017 )
+parser.add_argument('--end', action="store", dest="end", help='End Year', type=int, default=2019 )
 parser.add_argument('--reference', action="store", dest="reference", help='Reference Year', default='2018' )
+parser.add_argument('--scenario', action="store", dest="scenario", help=str(scenarios), default='H' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--historic', action="store_true", dest="historic", help='Use historic time series instead of synthetic', default=False)
 parser.add_argument('--hourly', action="store_true", dest="hourly", help='Use hourly time series', default=False)
 parser.add_argument('--climate', action="store_true", dest="climate", help='Use climate change adjusted time series', default=False)
 args = parser.parse_args()
 
+last_weather_year = args.end
+hourly = args.hourly
+if args.historic:
+    hourly = False
 # print arguments
-print('Start year {} Reference year {} plot {} hourly {}'.format(args.start, args.reference, args.plot, args.hourly) )
+print('Start year {} End Year {} Reference year {} plot {} hourly {} climate {} historic {}'.format(args.start, args.end, args.reference, args.plot, args.hourly, args.climate, args.historic) )
 
 # input assumptions for reference year
 heat_that_is_electric = 0.06     # my spreadsheet from DUKES
@@ -293,9 +325,44 @@ ref_temperature = ref_resistive['temperature']
 
 #  To remove existing space and water heating from the electricity demand time 
 #  series for the reference year - subtract the resistive heat series
+#  ( even if using historic series we calculate it so can scale to it )
 
 mod_electric_ref = electric_ref - (ref_resistive_heat * heat_that_is_electric)
-daily_electric_ref = mod_electric_ref.resample('D').sum()
+total_energy = electric_ref.sum()
+#total_energy = mod_electric_ref.sum()
+
+# Normalise by the unmodified reference year time series
+# so comparisons are possible
+daily_original_electric_with_heat = electric_ref.resample('D').sum()
+normalise_factor = daily_original_electric_with_heat.max()
+
+if not args.historic:
+
+    daily_electric_ref = mod_electric_ref.resample('D').sum()
+else:
+    # use KFs historic series instead
+    demand_filename = '/home/malcolm/uclan/data/kf/UKDailyELD19832014.csv'
+    last_weather_year = 2013
+    if args.start > last_weather_year:
+        print("ERROR: start year > last")
+        quit()
+    kf = pd.read_csv(demand_filename, header=None, squeeze=True)
+    d = pd.date_range(start = '1983-01-01', end = '2013-12-31', freq='D' )
+    mod_electric_ref = pd.Series(kf.values[0:len(d)], d, dtype='float64', name='ENGLAND_WALES_DEMAND')
+    # scale to the reference year by adding or subtracting a constant.
+    # as per KF method ( could test others )
+    new_values = np.empty(0)
+    for year in range(args.start, last_weather_year+1):
+        year_electric = mod_electric_ref[str(year)]
+#       print(year)
+#       print(year_electric)
+        adjustment = (total_energy - year_electric.sum()) / year_electric.size
+        print("Year {} len {} adjustment {} total {}".format(year, year_electric.size, adjustment, total_energy) )
+        year_electric = year_electric + adjustment
+        new_values = np.concatenate((new_values, year_electric.values))
+    d = pd.date_range(start = str(args.start) + '-01-01', end = str(last_weather_year) + '-12-31', freq='D' )
+    mod_electric_ref = pd.Series(new_values, d, dtype='float64', name='ENGLAND_WALES_DEMAND')
+    daily_electric_ref = mod_electric_ref
 
 # plot reference year electricity
 
@@ -309,7 +376,7 @@ if args.plot:
 
 # weather years from the start to 2019
 # ( need to download more ninja to get up to 2020 )
-last_weather_year = 2019
+#last_weather_year = 2019
 years = range(args.start, last_weather_year+1)
 print(years)
 # read ninja
@@ -380,7 +447,7 @@ if args.plot:
     plt.legend(loc='upper right')
     plt.show()
 
-if args.hourly:
+if hourly:
     print('Using hourly time series')
 else:
     print('Using daily time series')
@@ -388,86 +455,21 @@ else:
     wind = wind.resample('D').mean()
     pv = pv.resample('D').mean()
 
-df, yd = supply_and_storage(mod_electric_ref, wind, pv, 0.0, years, args.plot, args.hourly, ref_temperature, args.climate)
-print("Zero heat pumps: Max storage {} Min Storage {}".format(df['storage'].max(), df['storage'].min()) )
-
-df5, yd5 = supply_and_storage(mod_electric_ref, wind, pv, 0.5, years, args.plot, args.hourly, ref_temperature, args.climate)
-print("50% heat pumps: Max storage {} Min Storage {}".format(df5['storage'].max(), df5['storage'].min()) )
+df, yd, all_demand = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, ref_temperature, args.climate, args.historic, heat_that_is_electric, normalise_factor)
+print("Max storage {} Min Storage {}".format(df['storage'].max(), df['storage'].min()) )
 
 output_dir = "/home/malcolm/uclan/output/40years"
-output_file = 'yearly'
+electricChar = 'S'
+if args.historic:
+    electricChar = 'H'
+climateChar = 'N'
 if args.climate:
-    output_file = 'yearlyC'
-yd5.to_csv('{}/{}.csv'.format(output_dir, output_file))
+    climateChar = 'C'
+scenarioChar = args.scenario
 
-
-if args.plot:
-    df.plot.scatter(x='f_wind', y='f_pv', c='storage', colormap='viridis')
-#   plt.colorbar(label='Storage (days)')
-    plt.xlabel('Proportion of wind')
-    plt.ylabel('Porportion of solar')
-    plt.title('Storage in days for different proportions of wind and solar (no heat pumps).')
-    plt.show()
-
-    df5.plot.scatter(x='f_wind', y='f_pv', c='storage', colormap='viridis')
-#   plt.colorbar(label='Storage (days)')
-    plt.xlabel('Proportion of wind')
-    plt.ylabel('Porportion of solar')
-    plt.title('Storage in days for different proportions of wind and solar (50% heat pumps).')
-    plt.show()
-
-#   Lw = 0.28
-#   Ls = 0.116
-#   Lw = 1 / wind.mean()
-#   Ls = 1 / pv.mean()
-    Lw = wind.mean()
-    Ls = pv.mean()
-#   ic(Lw)
-#   ic(Ls)
-
-    # minimum generation
-
-    Ps = []
-    Pw = []
-
-    # y intercept
-    Pw.append(0.0)
-    Ps.append( 1 / Ls )
-    # x intercept
-    Ps.append(0.0)
-    Pw.append( 1 / Lw )
-
-    min_energy_line = { 'Pw' : Pw, 'Ps' : Ps }
-    df_min = pd.DataFrame(data=min_energy_line)
-
-    # plot minimum generation line TODO
-#   ax = df_min.plot(x='Pw', y='Ps',label='minimum generation')
-
-    # calcuate constant storage line for 40 days and plot
-    storage_40 = storage.storage_line(df,40.0)
-#   storage_40.plot(x='Pw',y='Ps',ax=ax,label='storage 40 days. 2018 system')
-    ax = storage_40.plot(x='Pw',y='Ps',label='storage 40 days. 2018 system')
-
-    # calcuate constant storage line for 25 days and plot
-    storage_25 = storage.storage_line(df,25.0)
-    storage_25.plot(x='Pw',y='Ps',ax=ax,label='storage 25 days. 2018 system')
-
-    # calcuate constant storage line for 40 days and plot
-    storage5_40 = storage.storage_line(df5,40.0)
-    storage5_40.plot(x='Pw',y='Ps',ax=ax,label='storage 40 days. 2018 system with 50% heating by heat pumps')
-
-    # calcuate constant storage line for 25 days and plot
-    storage5_25 = storage.storage_line(df5,25.0)
-    storage5_25.plot(x='Pw',y='Ps',ax=ax,label='storage 25 days, 2018 system with 50% heating by heat pumps')
-
-    # calcuate constant storage line for 2 days and plot
-    storage5_2 = storage.storage_line(df5,2.0)
-    storage5_2.plot(x='Pw',y='Ps',ax=ax,label='storage 2 days, 2018 system with 50% heating by heat pumps')
-
-    plt.title('Constant storage lines with and without heat pumps {} to {}'.format(args.start, last_weather_year) )
-    plt.xlabel('Wind ( capacity in proportion to nomarlised demand)')
-    plt.ylabel('Solar PV ( capacity in proportion to normalised demand)')
-    plt.show()
+yd.to_csv('{}/yearly{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
+df.to_csv('{}/shares{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
+all_demand.to_csv('{}/demand{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
 
 ## TODO wasserstein distance of heat demand to see if it changes over the
 ##      years.
