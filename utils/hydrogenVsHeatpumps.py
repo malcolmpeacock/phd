@@ -38,22 +38,52 @@ def regression_line(nx,ny):
     print('Regression grad {} const {}'.format(reg_grad, reg_const) )
     return x_reg, y_reg
 
+# Hydrogen boiler time series
+
 def hydrogen_boiler(heat, efficiency):
     hydrogen = heat / efficiency
     return hydrogen
+
+# Hybrid Heat Pump time series
+def hybrid_heat_pump(heat, efficiency, threshold):
+    demand = heat.copy()
+    total_heat = demand['heat'].sum()
+    # sort by temperature
+    demand = demand.sort_values('temperature')
+    hydrogen = demand['electricity'] * 0.0
+    # starting with coldest hour, allocate to gas and zero electric
+    # until the % energy is reached is reached.
+    # (this is based on FES 2019 assumption of % energy used so we find
+    #  out what threshold temperature this would need )
+    #
+    irow=0
+    for index, row in demand.iterrows():
+        # divide be efficiency because we use more primary gas energy than heat.
+        hydrogen.iloc[irow] = row['heat'] / efficiency
+        demand.iloc[irow,demand.columns.get_loc('electricity')] = 0.0
+        threshold_temperature = row['temperature']
+        if row['temperature'] > threshold:
+            break
+        irow+=1
+
+    # gas = heat * 0.85
+    # electric = 0
+    demand = demand.sort_index()
+    hydrogen = hydrogen.sort_index()
+    print(demand)
+    print(hydrogen)
+    # output the temperature - this is the threshold temperature.
+
+    return demand['electricity'], hydrogen
+
 #
 #  mod_electric_ref  - reference electricity with heat removed
 #              wind  - wind capacity factor time series
 #                pv  - pv capacity factor time series
-# percent_heat_pumps - percentage of heating from heat pumps
+#           scenario - percentage of heating from heat pumps
 #              years - list of years to do the analysis for
 def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly, ref_temp, climate, historic, heat_that_is_electric, normalise_factor):
 #   normalise_factor = mod_electric_ref.max()
-    heat_pump_share = 0.0
-    if scenario == 'H':
-        heat_pump_share = 0.5
-    if scenario == 'P':
-        heat_pump_share = 1.0
     # factor to normalise by.
     # If doing daily is the max daily demand so that storage is relative to 
     # peak daily demand energy.
@@ -76,6 +106,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
 
 
     demand_years=[]
+    hydrogen_years=[]
     total_heat_demand_years={}
     mean_temp_years={}
     monthly_temp_years={}
@@ -116,25 +147,57 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
             else:
                 electric_ref = pd.Series(ordinary_year, index=heat_weather.index)
         heat_added = 0.0
-        if scenario == 'H' or scenario == 'P':
-            # electric heat series
+        hydrogen = demand['electricity'] * 0.0
+        hydrogen_efficiency = 0.85  # hydrogen boiler efficiency
+
+        heat_pump_share = 0.0
+        if scenario == 'H':
+            heat_pump_share = 0.5
+        if scenario == 'P':
+            heat_pump_share = 1.0
+        if scenario == 'F':
+            heat_pump_share = 0.28  # fes 2019 Net Zero 2050
+
+        # Half Heat pumps of all heat pumps
+        if scenario == 'H' or scenario == 'P' or scenario == 'F':
             electric_heat = demand['electricity'] * heat_pump_share
             electric_ref = electric_ref + electric_heat
             heat_added = electric_heat.sum()
+        # Existing heat only
         if scenario == 'E' :
             electric_heat = heat_weather * heat_that_is_electric
             electric_ref = electric_ref + electric_heat
             heat_added = electric_heat.sum()
+        # Hydrogen boilers or half heat pumps
+        if scenario == 'B' or scenario == 'H':
+            percent_boilers = 1.0
+            if scenario == 'H':
+                percent_boilers = 0.5
+            if scenario == 'F':
+                percent_boilers = 0.45
+            hydrogen = hydrogen_boiler(heat_weather, hydrogen_efficiency) * percent_boilers
+        # Hybdrid heat pumps
+        if scenario == 'F' :
+            percent_hybdrid_heat_pump = 0.13 # fes 2019 Net Zero 2050
+            # temperature below which hybrid heat pumps switch completely to
+            # hydrogen to balance the grid
+            hybdrid_threshold = 5.0         
+            electric_hp, hydrogen_hp = hybrid_heat_pump(demand, hydrogen_efficiency, hybdrid_threshold)
+            electric_ref = electric_ref + electric_hp
+            hydrogen = hydrogen + hydrogen_hp
 
         print('Demand for {} total {} heat {}'.format(year, electric_ref.sum(), heat_added ))
         # normalise and add to the list
         demand_years.append( electric_ref / normalise_factor)
+        hydrogen_years.append( hydrogen / normalise_factor )
     # concantonate the demand series
     all_demand = pd.concat(demand_years[year] for year in range(len(years)) )
+    all_hydrogen = pd.concat(hydrogen_years[year] for year in range(len(years)) )
     if plot:
         all_demand.plot(color='blue', label='Electric with {} heating'.format(heat_pump_share))
         pv.plot(color='red', label='Solar PV')
         wind.plot(color='green', label='Wind')
+        all_hydrogen.plot(color='yellow', label='Hydrogen heating')
         plt.title('Daily Electricity demand and generation')
         plt.xlabel('Year', fontsize=15)
         plt.ylabel('Normalised daily Electricity', fontsize=15)
@@ -293,6 +356,8 @@ parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagn
 parser.add_argument('--historic', action="store_true", dest="historic", help='Use historic time series instead of synthetic', default=False)
 parser.add_argument('--hourly', action="store_true", dest="hourly", help='Use hourly time series', default=False)
 parser.add_argument('--climate', action="store_true", dest="climate", help='Use climate change adjusted time series', default=False)
+parser.add_argument('--base', action="store_true", dest="base", help='Use baseload shares', default=False)
+parser.add_argument('--ev', action="store_true", dest="ev", help='Include Electric Vehicles', default=False)
 args = parser.parse_args()
 
 last_weather_year = args.end
