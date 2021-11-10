@@ -20,6 +20,46 @@ import stats
 import readers
 import storage
 
+# electric vehicle time series
+ev_annual_energy = 95.83  # annual ev energy TWh fes Net Zero 2050
+ev_annual_energy = 93.38  # percentage adjusted for 2018 with all ev
+
+def ev_series(temperature, annual_energy):
+    daily_energy = annual_energy * 1000000 / 365.0
+    # at 14.4 kWh/100 km, gives
+    daily_range_km = daily_energy * 100.0 / 14.4
+    # calculate ev profile
+    daytime_temp = 19.0
+    new_daily_temp = 0.0
+    ev = temperature * 0.0
+    for i in range(0,len(ev)):
+        hour = i%24
+        # night charging at 1am, 2am, 3am
+        if hour==1 or hour==2 or hour==3:
+            ev[i] = 0.2
+        # peak daily charging
+        if hour==14 or hour==15 or hour==16 or hour==17:
+            ev[i] = 0.1
+        # factor increased energy for exterme low or high temperatures
+        if hour==23:
+            daytime_temp = new_daily_temp / 12.0
+            new_daily_temp = 0.0
+        # calculate temperature during the day
+        if hour > 7 or hour < 21:
+            new_daily_temp += temperature.values[i]
+        # calculate energy increase if below 10 or above 28
+        increase = 0.0
+        if daytime_temp < 10.0:
+            increase = ( (2.4 * daily_range_km)/100.0 ) * (10.0 - daytime_temp) / 5
+        if daytime_temp > 28.0:
+            increase = ( (2.3 * daily_range_km)/100.0 ) * (daytime_temp - 28.0) / 5
+#       print('Temp {} energy {} increase {}'.format(daytime_temp, daily_energy, increase) )
+        energy = daily_energy + increase
+        ev[i] = ev[i] * energy
+    print(ev)
+    return ev
+
+
 # create regression line for plotting
 
 def list_regression_line(x,y):
@@ -35,7 +75,7 @@ def regression_line(nx,ny):
     reg_grad = residual_results.params[1]
     x_reg = np.array([nx.min(),nx.max()])
     y_reg = reg_grad * x_reg + reg_const
-    print('Regression grad {} const {}'.format(reg_grad, reg_const) )
+#   print('Regression grad {} const {}'.format(reg_grad, reg_const) )
     return x_reg, y_reg
 
 # Hydrogen boiler time series
@@ -82,7 +122,7 @@ def hybrid_heat_pump(heat, efficiency, threshold):
 #                pv  - pv capacity factor time series
 #           scenario - percentage of heating from heat pumps
 #              years - list of years to do the analysis for
-def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly, ref_temp, climate, historic, heat_that_is_electric, normalise_factor):
+def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly, ref_temp, climate, historic, heat_that_is_electric, normalise_factor, base=False):
 #   normalise_factor = mod_electric_ref.max()
     # factor to normalise by.
     # If doing daily is the max daily demand so that storage is relative to 
@@ -116,7 +156,10 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
     for year in years:
 #       print('Creating demand for {}'.format(year))
 
-        # rhpp heat pump profile
+        # file name contructed from:
+        # B    - the BDEW method
+        # rhpp - the rhpp hourly (heat pump) profile
+        # C    - climate change adjusted for temperature increase.
         file_base = 'Brhpp'
         if climate:
             file_base = 'BrhppC'
@@ -169,7 +212,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
             electric_ref = electric_ref + electric_heat
             heat_added = electric_heat.sum()
         # Hydrogen boilers or half heat pumps
-        if scenario == 'B' or scenario == 'H':
+        if scenario == 'B' or scenario == 'H' or scenario == 'F':
             percent_boilers = 1.0
             if scenario == 'H':
                 percent_boilers = 0.5
@@ -183,10 +226,16 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
             # hydrogen to balance the grid
             hybdrid_threshold = 5.0         
             electric_hp, hydrogen_hp = hybrid_heat_pump(demand, hydrogen_efficiency, hybdrid_threshold)
-            electric_ref = electric_ref + electric_hp
-            hydrogen = hydrogen + hydrogen_hp
+            electric_ref = electric_ref + electric_hp * percent_hybdrid_heat_pump
+            hydrogen = hydrogen + hydrogen_hp * percent_hybdrid_heat_pump
 
         print('Demand for {} total {} heat {}'.format(year, electric_ref.sum(), heat_added ))
+
+        # electric transport charging
+        if args.ev:
+            ev = ev_series(demand['temperature'], ev_annual_energy)
+            electric_ref = electric_ref + ev
+
         # normalise and add to the list
         demand_years.append( electric_ref / normalise_factor)
         hydrogen_years.append( hydrogen / normalise_factor )
@@ -263,8 +312,8 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         plt.ylabel('Mean population weighted temperature (degrees C)', fontsize=15)
         plt.show()
 
-    # look at the storage history for 2 wind and 1 pv which is what we have now
-    # look at the storage history for 3 wind and 1 pv
+    # look at the storage history for 2 wind and 1 pv
+    # which is what we have now
     f_wind = 1.8
     f_pv = 1.0
     supply = wind * f_wind  +  pv * f_pv
@@ -287,7 +336,6 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
     print('Storage for {} wind {} pv size {} is {} days. last_one {}'.format(f_wind, f_pv, store_size, storage_days, last_one) )
     period_hist = store_hist + storage_days
     period_hist = period_hist.clip(0.0, storage_days)
-#   print(period_hist)
 
     if plot:
         period_hist.plot()
@@ -323,9 +371,27 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         plt.show()
         
 
+    # 
+    if args.genh:
+        h_input = all_hydrogen
+    else:
+        h_input = None
     # calculate storage at grid of Pv and Wind capacities for
     # hydrogen efficiency TODO need a reference
-    df= storage.storage_grid(all_demand, wind, pv, 0.8, hourly)
+    grid=7
+    if base:
+        df_list=[]
+        for i_base in range(0,grid):
+            base_load = i_base * 0.05
+            print('Base load {}'.format(base_load))
+            df= storage.storage_grid(all_demand, wind, pv, 0.8, hourly, grid, base_load, h_input)
+            df['base'] = df['storage'] * 0.0 + base_load
+            df_list.append(df)
+        df = pd.concat(df_list)
+        print(df)
+    else:
+        print('Base load Zero')
+        df= storage.storage_grid(all_demand, wind, pv, 0.8, hourly, grid, 0.0, h_input)
 
     # store yearly values
     yearly_data = { 'year'   : total_heat_demand_years.keys(),
@@ -334,7 +400,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
                     'wd'     : yearly_wd.values(),
                     'storage'     : yearly_diff }
     yd = pd.DataFrame(yearly_data).set_index('year')
-    return df, yd, all_demand
+    return df, yd, all_demand, all_hydrogen
 
 # main program
 
@@ -352,12 +418,14 @@ parser.add_argument('--start', action="store", dest="start", help='Start Year', 
 parser.add_argument('--end', action="store", dest="end", help='End Year', type=int, default=2019 )
 parser.add_argument('--reference', action="store", dest="reference", help='Reference Year', default='2018' )
 parser.add_argument('--scenario', action="store", dest="scenario", help=str(scenarios), default='H' )
+parser.add_argument('--dir', action="store", dest="dir", help='Output directory', default='40years' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--historic', action="store_true", dest="historic", help='Use historic time series instead of synthetic', default=False)
 parser.add_argument('--hourly', action="store_true", dest="hourly", help='Use hourly time series', default=False)
 parser.add_argument('--climate', action="store_true", dest="climate", help='Use climate change adjusted time series', default=False)
 parser.add_argument('--base', action="store_true", dest="base", help='Use baseload shares', default=False)
 parser.add_argument('--ev', action="store_true", dest="ev", help='Include Electric Vehicles', default=False)
+parser.add_argument('--genh', action="store_true", dest="genh", help='Assume hydrogen made from electricity and stored in the same store', default=False)
 args = parser.parse_args()
 
 last_weather_year = args.end
@@ -365,7 +433,7 @@ hourly = args.hourly
 if args.historic:
     hourly = False
 # print arguments
-print('Start year {} End Year {} Reference year {} plot {} hourly {} climate {} historic {}'.format(args.start, args.end, args.reference, args.plot, args.hourly, args.climate, args.historic) )
+print('Start year {} End Year {} Reference year {} plot {} hourly {} climate {} historic {} base {} ev {} genh {}'.format(args.start, args.end, args.reference, args.plot, args.hourly, args.climate, args.historic, args.base, args.ev, args.genh) )
 
 # input assumptions for reference year
 heat_that_is_electric = 0.06     # my spreadsheet from DUKES
@@ -429,14 +497,21 @@ else:
     mod_electric_ref = pd.Series(new_values, d, dtype='float64', name='ENGLAND_WALES_DEMAND')
     daily_electric_ref = mod_electric_ref
 
+
 # plot reference year electricity
 
 if args.plot:
+
     daily_electric_ref.plot(color='blue', label='Historic Electric without heating {}'.format(args.reference))
     plt.title('Reference year Daily Electricity with heat removed')
     plt.xlabel('Year', fontsize=15)
     plt.ylabel('Electricity (Mwh) per day', fontsize=15)
 #plt.legend(loc='upper right')
+    if args.ev:
+        ev = ev_series(ref_temperature, ev_annual_energy)
+        daily_ev = ev.resample('D').sum()
+        daily_ev.plot(color='red', label='Electric vehicles {}'.format(args.reference))
+        plt.legend(loc='upper right')
     plt.show()
 
 # weather years from the start to 2019
@@ -520,10 +595,10 @@ else:
     wind = wind.resample('D').mean()
     pv = pv.resample('D').mean()
 
-df, yd, all_demand = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, ref_temperature, args.climate, args.historic, heat_that_is_electric, normalise_factor)
+df, yd, all_demand, all_hydrogen = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, ref_temperature, args.climate, args.historic, heat_that_is_electric, normalise_factor, args.base)
 print("Max storage {} Min Storage {}".format(df['storage'].max(), df['storage'].min()) )
 
-output_dir = "/home/malcolm/uclan/output/40years"
+output_dir = "/home/malcolm/uclan/output/" + args.dir
 electricChar = 'S'
 if args.historic:
     electricChar = 'H'
@@ -535,6 +610,7 @@ scenarioChar = args.scenario
 yd.to_csv('{}/yearly{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
 df.to_csv('{}/shares{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
 all_demand.to_csv('{}/demand{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
+all_hydrogen.to_csv('{}/hydrogen{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
 
 ## TODO wasserstein distance of heat demand to see if it changes over the
 ##      years.
