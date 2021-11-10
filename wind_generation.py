@@ -13,6 +13,7 @@ from datetime import date
 import matplotlib.pyplot as plt
 import argparse
 import numpy as np
+from netCDF4 import Dataset, num2date
 
 # Custom scripts
 from utils.readers import read_midas_hourly
@@ -55,7 +56,7 @@ parser = argparse.ArgumentParser(description='Generate wind energy time series.'
 parser.add_argument('year', type=int, help='Weather year')
 parser.add_argument('--nyears', type=int, action="store", dest="nyears", help='Number of years', default=1 )
 parser.add_argument('--location', action="store", dest="location", help='Location to generate for z for all: ', default='z' )
-parser.add_argument('--weather', action="store", dest="weather", help='Weather source', default='midas' )
+parser.add_argument('--weather', action="store", dest="weather", help='Weather source: midas, era5 or adv', default='midas' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--debug', action="store_true", dest="debug", help='Debug 30 values of wind speed only', default=False)
 
@@ -73,7 +74,7 @@ if args.location == 'z':
 else:
     generators={ args.location : locations[args.location]}
 
-print(generators)
+#print(generators)
 
 weather_source = args.weather
 
@@ -82,15 +83,13 @@ print('Options- weather: {} '.format( weather_source))
 # heat_path = os.path.realpath('heat')
 
 # input_path = os.path.join(home_path, 'input')
-# interim_path = os.path.join(heat_path, 'interim')
 # output_path = os.path.join(home_path, 'output', version)
 input_path = "/home/malcolm/uclan/input/"
-interim_path = "/home/malcolm/uclan/interim/"
 
 # read turbine power curve
 power_file = "/home/malcolm/uclan/data/n902500power.csv"
 curve = pd.read_csv(power_file, header=0, usecols=['Windspeedms','HSkw'] )
-print(curve)
+#print(curve)
 if args.plot:
     curve.plot(x='Windspeedms',y='HSkw')
     plt.title('Wind turbine power curve')
@@ -101,7 +100,7 @@ test1 = power_from_curve(2.0)
 test2 = power_from_curve(3.5)
 test3 = power_from_curve(4.2)
 test4 = power_from_curve(25.2)
-print("ws 2.0 {} ws 3.5 {} ws 4.2 {} ws 25.2 {}".format(test1,test2,test3,test4))
+#print("ws 2.0 {} ws 3.5 {} ws 4.2 {} ws 25.2 {}".format(test1,test2,test3,test4))
 # heights of 70m, 80, 100m given in docs
 turbine_height = 100.0
 surface_roughness = 0.03
@@ -158,30 +157,65 @@ for year in years:
                 wind_hourly = wind_hourly.squeeze()
                 wind_hourly.index.rename('time', inplace=True)
                 wind_locations[key] = wind_hourly
-    # ERA5 weather
     else:
-        print('Using weather data from ERA5')
-        parameters = {
-            'wind_u': 'u10',
-            'wind_v': 'v10'
-        }
+        if weather_source == 'adv':
+        # Adverse climate change weather events
+            print('Using advserse weather event data for climate change')
+            event = 'winter_wind_drought'
+            period = '5'
+            warming = '2-4'
+            eno = '1'
+            parm = 'windspeed'
+            filename = '/home/malcolm/uclan/data/adverse/{}_uk_return_period_1_in_{}_years_duration_gwl1{}degC_event{}_{}.nc'.format(event, period, warming, eno, parm)
+            # Read the netCDF file
+            print('Reading netcdf file {} ...'.format(filename))
+            nc = Dataset(filename)
+            print(nc.variables)
+            time = nc.variables['time'][:]
+            time_units = nc.variables['time'].units
+            latitude = nc.variables['latitude'][:]
+            longitude = nc.variables['longitude'][:]
+            wind = nc.variables['wind_speed'][:]
 
-        download.weather_era5(input_path, year, 1, 'I', 'wind',  ['10m_u_component_of_wind', '10m_v_component_of_wind'], [ 60, -8, 50, 2, ])
-        df_u = read.weather_era5(input_path, year, 1, 'I', 'wind','u10')
-        df_v = read.weather_era5(input_path, year, 1, 'I', 'wind','v10')
-        # for each location ...
-        for key, generator in generators.items():
-            # blinearly interpolate wind from weather grid
-            coords = generator['coords']
-            lat = coords[0]
-            lon = coords[1]
-            bl_u,x,y = bil.bilinear(lat, lon, df_u)
-            bl_v,x,y = bil.bilinear(lat, lon, df_v)
-            wind_u = bl_u['t_interp']
-            wind_v = bl_v['t_interp']
-            wind_squared = wind_u.pow(2) + wind_u.pow(2)
-            wind_hourly = wind_squared.pow(1/2).rename('wind_speed')
-            wind_locations[key] = wind_hourly
+            times=num2date(time, time_units,only_use_cftime_datetimes=False,only_use_python_datetimes=True)
+            df = pd.DataFrame(data=wind.reshape(len(time), len(latitude) * len(longitude)), index=pd.DatetimeIndex(times, name='time'), columns=pd.MultiIndex.from_product([latitude, longitude], names=('latitude', 'longitude')))
+            print(df)
+            # for each location ...
+            for key, generator in generators.items():
+                # blinearly interpolate wind from weather grid
+                coords = generator['coords']
+                lat = coords[0]
+                lon = coords[1]
+                bl,x,y = bil.bilinear(lat, lon, df)
+                wind = bl['t_interp']
+                wind_hourly = wind.rename('wind_speed')
+                wind_locations[key] = wind_hourly
+
+        else:
+        # ERA5 weather
+            print('Using weather data from ERA5')
+            parameters = {
+                'wind_u': 'u10',
+                'wind_v': 'v10'
+            }
+
+            download.weather_era5(input_path, year, 1, 'I', 'wind',  ['10m_u_component_of_wind', '10m_v_component_of_wind'], [ 60, -8, 50, 2, ])
+            df_u = read.weather_era5(input_path, year, 1, 'I', 'wind','u10')
+            df_v = read.weather_era5(input_path, year, 1, 'I', 'wind','v10')
+            print(df_v)
+            # for each location ...
+            for key, generator in generators.items():
+                # blinearly interpolate wind from weather grid
+                coords = generator['coords']
+                lat = coords[0]
+                lon = coords[1]
+                bl_u,x,y = bil.bilinear(lat, lon, df_u)
+                bl_v,x,y = bil.bilinear(lat, lon, df_v)
+                wind_u = bl_u['t_interp']
+                wind_v = bl_v['t_interp']
+                wind_squared = wind_u.pow(2) + wind_u.pow(2)
+                wind_hourly = wind_squared.pow(1/2).rename('wind_speed')
+                wind_locations[key] = wind_hourly
 
     # calculate power from the weather
 
