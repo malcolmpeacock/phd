@@ -15,9 +15,9 @@ from sklearn.ensemble import RandomForestRegressor
 def forecast(df_in, df_out, df_forecast):
     print('forecast: df_in {} df_out {} df_forecast {}'.format(len(df_in), len(df_out), len(df_forecast) ) )
     print('max demand ...')
-    max_demand_forecast = rf_forecast(['demand', 'solar_irradiance1', 'windspeed_east1'], df_in, df_forecast, df_out['max_demand'])
+    max_demand_forecast = rf_forecast(['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'windspeed3', 'solar_irradiance2'], df_in, df_forecast, df_out['max_demand'])
     print('min demand ...')
-    min_demand_forecast = rf_forecast(['demand', 'spec_humidity1', 'dailytemp'], df_in, df_forecast, df_out['min_demand'])
+    min_demand_forecast = rf_forecast(['demand', 'spec_humidity1', 'dailytemp', 'temperature3', 'demand_lag1', 'temperature2', 'windspeed_north3', 'windspeed_east3', 'temperature2'], df_in, df_forecast, df_out['min_demand'])
 #   prediction = naive(df_in, df_out, df_forecast)
     data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
     prediction = pd.DataFrame(data, index=df_forecast.index)
@@ -35,11 +35,11 @@ def rf_forecast(columns, df_in, df_forecast, df_out):
 def naive(df_in, df_out, df_forecast):
     print('naive: df_in {} df_out {} df_forecast {}'.format(len(df_in), len(df_out), len(df_forecast) ) )
 #   print(df_forecast)
-    df_n = df_forecast[['demand','k']]
-    df_n['k'] = df_forecast['demand']
-    df_n.columns = ['max_demand', 'min_demand']
-#   print(df_n)
-    return df_n
+    max_demand_forecast = df_forecast['demand'].copy()
+    min_demand_forecast = df_forecast['demand'].copy()
+    data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
+    prediction = pd.DataFrame(data, index=df_forecast.index)
+    return prediction
 
 def assess(df_forecast, df_actual):
     print('assess: df_forecast {} df_actual {}'.format(len(df_forecast), len(df_actual) ) )
@@ -96,14 +96,13 @@ if args.start == 0:
 
     # output the forecast
     df_forecast.columns = ['value_max', 'value_min']
-    output_filename = '{}Predictions.csv'.format(output_dir)
+    output_filename = '{}predictions.csv'.format(output_dir)
     df_forecast.to_csv(output_filename, float_format='%.2f')
 
 else:
     rmses=[]
     # 30 days and 49 half hour periods
     forecast_days = 30
-    print('RMSE  Naive RMSE  Skill')
     # for each window ...
     for window in range(args.start):
         # create a forecast df and shorten the input df
@@ -131,8 +130,10 @@ else:
         rmse = assess(df_forecast, df_f_out)
         rmse_b = assess(df_bench, df_f_out)
         skill = rmse / rmse_b
-        print("{:.3f} {:.3f} {:.3f}".format(rmse, rmse_b, skill))
+        # store the assesment
+        rmses.append([rmse, rmse_b, skill])
 
+        # plot
         if args.plot:
             df_forecast['max_demand'].plot(label='forecast max_demand')
             df_f_out['max_demand'].plot(label='actual max_demand')
@@ -145,5 +146,10 @@ else:
             plt.legend(loc='lower left', fontsize=15)
             plt.show()
         
-        # store the assesment
     # output all the assessments
+    skill = 0.0
+    print('RMSE  Naive RMSE  Skill')
+    for vals in rmses:
+        print("{:.3f} {:.3f} {:.3f}".format(vals[0], vals[1], vals[2]))
+        skill += vals[2]
+    print('Average skill {}'.format(skill / len(rmses) ) )

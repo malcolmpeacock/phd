@@ -258,22 +258,40 @@ if args.plot:
     plt.legend(loc='upper right', fontsize=15)
     plt.show()
 
+lass_max = {}
+lass_min = {}
+corr_max = {}
+corr_min = {}
 # lasso max demand
 print('Lasso max_demand')
 coeffs = lasso(df, maxmin['max_demand'], plot=args.plot)
 for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
     print('{:15}         {:.3f}'.format(col,value))
+    lass_max[col] = value
 # lasso min demand
 print('Lasso min_demand')
 coeffs = lasso(df, maxmin['min_demand'], plot=args.plot)
 for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
     print('{:15}         {:.3f}'.format(col,value))
+    lass_min[col] = value
 
 # correlation max_demand
 print('Correlation max_demand')
 coeffs = correlation(df, maxmin['max_demand'], plot=args.plot)
 for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
     print('{:15}         {:.3f}'.format(col,value))
+    corr_max[col] = value
+
+# correlation max_demand
+print('Correlation min_demand')
+coeffs = correlation(df, maxmin['min_demand'], plot=args.plot)
+for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
+    print('{:15}         {:.3f}'.format(col,value))
+    corr_min[col] = value
+
+#data = { 'corr_max' : pd.Series(corr_max), 'corr_min' : pd.Series(corr_min), 'lass_max': pd.Series(lass_max), 'lass_min' : pd.Series(lass_min) }
+df_parms = pd.concat([pd.Series(corr_max), pd.Series(corr_min), pd.Series(lass_max), pd.Series(lass_min) ], keys = ['corr_max', 'corr_min', 'lass_max', 'lass_min'], axis=1)
+print(df_parms)
 
 # sanity check
 print(df.columns)
@@ -300,3 +318,6 @@ fdf.index.name = 'time'
 output_filename = 'merged_august.csv'
 fdf.to_csv(output_dir+output_filename, float_format='%.2f')
 
+# output correlation values
+output_filename = 'correlation.csv'
+df_parms.to_csv(output_dir+output_filename, float_format='%.2f')
