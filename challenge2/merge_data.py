@@ -2,23 +2,9 @@
 # like holidays and csc_ghi.
 # also output the forecast file for next weeks weather.
 #
-# pv_ghi     global horizontal irradiance from the pv data
-# pv_power   power from the pv data
-# pv_temp    panel temperature from the pv data
-# temp1, 6   temperature from weather locations 1 to 6
-# sun1, 6    irradiance from weather locations 1 to 6
-# tempw      temperature at pv location weighted average of 4 surrounding weather
-# sunw       irradiance at pv location weighted average of 4 surrounding weather
-# tempm      mean temperature from all 6 weather locations
-# sunm       mean irradiance from all 6 weather locations
 # k          half hour period of the day  ( based on UTC)
 # dsk        half hour period of the day  ( accounting for clocks changing)
-# zenith     solar zenith angle ( its getting dark if > 87 )
-# cs_ghi     clear sky theorectical GHI based on sun position
-# poa_ghi    ghi on plain of array for sun2 assuming 30 tilt south facing
 # demand     demand data
-# sh         school holiday =1, 0 otherwise
-# ph         public holiday =1, 0 otherwise
 # wd         day of the week
 # week       week number with 1 as the newest
 # season     0=winter, 1=spring, 2=summer, 3=autumn
@@ -83,14 +69,18 @@ def index2ks(index):
     return k.astype(int)
 
 # lagged demand
-def add_lags(df, nlags):
+def add_lags(df, nlags, parameter='demand'):
     count=0
     for lag in range(nlags):
         count+=1
-        previous = df['demand'].values[count-1:len(df)-1]
+        previous = df[parameter].copy().values[0:len(df)-count]
+#       print(previous)
         zero = np.zeros(count)
-        print('df {} prev {} zeros {}'.format(len(df), len(previous), len(zero)))
-        df['demand_lag'+str(count)] = np.concatenate([zero,previous]) 
+#       print(zero)
+        lag_values = np.concatenate([zero,previous])
+        print('df {} prev {} zeros {} new {}'.format(len(df), len(previous), len(zero), len(lag_values)))
+#       print(lag_values)
+        df[parameter+'_lag'+str(count)] = lag_values
 
 def augment(df):
 
@@ -167,6 +157,17 @@ def augment(df):
     df['dsk'] = df['k'] + 2 * (df.index.hour - df.index.tz_localize('UTC').tz_convert(tz=pytz.timezone('Europe/London')).hour + 1)
     df.loc[df['dsk']==95, 'dsk'] = 47
     df.loc[df['dsk']==96, 'dsk'] = 48
+
+    # lagged weather variables
+    add_lags(df, 1, 'solar_irradiance1') 
+    add_lags(df, 1, 'windspeed_east1') 
+    add_lags(df, 1, 'spec_humidity1') 
+    add_lags(df, 1, 'temperature3') 
+    add_lags(df, 1, 'windspeed_north3')
+
+    # cyclic versions of the time variables
+    df['s_k'] = np.sin(df['k'].values * (360 / 48 ) )
+    df['c_k'] = np.cos(df['k'].values * (360 / 48 ) )
 
 # main program
 
@@ -251,10 +252,21 @@ if args.plot:
     plt.legend(loc='upper right', fontsize=15)
     plt.show()
 
-    df['solar_irradiance1'].plot(label='solar_irradiance', color='red')
+    df['solar_irradiance1'].plot(label='solar_irradiance1')
+    df['solar_irradiance1_lag1'].plot(label='solar_irradiance_lag1')
     plt.title('Solar Irradiance')
     plt.xlabel('Hour of the year', fontsize=15)
     plt.ylabel('Irradiance (W/m2)', fontsize=15)
+    plt.legend(loc='upper right', fontsize=15)
+    plt.show()
+
+# plot demand
+    df['demand'].plot(label='demand')
+    maxmin['max_demand'].plot(label='max_demand')
+    maxmin['min_demand'].plot(label='min_demand')
+    plt.title('demand')
+    plt.xlabel('Hour of the year', fontsize=15)
+    plt.ylabel('Demand (MWh)', fontsize=15)
     plt.legend(loc='upper right', fontsize=15)
     plt.show()
 
@@ -304,19 +316,19 @@ for col in df.columns:
 
 output_dir = "/home/malcolm/uclan/challenge2/output/"
 
-# output merged data.
+# output maxmin data.
 maxmin.index.name = 'time'
 output_filename = 'maxmin_pre_august.csv'
-maxmin.to_csv(output_dir+output_filename, float_format='%.2f')
+maxmin.to_csv(output_dir+output_filename, float_format='%.8f')
 # output merged data.
 df.index.name = 'time'
 output_filename = 'merged_pre_august.csv'
-df.to_csv(output_dir+output_filename, float_format='%.2f')
+df.to_csv(output_dir+output_filename, float_format='%.8f')
 
 # output weather forecast
 fdf.index.name = 'time'
 output_filename = 'merged_august.csv'
-fdf.to_csv(output_dir+output_filename, float_format='%.2f')
+fdf.to_csv(output_dir+output_filename, float_format='%.8f')
 
 # output correlation values
 output_filename = 'correlation.csv'
