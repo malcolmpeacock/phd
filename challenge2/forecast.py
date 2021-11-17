@@ -1,4 +1,3 @@
-
 # contrib code
 import sys
 import pandas as pd
@@ -8,6 +7,7 @@ import math
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
+import sklearn.gaussian_process as gp
 import torch
 import torch.nn as nn
 # Import tensor dataset & data loader
@@ -20,14 +20,22 @@ import torch.nn.functional as F
 #   df_forecast same variables as df_in but for the forecast period
 def forecast(df_in, df_out, df_forecast):
     print('forecast: df_in {} df_out {} df_forecast {}'.format(len(df_in), len(df_out), len(df_forecast) ) )
+    max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'windspeed3', 'solar_irradiance2', 'spec_humidity1_lag1', 'solar_irradiance1_lag1']
+    min_cols = ['demand', 'spec_humidity1', 'dailytemp', 'temperature3', 'demand_lag1', 'temperature2', 'windspeed_north3', 'windspeed_east3', 'temperature5', 'temperature3_lag1', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_north1']
     if args.method=='rf':
         print('max demand ...')
 #       max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'windspeed3', 'solar_irradiance2']
-        max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'windspeed3', 'solar_irradiance2', 'spec_humidity1_lag1', 'solar_irradiance1_lag1']
         max_demand_forecast = rf_forecast(max_cols, df_in, df_forecast, df_out['max_demand'])
         print('min demand ...')
-        min_cols = ['demand', 'spec_humidity1', 'dailytemp', 'temperature3', 'demand_lag1', 'temperature2', 'windspeed_north3', 'windspeed_east3', 'temperature5', 'temperature3_lag1', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_north1']
         min_demand_forecast = rf_forecast(min_cols, df_in, df_forecast, df_out['min_demand'])
+        data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
+        prediction = pd.DataFrame(data, index=df_forecast.index)
+    if args.method=='gpr':
+        gpr_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k']
+        print('max demand ...')
+        max_demand_forecast = gpr_forecast(gpr_cols, df_in, df_forecast, df_out['max_demand'])
+        print('min demand ...')
+        min_demand_forecast = gpr_forecast(gpr_cols, df_in, df_forecast, df_out['min_demand'])
         data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
         prediction = pd.DataFrame(data, index=df_forecast.index)
 
@@ -46,6 +54,19 @@ def rf_forecast(columns, df_in, df_forecast, df_out):
 #   regressor = RandomForestRegressor(n_estimators=130, random_state=0)
     regressor.fit(X_train, y_train)
     y_pred = regressor.predict(X_test)
+    return y_pred
+
+# gpr
+
+def gpr_forecast(columns, df_in, df_forecast, df_out):
+    X_train = df_in[columns]
+    y_train = df_out
+    X_test = df_forecast[columns]
+    kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.RBF(10.0, (1e-3, 1e8))
+    model = gp.GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10, alpha=0.1, normalize_y=False, random_state=0)
+
+    model.fit(X_train, y_train)
+    y_pred, std = model.predict(X_test, return_std=True)
     return y_pred
 
 def naive(df_forecast):
@@ -183,6 +204,7 @@ parser = argparse.ArgumentParser(description='Create demand forecast.')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--naive', action="store_true", dest="naive", help='Output the naive forecast', default=False)
 parser.add_argument('--start', action="store", dest="start", help='Where to start rolling assesment from: 0=just forecast, 1=30 days before the end, 2=31 etc.' , default=0, type=int )
+parser.add_argument('--data', action="store", dest="data", help='Where to start data from: 0=use all data, n= use the n most recent days.' , default=0, type=int )
 parser.add_argument('--method', action="store", dest="method", help='Forecast method to use.' , default='rf' )
 parser.add_argument('--step', action="store", dest="step", help='Rolling assesment step.' , default=1, type=int )
 parser.add_argument('--epochs', action="store", dest="epochs", help='Number of epochs to train ann' , default=1, type=int )
@@ -235,12 +257,15 @@ else:
     rmses=[]
     # 30 days and 48 half hour periods
     forecast_days = 30
+    data_start = 0
+    if args.data >0:
+        data_start = len(df_in) - (args.data * 48)
     # for each window ...
     for window in range(0, args.start, args.step):
-        print('Window {} of {}'.format(window, args.start / args.step) )
         # create a forecast df and shorten the input df
-        win_start = window*48
+        win_start = (window * 48) + data_start
         win_end  = len(df_in) - (forecast_days + args.start - window)*48
+        print('Window {} of {} start {} end {}'.format(window+1, math.floor(args.start / args.step), win_start, win_end ) )
         # training data ( weather and demand for prior period )
         df_train_in = df_in[win_start:win_end]
         # print('df_train_in')
