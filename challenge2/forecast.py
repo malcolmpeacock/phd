@@ -7,8 +7,12 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import StandardScaler
 import torch
 import torch.nn as nn
+# Import tensor dataset & data loader
+from torch.utils.data import TensorDataset, DataLoader
+import torch.nn.functional as F
 
 # forecast
 #   df_in       input weather and demand
@@ -16,15 +20,21 @@ import torch.nn as nn
 #   df_forecast same variables as df_in but for the forecast period
 def forecast(df_in, df_out, df_forecast):
     print('forecast: df_in {} df_out {} df_forecast {}'.format(len(df_in), len(df_out), len(df_forecast) ) )
-    print('max demand ...')
-#   max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'windspeed3', 'solar_irradiance2']
-    max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'windspeed3', 'solar_irradiance2', 'spec_humidity1_lag1', 'solar_irradiance1_lag1']
-    max_demand_forecast = rf_forecast(max_cols, df_in, df_forecast, df_out['max_demand'])
-    print('min demand ...')
-    min_demand_forecast = rf_forecast(['demand', 'spec_humidity1', 'dailytemp', 'temperature3', 'demand_lag1', 'temperature2', 'windspeed_north3', 'windspeed_east3', 'temperature5'], df_in, df_forecast, df_out['min_demand'])
-#   prediction = naive(df_in, df_out, df_forecast)
-    data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
-    prediction = pd.DataFrame(data, index=df_forecast.index)
+    if args.method=='rf':
+        print('max demand ...')
+#       max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'windspeed3', 'solar_irradiance2']
+        max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'windspeed3', 'solar_irradiance2', 'spec_humidity1_lag1', 'solar_irradiance1_lag1']
+        max_demand_forecast = rf_forecast(max_cols, df_in, df_forecast, df_out['max_demand'])
+        print('min demand ...')
+        min_cols = ['demand', 'spec_humidity1', 'dailytemp', 'temperature3', 'demand_lag1', 'temperature2', 'windspeed_north3', 'windspeed_east3', 'temperature5', 'temperature3_lag1', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_north1']
+        min_demand_forecast = rf_forecast(min_cols, df_in, df_forecast, df_out['min_demand'])
+        data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
+        prediction = pd.DataFrame(data, index=df_forecast.index)
+
+    if args.method=='ann':
+#       ann_cols = ['demand', 'spec_humidity1', 'dailytemp']
+        ann_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'windspeed3', 'solar_irradiance2', 'spec_humidity1_lag1', 'solar_irradiance1_lag1']
+        prediction = ann_forecast(df_in[ann_cols], df_out, df_forecast[ann_cols], args.plot, args.epochs)
     return prediction
 
 def rf_forecast(columns, df_in, df_forecast, df_out):
@@ -33,6 +43,7 @@ def rf_forecast(columns, df_in, df_forecast, df_out):
     X_test = df_forecast[columns]
     # default error is RMSE criterion=“squared_error”
     regressor = RandomForestRegressor(n_estimators=100, random_state=0)
+#   regressor = RandomForestRegressor(n_estimators=130, random_state=0)
     regressor.fit(X_train, y_train)
     y_pred = regressor.predict(X_test)
     return y_pred
@@ -58,7 +69,9 @@ def assess(df_forecast, df_actual):
     max_diff2 = (df_forecast['max_demand'] - df_actual['max_demand']).pow(2)
     min_diff2 = (df_forecast['min_demand'] - df_actual['min_demand']).pow(2)
     rmse = math.sqrt(max_diff2.sum() + min_diff2.sum() )
-    return rmse
+    min_rmse = math.sqrt(min_diff2.sum())
+    max_rmse = math.sqrt(max_diff2.sum())
+    return rmse, min_rmse, max_rmse
 
 # class to create ANN
 
@@ -102,37 +115,65 @@ def fit(num_epochs, model, loss_fn, opt, train_dl):
     return loss_history
 
 
-# forecast
+# ann_forecast
 #   df_in       input weather and demand
 #   df_out      max and min demand for same period as df_in
 #   df_forecast same variables as df_in but for the forecast period
-def ann_forecast(df_in, df_out, df_forecast):
-    inputs = torch.tensor(df_in.values.astype(np.float32))
-    targets = torch.tensor(df_out.values.astype(np.float32))
+def ann_forecast(df_in, df_out, df_forecast, plot=False, num_epochs=2):
+    # settings:
+    seed = 1
+    batch_size = 48
+    num_neurons = 200
+
+    # normalise:
+    # normalise
+    sc_x = StandardScaler()
+    sc_y = StandardScaler()
+    x = sc_x.fit_transform(df_in.values.astype(np.float32))
+    y = sc_y.fit_transform(df_out.values.astype(np.float32))
+
+#   inputs = torch.tensor(df_in.values.astype(np.float32))
+#   targets = torch.tensor(df_out.values.astype(np.float32))
+
+    inputs = torch.tensor(x)
+    targets = torch.tensor(y)
     torch.manual_seed(seed)    # reproducible
     train_ds = TensorDataset(inputs, targets)
-
-    batch_size = 48
     train_dl = DataLoader(train_ds, batch_size, shuffle=True)
     next(iter(train_dl))
     num_inputs = len(df_in.columns)
     num_outputs = len(df_out.columns)
     loss_fn = F.mse_loss
+    model = SimpleNet(num_inputs, num_outputs, num_neurons)
     opt = torch.optim.SGD(model.parameters(), lr=1e-3)
     loss = loss_fn(model(inputs), targets)
     # Train the model
     losses = fit(num_epochs, model, loss_fn, opt, train_dl)
     print('Training loss: ', loss_fn(model(inputs), targets))
     preds = model(inputs)
+    print(preds)
     # normalise the inputs (using same max as for the model)
-    f_inputs = torch.tensor(input_f.values.astype(np.float32))
+    x_f = sc_x.fit_transform(df_forecast.values.astype(np.float32))
+    f_inputs = torch.tensor(x_f)
 #   print('f_inputs')
 #   print(f_inputs)
     preds = model(f_inputs)
+    print(preds)
 #   print(preds)
-    vals = preds.detach().numpy()[0]
+    vals = preds.detach().numpy()
+    print(vals)
+    vals = sc_y.inverse_transform(vals)
+    if plot:
+        plt.plot(losses)
+        plt.title('demand ann convergence')
+        plt.xlabel('Epochs', fontsize=15)
+        plt.ylabel('Loss', fontsize=15)
+        plt.show()
 
-
+    data = { 'max_demand' :  vals[:,0], 'min_demand': vals[:,1] }
+    prediction = pd.DataFrame(data, index=df_forecast.index)
+    print(prediction)
+    return prediction
 
 # main program
 
@@ -142,7 +183,9 @@ parser = argparse.ArgumentParser(description='Create demand forecast.')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--naive', action="store_true", dest="naive", help='Output the naive forecast', default=False)
 parser.add_argument('--start', action="store", dest="start", help='Where to start rolling assesment from: 0=just forecast, 1=30 days before the end, 2=31 etc.' , default=0, type=int )
+parser.add_argument('--method', action="store", dest="method", help='Forecast method to use.' , default='rf' )
 parser.add_argument('--step', action="store", dest="step", help='Rolling assesment step.' , default=1, type=int )
+parser.add_argument('--epochs', action="store", dest="epochs", help='Number of epochs to train ann' , default=1, type=int )
 args = parser.parse_args()
 
 # read in the data
@@ -220,11 +263,11 @@ else:
         df_bench = naive(df_f_in)
 
         # assess the forecast
-        rmse = assess(df_forecast, df_f_out)
-        rmse_b = assess(df_bench, df_f_out)
+        rmse, min_rmse, max_rmse = assess(df_forecast, df_f_out)
+        rmse_b, min_rmse, max_rmse = assess(df_bench, df_f_out)
         skill = rmse / rmse_b
         # store the assesment
-        rmses.append([rmse, rmse_b, skill])
+        rmses.append([rmse, rmse_b, skill, min_rmse, max_rmse])
 
         # plot
         if args.plot:
@@ -241,8 +284,8 @@ else:
         
     # output all the assessments
     skill = 0.0
-    print('RMSE  Naive RMSE  Skill')
+    print('RMSE  Naive RMSE  Skill  RMSE-min   RMSE-max')
     for vals in rmses:
-        print("{:.3f} {:.3f} {:.3f}".format(vals[0], vals[1], vals[2]))
+        print("{:.3f} {:.3f} {:.3f} {:.3f} {:.3f}".format(vals[0], vals[1], vals[2], vals[3], vals[4]))
         skill += vals[2]
     print('Average skill {}'.format(skill / len(rmses) ) )
