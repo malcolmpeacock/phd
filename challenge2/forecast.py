@@ -14,14 +14,35 @@ import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 import torch.nn.functional as F
 
+def to_diffs(df_in, df_out):
+    df_out['max_demand'] = df_out['max_demand'] - df_in['demand']
+    df_out['min_demand'] = df_in['demand'] - df_out['min_demand']
+
+def from_diffs(df_forecast, df_f_out):
+    df_f_out['max_demand'] = df_forecast['demand'] + df_f_out['max_demand']
+    df_f_out['min_demand'] = df_forecast['demand'] - df_f_out['min_demand']
+
+# feature correlation
+def correlation(input_df, output, plot=False):
+#   print(input_df.index)
+#   print(output.index)
+    coef = {}
+    for column in input_df.columns:
+        coef[column] = output.corr(input_df[column])
+    return(coef)
+
+
 # forecast
 #   df_in       input weather and demand
 #   df_out      max and min demand for same period as df_in
 #   df_forecast same variables as df_in but for the forecast period
 def forecast(df_in, df_out, df_forecast):
     print('forecast: df_in {} df_out {} df_forecast {}'.format(len(df_in), len(df_out), len(df_forecast) ) )
-    max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'windspeed3', 'solar_irradiance2', 'spec_humidity1_lag1', 'solar_irradiance1_lag1']
-    min_cols = ['demand', 'spec_humidity1', 'dailytemp', 'temperature3', 'demand_lag1', 'temperature2', 'windspeed_north3', 'windspeed_east3', 'temperature5', 'temperature3_lag1', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_north1']
+#   max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'spec_humidity1', 'solar_irradiance_var', 'dailytemp', 'spec_humidity1_lag1', 'demand_lag1', 'spec_humidity_var', 'solar_irradiance_var_lag1', 'temperature3', 'temperature1', 'solar_irradiance2']
+#   max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'spec_humidity1', 'solar_irradiance_var', 'dailytemp', 'spec_humidity1_lag1', 'demand_lag1', 'spec_humidity_var', 'solar_irradiance_var_lag1', 'temperature3', 'temperature1', 'solar_irradiance2', 'demand_lag2', 'demand_lag3' ,'demand_lag4']
+    max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'spec_humidity1', 'solar_irradiance_var', 'dailytemp', 'spec_humidity1_lag1', 'demand_lag1', 'spec_humidity_var', 'solar_irradiance_var_lag1', 'temperature3', 'temperature1', 'solar_irradiance2', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_var', 'windspeed3', 'windspeed_north3', 'windspeed_north1', 'solar_irradiance1_lag1', 'temperature_var']
+#   min_cols = ['demand', 'spec_humidity1', 'dailytemp', 'temperature3', 'demand_lag1', 'temperature2', 'windspeed_north3', 'windspeed_east3', 'temperature5', 'temperature3_lag1', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_north1']
+    min_cols = max_cols
     if args.method=='rf':
         print('max demand ...')
 #       max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'windspeed3', 'solar_irradiance2']
@@ -41,7 +62,8 @@ def forecast(df_in, df_out, df_forecast):
 
     if args.method=='ann':
 #       ann_cols = ['demand', 'spec_humidity1', 'dailytemp']
-        ann_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'windspeed3', 'solar_irradiance2', 'spec_humidity1_lag1', 'solar_irradiance1_lag1']
+#       ann_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'windspeed3', 'solar_irradiance2', 'spec_humidity1_lag1', 'solar_irradiance1_lag1']
+        ann_cols = max_cols
         prediction = ann_forecast(df_in[ann_cols], df_out, df_forecast[ann_cols], args.plot, args.epochs)
     return prediction
 
@@ -59,8 +81,13 @@ def rf_forecast(columns, df_in, df_forecast, df_out):
     # default error is RMSE criterion=“squared_error”
     regressor = RandomForestRegressor(n_estimators=100, random_state=0)
 #   regressor = RandomForestRegressor(n_estimators=130, random_state=0)
-    regressor.fit(X_train, y_train)
+    regressor.fit(X_train, y_train.ravel())
+#   regressor.fit(X_train, y_train)
     y_pred = regressor.predict(X_test)
+#   print('RF ypred')
+#   print(type(y_pred))
+#   print(np.shape(y_pred))
+#   print(y_pred)
     y_pred = sc_y.inverse_transform(y_pred)
     return y_pred
 
@@ -82,6 +109,7 @@ def gpr_forecast(columns, df_in, df_forecast, df_out):
 
     model.fit(X_train, y_train)
     y_pred, std = model.predict(X_test, return_std=True)
+    y_pred = y_pred.reshape(len(X_test),)
     y_pred = sc_y.inverse_transform(y_pred)
     return y_pred
 
@@ -218,6 +246,7 @@ def ann_forecast(df_in, df_out, df_forecast, plot=False, num_epochs=2):
 
 parser = argparse.ArgumentParser(description='Create demand forecast.')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--errors', action="store_true", dest="errors", help='Show Error diagnostics', default=False)
 parser.add_argument('--naive', action="store_true", dest="naive", help='Output the naive forecast', default=False)
 parser.add_argument('--start', action="store", dest="start", help='Where to start rolling assesment from: 0=just forecast, 1=30 days before the end, 2=31 etc.' , default=0, type=int )
 parser.add_argument('--data', action="store", dest="data", help='Where to start data from: 0=use all data, n= use the n most recent days.' , default=0, type=int )
@@ -322,6 +351,18 @@ else:
             plt.ylabel('Demand (MW)', fontsize=15)
             plt.legend(loc='lower left', fontsize=15)
             plt.show()
+
+        # errors
+        if args.errors:
+            max_errors = df_forecast['max_demand'] - df_f_out['max_demand']
+            # correlation of errors with variables
+            coeffs = correlation(df_f_in, max_errors)
+            print('Correlation max_demand errors')
+            for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
+                print('{:15}         {:.3f}'.format(col,value))
+
+#           min_errors = df_forecast['min_demand'] - df_f_out['min_demand']
+        
         
     # output all the assessments
     skill = 0.0

@@ -68,6 +68,11 @@ def index2ks(index):
     k = (index.hour * 2) + (index.minute / 30) + 1
     return k.astype(int)
 
+# cube ( for wind power )
+def add_cube(df, parameter='windspeed1'):
+    df[parameter+'_cube'] = df[parameter].pow(3)
+    
+
 # lagged demand
 def add_lags(df, nlags, parameter='demand'):
     count=0
@@ -81,6 +86,14 @@ def add_lags(df, nlags, parameter='demand'):
         print('df {} prev {} zeros {} new {}'.format(len(df), len(previous), len(zero), len(lag_values)))
 #       print(lag_values)
         df[parameter+'_lag'+str(count)] = lag_values
+
+def add_variance(df, parameter):
+    parms = []
+    for p in range(5):
+        parms.append(parameter + str(p+1))
+    vmax = df[parms].max(axis=1)
+    vmin = df[parms].min(axis=1)
+    df[parameter+'_var'] = vmax - vmin
 
 def augment(df):
 
@@ -169,13 +182,24 @@ def augment(df):
     df['s_k'] = np.sin(df['k'].values * (360 / 48 ) )
     df['c_k'] = np.cos(df['k'].values * (360 / 48 ) )
 
+    # variance of weather variables
+    add_variance(df, 'solar_irradiance') 
+    add_variance(df, 'windspeed') 
+    add_variance(df, 'temperature') 
+    add_variance(df, 'spec_humidity') 
+    # lagged variance
+    add_lags(df, 1, 'solar_irradiance_var') 
+
+    # cube of windspeed
+    add_cube(df, 'windspeed1') 
+
 # main program
 
 # process command line
 
 parser = argparse.ArgumentParser(description='Merge and augment data.')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
-parser.add_argument('--weather', action="store", dest="weather", help='Number of weather locations', default=1, type=int)
+parser.add_argument('--weather', action="store", dest="weather", help='Number of weather locations', default=5, type=int)
 
 args = parser.parse_args()
 
