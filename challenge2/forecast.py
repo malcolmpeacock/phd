@@ -49,11 +49,19 @@ def rf_forecast(columns, df_in, df_forecast, df_out):
     X_train = df_in[columns]
     y_train = df_out
     X_test = df_forecast[columns]
+    # normalise the inputs 
+    sc_x = StandardScaler()
+    sc_y = StandardScaler()
+    X_train = sc_x.fit_transform(X_train.values.astype(np.float32))
+    y_train = sc_y.fit_transform(y_train.values.astype(np.float32).reshape(-1, 1))
+    # normalise the inputs (using same max as for the model)
+    X_test = sc_x.transform(X_test.values.astype(np.float32))
     # default error is RMSE criterion=“squared_error”
     regressor = RandomForestRegressor(n_estimators=100, random_state=0)
 #   regressor = RandomForestRegressor(n_estimators=130, random_state=0)
     regressor.fit(X_train, y_train)
     y_pred = regressor.predict(X_test)
+    y_pred = sc_y.inverse_transform(y_pred)
     return y_pred
 
 # gpr
@@ -62,11 +70,19 @@ def gpr_forecast(columns, df_in, df_forecast, df_out):
     X_train = df_in[columns]
     y_train = df_out
     X_test = df_forecast[columns]
+    # normalise the inputs 
+    sc_x = StandardScaler()
+    sc_y = StandardScaler()
+    X_train = sc_x.fit_transform(X_train.values.astype(np.float32))
+    y_train = sc_y.fit_transform(y_train.values.astype(np.float32).reshape(-1, 1))
+    # normalise the inputs (using same max as for the model)
+    X_test = sc_x.transform(X_test.values.astype(np.float32))
     kernel = gp.kernels.ConstantKernel(1.0, (1e-1, 1e3)) * gp.kernels.RBF(10.0, (1e-3, 1e8))
     model = gp.GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10, alpha=0.1, normalize_y=False, random_state=0)
 
     model.fit(X_train, y_train)
     y_pred, std = model.predict(X_test, return_std=True)
+    y_pred = sc_y.inverse_transform(y_pred)
     return y_pred
 
 def naive(df_forecast):
@@ -144,7 +160,7 @@ def ann_forecast(df_in, df_out, df_forecast, plot=False, num_epochs=2):
     # settings:
     seed = 1
     batch_size = 48
-    num_neurons = 200
+    num_neurons = 400
 
     # normalise:
     # normalise
@@ -174,7 +190,7 @@ def ann_forecast(df_in, df_out, df_forecast, plot=False, num_epochs=2):
     preds = model(inputs)
     print(preds)
     # normalise the inputs (using same max as for the model)
-    x_f = sc_x.fit_transform(df_forecast.values.astype(np.float32))
+    x_f = sc_x.transform(df_forecast.values.astype(np.float32))
     f_inputs = torch.tensor(x_f)
 #   print('f_inputs')
 #   print(f_inputs)
