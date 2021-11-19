@@ -27,7 +27,7 @@ from sklearn.preprocessing import MaxAbsScaler
 import matplotlib
 
 # custom code
-#import utils
+import utils
 
 # feature identification using lasso
 def lasso(input_df, output, plot=False):
@@ -266,6 +266,7 @@ fdf = demandf.join(weather, how='inner')
 print(df)
 print(fdf)
 print(df.columns)
+utils.add_diffs(df, maxmin)
 
 # plot weather
 if args.plot:
@@ -296,6 +297,8 @@ if args.plot:
 
 lass_max = {}
 lass_min = {}
+lass_maxd = {}
+lass_mind = {}
 corr_max = {}
 corr_min = {}
 # lasso max demand
@@ -310,6 +313,19 @@ coeffs = lasso(df, maxmin['min_demand'], plot=args.plot)
 for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
     print('{:15}         {:.3f}'.format(col,value))
     lass_min[col] = value
+
+# lasso max demand diff
+print('Lasso max_demand diff')
+coeffs = lasso(df, maxmin['max_diff'], plot=args.plot)
+for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
+    print('{:15}         {:.3f}'.format(col,value))
+    lass_maxd[col] = value
+# lasso min demand diff
+print('Lasso min_demand diff')
+coeffs = lasso(df, maxmin['min_diff'], plot=args.plot)
+for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
+    print('{:15}         {:.3f}'.format(col,value))
+    lass_mind[col] = value
 
 # correlation max_demand
 print('Correlation max_demand')
@@ -326,7 +342,7 @@ for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True 
     corr_min[col] = value
 
 #data = { 'corr_max' : pd.Series(corr_max), 'corr_min' : pd.Series(corr_min), 'lass_max': pd.Series(lass_max), 'lass_min' : pd.Series(lass_min) }
-df_parms = pd.concat([pd.Series(corr_max), pd.Series(corr_min), pd.Series(lass_max), pd.Series(lass_min) ], keys = ['corr_max', 'corr_min', 'lass_max', 'lass_min'], axis=1)
+df_parms = pd.concat([pd.Series(corr_max), pd.Series(corr_min), pd.Series(lass_max), pd.Series(lass_min), pd.Series(lass_maxd), pd.Series(lass_mind) ], keys = ['corr_max', 'corr_min', 'lass_max', 'lass_min', 'lass_maxd', 'lass_mind'], axis=1)
 print(df_parms)
 
 # sanity check

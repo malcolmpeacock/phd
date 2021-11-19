@@ -18,9 +18,9 @@ def to_diffs(df_in, df_out):
     df_out['max_demand'] = df_out['max_demand'] - df_in['demand']
     df_out['min_demand'] = df_in['demand'] - df_out['min_demand']
 
-def from_diffs(df_forecast, df_f_out):
-    df_f_out['max_demand'] = df_forecast['demand'] + df_f_out['max_demand']
-    df_f_out['min_demand'] = df_forecast['demand'] - df_f_out['min_demand']
+def from_diffs(df_in, df_out):
+    df_out['max_demand'] = df_in['demand'] + df_out['max_demand']
+    df_out['min_demand'] = df_in['demand'] - df_out['min_demand']
 
 # feature correlation
 def correlation(input_df, output, plot=False):
@@ -42,6 +42,11 @@ def forecast(df_in, df_out, df_forecast):
 #   max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'spec_humidity1', 'solar_irradiance_var', 'dailytemp', 'spec_humidity1_lag1', 'demand_lag1', 'spec_humidity_var', 'solar_irradiance_var_lag1', 'temperature3', 'temperature1', 'solar_irradiance2', 'demand_lag2', 'demand_lag3' ,'demand_lag4']
     max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'spec_humidity1', 'solar_irradiance_var', 'dailytemp', 'spec_humidity1_lag1', 'demand_lag1', 'spec_humidity_var', 'solar_irradiance_var_lag1', 'temperature3', 'temperature1', 'solar_irradiance2', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_var', 'windspeed3', 'windspeed_north3', 'windspeed_north1', 'solar_irradiance1_lag1', 'temperature_var']
 #   min_cols = ['demand', 'spec_humidity1', 'dailytemp', 'temperature3', 'demand_lag1', 'temperature2', 'windspeed_north3', 'windspeed_east3', 'temperature5', 'temperature3_lag1', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_north1']
+    if args.diffs:
+#       max_cols = ['demand', 'demand_lag1', 'windspeed_east2', 'windspeed_east4', 'windspeed_east3', 'spec_humidity2', 'spec_humidity1_lag1', 'spec_humidity4', 'solar_irradiance_var', 'temperature3_lag1', 'temperature5', 'temperature1', 'solar_irradiance1_lag1', 'solar_irradiance1']
+        max_cols = ['demand', 'demand_lag1', 'windspeed_east2', 'windspeed_east4', 'windspeed_east3', 'spec_humidity2', 'spec_humidity1_lag1', 'spec_humidity4', 'solar_irradiance_var', 'temperature3_lag1', 'temperature5', 'temperature1', 'solar_irradiance1_lag1', 'solar_irradiance1', 'hdh', 'windspeed_var','windspeed5', 'windspeed_east1_lag1', 'windspeed_east1', 'windspeed_east5','windspeed1_cube', 'windspeed4', 'windspeed2','solar_irradiance_var_lag1','solar_irradiance2', 'solar_irradiance5', 'solar_irradiance3']
+    if args.all:
+        max_cols = df_in.columns
     min_cols = max_cols
     if args.method=='rf':
         print('max demand ...')
@@ -188,7 +193,7 @@ def ann_forecast(df_in, df_out, df_forecast, plot=False, num_epochs=2):
     # settings:
     seed = 1
     batch_size = 48
-    num_neurons = 400
+    num_neurons = args.nodes
 
     # normalise:
     # normalise
@@ -246,6 +251,8 @@ def ann_forecast(df_in, df_out, df_forecast, plot=False, num_epochs=2):
 
 parser = argparse.ArgumentParser(description='Create demand forecast.')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--diffs', action="store_true", dest="diffs", help='Predict the difference between max demand and demand', default=False)
+parser.add_argument('--all', action="store_true", dest="all", help='Use all the columns in the prediction', default=False)
 parser.add_argument('--errors', action="store_true", dest="errors", help='Show Error diagnostics', default=False)
 parser.add_argument('--naive', action="store_true", dest="naive", help='Output the naive forecast', default=False)
 parser.add_argument('--start', action="store", dest="start", help='Where to start rolling assesment from: 0=just forecast, 1=30 days before the end, 2=31 etc.' , default=0, type=int )
@@ -253,6 +260,7 @@ parser.add_argument('--data', action="store", dest="data", help='Where to start 
 parser.add_argument('--method', action="store", dest="method", help='Forecast method to use.' , default='rf' )
 parser.add_argument('--step', action="store", dest="step", help='Rolling assesment step.' , default=1, type=int )
 parser.add_argument('--epochs', action="store", dest="epochs", help='Number of epochs to train ann' , default=1, type=int )
+parser.add_argument('--nodes', action="store", dest="nodes", help='Number of neurons in hidden layer for ann' , default=5000, type=int )
 args = parser.parse_args()
 
 # read in the data
@@ -265,6 +273,8 @@ df_in = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_c
 # maxmin data file ( min/max in the period - what we are trying to predict )
 merged_filename = '{}maxmin_pre_august.csv'.format(output_dir)
 df_out = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+if args.diffs:
+    to_diffs(df_in, df_out)
 # print(df_out)
 
 
@@ -280,6 +290,11 @@ if args.start == 0:
     else:
         # forecast it
         df_forecast = forecast(df_in, df_out, df_f_in)
+    if args.diffs:
+        # set values in df_forecast back to actual max and min
+        from_diffs(df_f_in, df_forecast)
+        # set values in df_out back to actual max and min
+        from_diffs(df_in, df_out)
     # print(df_forecast)
 
     # plot the forecast
@@ -329,6 +344,12 @@ else:
         # print(df_f_out)
         # forecast it
         df_forecast = forecast(df_train_in, df_train_out, df_f_in)
+        # forecasting diffs
+        if args.diffs:
+            # set values in df_forecast back to actual max and min
+            from_diffs(df_f_in, df_forecast)
+            # set values in df_f_out back to actual max and min
+            from_diffs(df_f_in, df_f_out)
         # calculate naive bench mark
         df_bench = naive(df_f_in)
 
