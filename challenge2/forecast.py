@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 import sklearn.gaussian_process as gp
+import lightgbm as lgb
 import torch
 import torch.nn as nn
 # Import tensor dataset & data loader
@@ -57,11 +58,20 @@ def forecast(df_in, df_out, df_forecast):
         data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
         prediction = pd.DataFrame(data, index=df_forecast.index)
     if args.method=='gpr':
-        gpr_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k']
+#       gpr_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k']
+        gpr_cols = max_cols
         print('max demand ...')
         max_demand_forecast = gpr_forecast(gpr_cols, df_in, df_forecast, df_out['max_demand'])
         print('min demand ...')
         min_demand_forecast = gpr_forecast(gpr_cols, df_in, df_forecast, df_out['min_demand'])
+        data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
+        prediction = pd.DataFrame(data, index=df_forecast.index)
+    if args.method=='lgbm':
+        cols = max_cols
+        print('max demand ...')
+        max_demand_forecast = lgbm_forecast(cols, df_in, df_forecast, df_out['max_demand'])
+        print('min demand ...')
+        min_demand_forecast = lgbm_forecast(cols, df_in, df_forecast, df_out['min_demand'])
         data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
         prediction = pd.DataFrame(data, index=df_forecast.index)
 
@@ -89,6 +99,36 @@ def rf_forecast(columns, df_in, df_forecast, df_out):
     regressor.fit(X_train, y_train.ravel())
 #   regressor.fit(X_train, y_train)
     y_pred = regressor.predict(X_test)
+#   print('RF ypred')
+#   print(type(y_pred))
+#   print(np.shape(y_pred))
+#   print(y_pred)
+    y_pred = sc_y.inverse_transform(y_pred)
+    return y_pred
+
+# lgbm
+
+def lgbm_forecast(columns, df_in, df_forecast, df_out):
+    X_train = df_in[columns]
+    y_train = df_out
+    X_test = df_forecast[columns]
+    # normalise the inputs 
+    sc_x = StandardScaler()
+    sc_y = StandardScaler()
+    X_train = sc_x.fit_transform(X_train.values.astype(np.float32))
+    y_train = sc_y.fit_transform(y_train.values.astype(np.float32).reshape(-1, 1))
+    # normalise the inputs (using same max as for the model)
+    X_test = sc_x.transform(X_test.values.astype(np.float32))
+    print('Creating Regressor ...')
+    # defaults
+    # num_leaves=31 learning_rate=0.1, n_estimators=100, boosting='gbdt'
+    # (n_estimators is number of iterations)
+    # dart not good
+#   model = lgb.LGBMRegressor(num_leaves=41, learning_rate=0.05, n_estimators=200, boosting_type='dart', deterministic=True)
+    model = lgb.LGBMRegressor(num_leaves=45, learning_rate=0.05, n_estimators=300, boosting_type='gbdt', deterministic=True)
+    print('Fitting model ...')
+    model.fit(X_train, y_train.ravel(), eval_metric='l2')
+    y_pred = model.predict(X_test)
 #   print('RF ypred')
 #   print(type(y_pred))
 #   print(np.shape(y_pred))
