@@ -14,6 +14,11 @@ import torch.nn as nn
 # Import tensor dataset & data loader
 from torch.utils.data import TensorDataset, DataLoader
 import torch.nn.functional as F
+import xgboost as xgb
+from catboost import CatBoostRegressor
+
+import time
+import datetime
 
 def to_diffs(df_in, df_out):
     df_out['max_demand'] = df_out['max_demand'] - df_in['demand']
@@ -32,6 +37,11 @@ def correlation(input_df, output, plot=False):
         coef[column] = output.corr(input_df[column])
     return(coef)
 
+def add_parm(parameter):
+    parms = []
+    for p in range(5):
+        parms.append(parameter + str(p+1))
+    return parms
 
 # forecast
 #   df_in       input weather and demand
@@ -41,13 +51,23 @@ def forecast(df_in, df_out, df_forecast):
     print('forecast: df_in {} df_out {} df_forecast {}'.format(len(df_in), len(df_out), len(df_forecast) ) )
 #   max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'spec_humidity1', 'solar_irradiance_var', 'dailytemp', 'spec_humidity1_lag1', 'demand_lag1', 'spec_humidity_var', 'solar_irradiance_var_lag1', 'temperature3', 'temperature1', 'solar_irradiance2']
 #   max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'spec_humidity1', 'solar_irradiance_var', 'dailytemp', 'spec_humidity1_lag1', 'demand_lag1', 'spec_humidity_var', 'solar_irradiance_var_lag1', 'temperature3', 'temperature1', 'solar_irradiance2', 'demand_lag2', 'demand_lag3' ,'demand_lag4']
+    # basic columns - no augmentations
+    basic_cols = ['demand']
+    basic_cols += add_parm('solar_irradiance')
+    basic_cols += add_parm('windspeed_east')
+    basic_cols += add_parm('windspeed_north')
+    basic_cols += add_parm('spec_humidity')
+    basic_cols += add_parm('temperature')
+    basic_cols += add_parm('pressure')
     max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'spec_humidity1', 'solar_irradiance_var', 'dailytemp', 'spec_humidity1_lag1', 'demand_lag1', 'spec_humidity_var', 'solar_irradiance_var_lag1', 'temperature3', 'temperature1', 'solar_irradiance2', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_var', 'windspeed3', 'windspeed_north3', 'windspeed_north1', 'solar_irradiance1_lag1', 'temperature_var']
 #   min_cols = ['demand', 'spec_humidity1', 'dailytemp', 'temperature3', 'demand_lag1', 'temperature2', 'windspeed_north3', 'windspeed_east3', 'temperature5', 'temperature3_lag1', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_north1']
     if args.diffs:
 #       max_cols = ['demand', 'demand_lag1', 'windspeed_east2', 'windspeed_east4', 'windspeed_east3', 'spec_humidity2', 'spec_humidity1_lag1', 'spec_humidity4', 'solar_irradiance_var', 'temperature3_lag1', 'temperature5', 'temperature1', 'solar_irradiance1_lag1', 'solar_irradiance1']
-        max_cols = ['demand', 'demand_lag1', 'windspeed_east2', 'windspeed_east4', 'windspeed_east3', 'spec_humidity2', 'spec_humidity1_lag1', 'spec_humidity4', 'solar_irradiance_var', 'temperature3_lag1', 'temperature5', 'temperature1', 'solar_irradiance1_lag1', 'solar_irradiance1', 'hdh', 'windspeed_var','windspeed5', 'windspeed_east1_lag1', 'windspeed_east1', 'windspeed_east5','windspeed1_cube', 'windspeed4', 'windspeed2','solar_irradiance_var_lag1','solar_irradiance2', 'solar_irradiance5', 'solar_irradiance3']
-    if args.all:
+        max_cols = ['demand', 'demand_lag1', 'windspeed_east2', 'windspeed_east4', 'windspeed_east3', 'spec_humidity2', 'spec_humidity1_lag1', 'spec_humidity4', 'solar_irradiance_var', 'temperature3_lag1', 'temperature5', 'temperature1', 'solar_irradiance1_lag1', 'solar_irradiance1', 'hdh', 'windspeed_var','windspeed5', 'windspeed_east1_lag1', 'windspeed_east1', 'windspeed_east5','windspeed1_cube', 'windspeed4', 'windspeed2','solar_irradiance_var_lag1','solar_irradiance2', 'solar_irradiance5', 'solar_irradiance3', 'trend']
+    if args.cols == 'all':
         max_cols = df_in.columns
+    if args.cols == 'basic':
+        max_cols = basic_cols
     min_cols = max_cols
     if args.method=='rf':
         print('max demand ...')
@@ -72,6 +92,24 @@ def forecast(df_in, df_out, df_forecast):
         max_demand_forecast = lgbm_forecast(cols, df_in, df_forecast, df_out['max_demand'])
         print('min demand ...')
         min_demand_forecast = lgbm_forecast(cols, df_in, df_forecast, df_out['min_demand'])
+        data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
+        prediction = pd.DataFrame(data, index=df_forecast.index)
+
+    if args.method=='cb':
+        cols = max_cols
+        print('max demand ...')
+        max_demand_forecast = cb_forecast(cols, df_in, df_forecast, df_out['max_demand'])
+        print('min demand ...')
+        min_demand_forecast = cb_forecast(cols, df_in, df_forecast, df_out['min_demand'])
+        data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
+        prediction = pd.DataFrame(data, index=df_forecast.index)
+
+    if args.method=='xgb':
+        cols = max_cols
+        print('max demand ...')
+        max_demand_forecast = xgb_forecast(cols, df_in, df_forecast, df_out['max_demand'])
+        print('min demand ...')
+        min_demand_forecast = xgb_forecast(cols, df_in, df_forecast, df_out['min_demand'])
         data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
         prediction = pd.DataFrame(data, index=df_forecast.index)
 
@@ -125,7 +163,9 @@ def lgbm_forecast(columns, df_in, df_forecast, df_out):
     # (n_estimators is number of iterations)
     # dart not good
 #   model = lgb.LGBMRegressor(num_leaves=41, learning_rate=0.05, n_estimators=200, boosting_type='dart', deterministic=True)
-    model = lgb.LGBMRegressor(num_leaves=45, learning_rate=0.05, n_estimators=300, boosting_type='gbdt', deterministic=True)
+    # TODO - try max_bin= 255 is the default . 511 makes it worse
+    # 2550 makes it very slightly better.
+    model = lgb.LGBMRegressor(num_leaves=45, learning_rate=0.03, n_estimators=300, boosting_type='gbdt', deterministic=True, max_bin=2550 )
     print('Fitting model ...')
     model.fit(X_train, y_train.ravel(), eval_metric='l2')
     y_pred = model.predict(X_test)
@@ -135,6 +175,56 @@ def lgbm_forecast(columns, df_in, df_forecast, df_out):
 #   print(y_pred)
     y_pred = sc_y.inverse_transform(y_pred)
     return y_pred
+
+# xgBoost
+
+def xgb_forecast(columns, df_in, df_forecast, df_out):
+    X_train = df_in[columns]
+    y_train = df_out
+    X_test = df_forecast[columns]
+    # normalise the inputs 
+    sc_x = StandardScaler()
+    sc_y = StandardScaler()
+    X_train = sc_x.fit_transform(X_train.values.astype(np.float32))
+    y_train = sc_y.fit_transform(y_train.values.astype(np.float32).reshape(-1, 1))
+    # normalise the inputs (using same max as for the model)
+    X_test = sc_x.transform(X_test.values.astype(np.float32))
+    print('Creating Regressor ...')
+    #  lowering learing rate and increasing estimators seem to make it
+    #  worse.
+    model = xgb.XGBRegressor(max_depth=7, n_estimators=300, n_jobs=1,
+                           objective='reg:squarederror', booster='gbtree',
+                           random_state=42, learning_rate=0.05)
+    print('Fitting model ...')
+    model.fit(X_train, y_train.ravel() )
+    y_pred = model.predict(X_test)
+    y_pred = sc_y.inverse_transform(y_pred)
+    return y_pred
+
+# catBoost
+
+def cb_forecast(columns, df_in, df_forecast, df_out):
+    X_train = df_in[columns]
+    y_train = df_out
+    X_test = df_forecast[columns]
+    # normalise the inputs 
+    sc_x = StandardScaler()
+    sc_y = StandardScaler()
+    X_train = sc_x.fit_transform(X_train.values.astype(np.float32))
+    y_train = sc_y.fit_transform(y_train.values.astype(np.float32).reshape(-1, 1))
+    # normalise the inputs (using same max as for the model)
+    X_test = sc_x.transform(X_test.values.astype(np.float32))
+    print('Creating catboost Regressor ...')
+    #  lowering learing rate and increasing estimators seem to make it
+    #  worse.
+    model = CatBoostRegressor(verbose=0, n_estimators=100)
+    print('Fitting model ...')
+    model.fit(X_train, y_train.ravel() )
+    y_pred = model.predict(X_test)
+    y_pred = sc_y.inverse_transform(y_pred)
+    return y_pred
+
+
 
 # gpr
 
@@ -194,8 +284,9 @@ class SimpleNet(nn.Module):
         # Activation function
         self.act1 = nn.Sigmoid()
 #       Layer 2
-        self.act2 = nn.LeakyReLU()
-        self.linear2 = nn.Linear(num_hidden, num_outputs)
+#       self.act2 = nn.LeakyReLU()
+        self.act2 = nn.Sigmoid()
+        self.linear2 = nn.Linear(num_hidden, num_hidden)
 
     # Perform the computation
     def forward(self, x):
@@ -203,6 +294,34 @@ class SimpleNet(nn.Module):
         x = self.act1(x)
         x = self.linear2(x)
         x = self.act2(x)
+        return x
+
+# class to create ANN
+
+class TwoLayers(nn.Module):
+    # Initialize the layers
+    def __init__(self,num_inputs,num_outputs,num_hidden):
+        super().__init__()
+#       Layer 1
+        self.linear1 = nn.Linear(num_inputs, num_hidden)
+        # Activation function
+        self.act1 = nn.Sigmoid()
+#       Layer 2
+#       self.act2 = nn.LeakyReLU()
+        self.act2 = nn.Sigmoid()
+        self.linear2 = nn.Linear(num_hidden, num_hidden)
+#       Layer 3
+        self.act3 = nn.Sigmoid()
+        self.linear3 = nn.Linear(num_hidden, num_outputs)
+
+    # Perform the computation
+    def forward(self, x):
+        x = self.linear1(x)
+        x = self.act1(x)
+        x = self.linear2(x)
+        x = self.act2(x)
+        x = self.linear3(x)
+        x = self.act3(x)
         return x
 
 # Define a utility function to train the model
@@ -213,6 +332,7 @@ def fit(num_epochs, model, loss_fn, opt, train_dl):
         for xb,yb in train_dl:
             # Generate predictions
             pred = model(xb)
+#           loss = torch.sqrt(loss_fn(pred, yb))
             loss = loss_fn(pred, yb)
             # Perform gradient descent
             loss.backward()
@@ -234,6 +354,7 @@ def ann_forecast(df_in, df_out, df_forecast, plot=False, num_epochs=2):
     seed = 1
     batch_size = 48
     num_neurons = args.nodes
+    learning_rate = 1e-4
 
     # normalise:
     # normalise
@@ -254,8 +375,12 @@ def ann_forecast(df_in, df_out, df_forecast, plot=False, num_epochs=2):
     num_inputs = len(df_in.columns)
     num_outputs = len(df_out.columns)
     loss_fn = F.mse_loss
-    model = SimpleNet(num_inputs, num_outputs, num_neurons)
-    opt = torch.optim.SGD(model.parameters(), lr=1e-3)
+    if args.model=='two':
+        model = TwoLayers(num_inputs, num_outputs, num_neurons)
+    else:
+        model = SimpleNet(num_inputs, num_outputs, num_neurons)
+#   opt = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    opt = torch.optim.SGD(model.parameters(), lr=learning_rate)
     loss = loss_fn(model(inputs), targets)
     # Train the model
     losses = fit(num_epochs, model, loss_fn, opt, train_dl)
@@ -292,7 +417,7 @@ def ann_forecast(df_in, df_out, df_forecast, plot=False, num_epochs=2):
 parser = argparse.ArgumentParser(description='Create demand forecast.')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--diffs', action="store_true", dest="diffs", help='Predict the difference between max demand and demand', default=False)
-parser.add_argument('--all', action="store_true", dest="all", help='Use all the columns in the prediction', default=False)
+parser.add_argument('--cols', action="store", dest="cols", help='Column set to use in the prediction', default='standard')
 parser.add_argument('--errors', action="store_true", dest="errors", help='Show Error diagnostics', default=False)
 parser.add_argument('--naive', action="store_true", dest="naive", help='Output the naive forecast', default=False)
 parser.add_argument('--start', action="store", dest="start", help='Where to start rolling assesment from: 0=just forecast, 1=30 days before the end, 2=31 etc.' , default=0, type=int )
@@ -301,6 +426,7 @@ parser.add_argument('--method', action="store", dest="method", help='Forecast me
 parser.add_argument('--step', action="store", dest="step", help='Rolling assesment step.' , default=1, type=int )
 parser.add_argument('--epochs', action="store", dest="epochs", help='Number of epochs to train ann' , default=1, type=int )
 parser.add_argument('--nodes', action="store", dest="nodes", help='Number of neurons in hidden layer for ann' , default=5000, type=int )
+parser.add_argument('--model', action="store", dest="model", help='ANN Model' , default='simple')
 args = parser.parse_args()
 
 # read in the data
@@ -317,6 +443,8 @@ if args.diffs:
     to_diffs(df_in, df_out)
 # print(df_out)
 
+print(time.strftime("Starting at: %Y-%m-%d %H:%M:%S", time.gmtime()) )
+startTime = time.time()
 
 if args.start == 0:
     # read in the default forecast
@@ -415,20 +543,37 @@ else:
 
         # errors
         if args.errors:
+            corr_max = {}
+            corr_min = {}
+            # correlation of errors with variables (max)
             max_errors = df_forecast['max_demand'] - df_f_out['max_demand']
-            # correlation of errors with variables
             coeffs = correlation(df_f_in, max_errors)
             print('Correlation max_demand errors')
             for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
                 print('{:15}         {:.3f}'.format(col,value))
+                corr_max[col] = value
 
-#           min_errors = df_forecast['min_demand'] - df_f_out['min_demand']
+            # correlation of errors with variables (min)
+            min_errors = df_forecast['min_demand'] - df_f_out['min_demand']
+            coeffs = correlation(df_f_in, max_errors)
+            print('Correlation max_demand errors')
+            for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
+                print('{:15}         {:.3f}'.format(col,value))
+                corr_min[col] = value
+            df_errs = pd.concat([pd.Series(corr_max), pd.Series(corr_min)], keys = ['err_max', 'err_min'], axis=1)
+            print(df_errs)
+            # output correlation values
+            output_filename = 'errors.csv'
+            df_errs.to_csv(output_dir+output_filename, float_format='%.2f')
+
         
         
     # output all the assessments
     skill = 0.0
     print('RMSE  Naive RMSE  Skill  RMSE-min   RMSE-max')
     for vals in rmses:
-        print("{:.3f} {:.3f} {:.3f} {:.3f} {:.3f}".format(vals[0], vals[1], vals[2], vals[3], vals[4]))
+        print("{:.3f} {:.3f}      {:.3f} {:.3f} {:.3f}".format(vals[0], vals[1], vals[2], vals[3], vals[4]))
         skill += vals[2]
     print('Average skill {}'.format(skill / len(rmses) ) )
+    minutes = (time.time() - startTime) / 60.0
+    print('It took {0:0.2f} minutes'.format(minutes))
