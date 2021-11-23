@@ -15,7 +15,7 @@ import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 import torch.nn.functional as F
 import xgboost as xgb
-from catboost import CatBoostRegressor
+#from catboost import CatBoostRegressor
 
 import time
 import datetime
@@ -60,6 +60,7 @@ def forecast(df_in, df_out, df_forecast):
     basic_cols += add_parm('temperature')
     basic_cols += add_parm('pressure')
     max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'spec_humidity1', 'solar_irradiance_var', 'dailytemp', 'spec_humidity1_lag1', 'demand_lag1', 'spec_humidity_var', 'solar_irradiance_var_lag1', 'temperature3', 'temperature1', 'solar_irradiance2', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_var', 'windspeed3', 'windspeed_north3', 'windspeed_north1', 'solar_irradiance1_lag1', 'temperature_var']
+#   max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'spec_humidity1', 'solar_irradiance_var', 'dailytemp', 'spec_humidity1_lag1', 'demand_lag1', 'spec_humidity_var', 'solar_irradiance_var_lag1', 'temperature3', 'temperature1', 'solar_irradiance2', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_var', 'windspeed3', 'windspeed_north3', 'windspeed_north1', 'solar_irradiance1_lag1', 'temperature_var', 'windspeed_var_lag1']
 #   min_cols = ['demand', 'spec_humidity1', 'dailytemp', 'temperature3', 'demand_lag1', 'temperature2', 'windspeed_north3', 'windspeed_east3', 'temperature5', 'temperature3_lag1', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_north1']
     if args.diffs:
 #       max_cols = ['demand', 'demand_lag1', 'windspeed_east2', 'windspeed_east4', 'windspeed_east3', 'spec_humidity2', 'spec_humidity1_lag1', 'spec_humidity4', 'solar_irradiance_var', 'temperature3_lag1', 'temperature5', 'temperature1', 'solar_irradiance1_lag1', 'solar_irradiance1']

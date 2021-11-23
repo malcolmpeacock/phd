@@ -172,11 +172,12 @@ def augment(df):
     df.loc[df['dsk']==96, 'dsk'] = 48
 
     # lagged weather variables
-    add_lags(df, 1, 'solar_irradiance1') 
-    add_lags(df, 1, 'windspeed_east1') 
-    add_lags(df, 1, 'spec_humidity1') 
-    add_lags(df, 1, 'temperature3') 
-    add_lags(df, 1, 'windspeed_north3')
+    for p in range(5):
+        add_lags(df, 1, 'solar_irradiance' + str(p+1)) 
+        add_lags(df, 1, 'windspeed_east' + str(p+1)) 
+        add_lags(df, 1, 'windspeed_north' + str(p+1))
+        add_lags(df, 1, 'spec_humidity' + str(p+1)) 
+        add_lags(df, 1, 'temperature' + str(p+1)) 
 
     # cyclic versions of the time variables
     df['s_k'] = np.sin(df['k'].values * (360 / 48 ) )
@@ -189,6 +190,9 @@ def augment(df):
     add_variance(df, 'spec_humidity') 
     # lagged variance
     add_lags(df, 1, 'solar_irradiance_var') 
+    add_lags(df, 1, 'windspeed_var') 
+    add_lags(df, 1, 'temperature_var') 
+    add_lags(df, 1, 'spec_humidity_var') 
 
     # cube of windspeed
     add_cube(df, 'windspeed1') 
