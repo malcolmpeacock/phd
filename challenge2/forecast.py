@@ -47,7 +47,7 @@ def add_parm(parameter):
 #   df_in       input weather and demand
 #   df_out      max and min demand for same period as df_in
 #   df_forecast same variables as df_in but for the forecast period
-def forecast(df_in, df_out, df_forecast):
+def forecast(df_in, df_out, df_forecast, out_cols=['max_demand', 'min_demand']):
     print('forecast: df_in {} df_out {} df_forecast {}'.format(len(df_in), len(df_out), len(df_forecast) ) )
 #   max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'spec_humidity1', 'solar_irradiance_var', 'dailytemp', 'spec_humidity1_lag1', 'demand_lag1', 'spec_humidity_var', 'solar_irradiance_var_lag1', 'temperature3', 'temperature1', 'solar_irradiance2']
 #   max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'spec_humidity1', 'solar_irradiance_var', 'dailytemp', 'spec_humidity1_lag1', 'demand_lag1', 'spec_humidity_var', 'solar_irradiance_var_lag1', 'temperature3', 'temperature1', 'solar_irradiance2', 'demand_lag2', 'demand_lag3' ,'demand_lag4']
@@ -64,61 +64,35 @@ def forecast(df_in, df_out, df_forecast):
 #   min_cols = ['demand', 'spec_humidity1', 'dailytemp', 'temperature3', 'demand_lag1', 'temperature2', 'windspeed_north3', 'windspeed_east3', 'temperature5', 'temperature3_lag1', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_north1']
     if args.diffs:
 #       max_cols = ['demand', 'demand_lag1', 'windspeed_east2', 'windspeed_east4', 'windspeed_east3', 'spec_humidity2', 'spec_humidity1_lag1', 'spec_humidity4', 'solar_irradiance_var', 'temperature3_lag1', 'temperature5', 'temperature1', 'solar_irradiance1_lag1', 'solar_irradiance1']
-        max_cols = ['demand', 'demand_lag1', 'windspeed_east2', 'windspeed_east4', 'windspeed_east3', 'spec_humidity2', 'spec_humidity1_lag1', 'spec_humidity4', 'solar_irradiance_var', 'temperature3_lag1', 'temperature5', 'temperature1', 'solar_irradiance1_lag1', 'solar_irradiance1', 'hdh', 'windspeed_var','windspeed5', 'windspeed_east1_lag1', 'windspeed_east1', 'windspeed_east5','windspeed1_cube', 'windspeed4', 'windspeed2','solar_irradiance_var_lag1','solar_irradiance2', 'solar_irradiance5', 'solar_irradiance3', 'trend']
+        max_cols = ['demand', 'demand_lag1', 'windspeed_east2', 'windspeed_east4', 'windspeed_east3', 'spec_humidity2', 'spec_humidity1_lag1', 'spec_humidity4', 'solar_irradiance_var', 'temperature3_lag1', 'temperature5', 'temperature1', 'solar_irradiance1_lag1', 'solar_irradiance1', 'hdh', 'windspeed_var','windspeed5', 'windspeed_east1_lag1', 'windspeed_east1', 'windspeed_east5','windspeed1_cube', 'windspeed4', 'windspeed2','solar_irradiance_var_lag1','solar_irradiance2', 'solar_irradiance5', 'solar_irradiance3', 'trend', 'demand_lag4', 'windspeed_north5', 'temperature_var', 'dailytemp', 'tempyd', 'tempdb', 'temperature3', 'windspeed3', 'windspeed_north3_lag1', 'season', 'demand_lag2', 'dsk']
     if args.cols == 'all':
         max_cols = df_in.columns
     if args.cols == 'basic':
         max_cols = basic_cols
     min_cols = max_cols
-    if args.method=='rf':
-        print('max demand ...')
-#       max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'windspeed3', 'solar_irradiance2']
-        max_demand_forecast = rf_forecast(max_cols, df_in, df_forecast, df_out['max_demand'])
-        print('min demand ...')
-        min_demand_forecast = rf_forecast(min_cols, df_in, df_forecast, df_out['min_demand'])
-        data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
-        prediction = pd.DataFrame(data, index=df_forecast.index)
-    if args.method=='gpr':
-#       gpr_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k']
-        gpr_cols = max_cols
-        print('max demand ...')
-        max_demand_forecast = gpr_forecast(gpr_cols, df_in, df_forecast, df_out['max_demand'])
-        print('min demand ...')
-        min_demand_forecast = gpr_forecast(gpr_cols, df_in, df_forecast, df_out['min_demand'])
-        data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
-        prediction = pd.DataFrame(data, index=df_forecast.index)
-    if args.method=='lgbm':
-        cols = max_cols
-        print('max demand ...')
-        max_demand_forecast = lgbm_forecast(cols, df_in, df_forecast, df_out['max_demand'])
-        print('min demand ...')
-        min_demand_forecast = lgbm_forecast(cols, df_in, df_forecast, df_out['min_demand'])
-        data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
-        prediction = pd.DataFrame(data, index=df_forecast.index)
-
-    if args.method=='cb':
-        cols = max_cols
-        print('max demand ...')
-        max_demand_forecast = cb_forecast(cols, df_in, df_forecast, df_out['max_demand'])
-        print('min demand ...')
-        min_demand_forecast = cb_forecast(cols, df_in, df_forecast, df_out['min_demand'])
-        data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
-        prediction = pd.DataFrame(data, index=df_forecast.index)
-
-    if args.method=='xgb':
-        cols = max_cols
-        print('max demand ...')
-        max_demand_forecast = xgb_forecast(cols, df_in, df_forecast, df_out['max_demand'])
-        print('min demand ...')
-        min_demand_forecast = xgb_forecast(cols, df_in, df_forecast, df_out['min_demand'])
-        data = { 'max_demand' :  max_demand_forecast, 'min_demand': min_demand_forecast }
-        prediction = pd.DataFrame(data, index=df_forecast.index)
 
     if args.method=='ann':
 #       ann_cols = ['demand', 'spec_humidity1', 'dailytemp']
 #       ann_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'windspeed3', 'solar_irradiance2', 'spec_humidity1_lag1', 'solar_irradiance1_lag1']
         ann_cols = max_cols
         prediction = ann_forecast(df_in[ann_cols], df_out, df_forecast[ann_cols], args.plot, args.epochs)
+    else:
+        forecasts = {}
+        for out_col in out_cols:
+            print('Method {} Output {} ...'.format(args.method, out_col) )
+    
+            if args.method=='rf':
+                forecasts[out_col] = rf_forecast(max_cols, df_in, df_forecast, df_out[out_col])
+            if args.method=='gpr':
+                forecasts[out_col] = gpr_forecast(max_cols, df_in, df_forecast, df_out[out_col])
+            if args.method=='lgbm':
+                forecasts[out_col] = lgbm_forecast(max_cols, df_in, df_forecast, df_out[out_col])
+            if args.method=='cb':
+                forecasts[out_col] = cb_forecast(max_cols, df_in, df_forecast, df_out['max_demand'])
+            if args.method=='xgb':
+                forecasts[out_col] = xgb_forecast(max_cols, df_in, df_forecast, df_out[out_col])
+
+        prediction = pd.DataFrame(forecasts, index=df_forecast.index)
     return prediction
 
 def rf_forecast(columns, df_in, df_forecast, df_out):
@@ -258,21 +232,35 @@ def naive(df_forecast):
     prediction = pd.DataFrame(data, index=df_forecast.index)
     return prediction
 
+def mape(a,f,parm):
+    mape = ( (f[parm] - a[parm]) / a[parm]).abs().mean()
+    return mape
+
 def assess(df_forecast, df_actual):
     print('assess: df_forecast {} df_actual {}'.format(len(df_forecast), len(df_actual) ) )
-#   print(df_forecast.columns)
-#   print(df_actual.columns)
-#   print(df_forecast)
-#   print(df_actual)
     if len(df_forecast) != len(df_actual):
         print('ERROR forecast and actual different lengths')
         quit()
     max_diff2 = (df_forecast['max_demand'] - df_actual['max_demand']).pow(2)
     min_diff2 = (df_forecast['min_demand'] - df_actual['min_demand']).pow(2)
     rmse = math.sqrt(max_diff2.sum() + min_diff2.sum() )
-    min_rmse = math.sqrt(min_diff2.sum())
-    max_rmse = math.sqrt(max_diff2.sum())
-    return rmse, min_rmse, max_rmse
+
+    min_mape = mape(df_forecast, df_actual, 'min_demand' )
+    max_mape = mape(df_forecast, df_actual, 'max_demand' )
+
+    if args.model == 'minute' and 'std' in df_forecast.columns:
+        std_mape = mape(df_forecast, df_actual, 'std' )
+        var_mape = mape(df_forecast, df_actual, 'var' )
+        sem_mape = mape(df_forecast, df_actual, 'sem' )
+    else:
+        std_mape = 0.0
+        var_mape = 0.0
+        sem_mape = 0.0
+    return rmse, min_mape, max_mape, std_mape, var_mape, sem_mape
+
+def check_max_min_diff(df):
+    diff = df['max_demand'] - df['min_demand']
+    return diff.mean()
 
 # class to create ANN
 
@@ -413,6 +401,8 @@ def ann_forecast(df_in, df_out, df_forecast, plot=False, num_epochs=2):
 
 # main program
 
+methods = ['df', 'lgbm', 'xgb', 'ann', 'cb', 'gpr']
+
 # process command line
 
 parser = argparse.ArgumentParser(description='Create demand forecast.')
@@ -423,7 +413,7 @@ parser.add_argument('--errors', action="store_true", dest="errors", help='Show E
 parser.add_argument('--naive', action="store_true", dest="naive", help='Output the naive forecast', default=False)
 parser.add_argument('--start', action="store", dest="start", help='Where to start rolling assesment from: 0=just forecast, 1=30 days before the end, 2=31 etc.' , default=0, type=int )
 parser.add_argument('--data', action="store", dest="data", help='Where to start data from: 0=use all data, n= use the n most recent days.' , default=0, type=int )
-parser.add_argument('--method', action="store", dest="method", help='Forecast method to use.' , default='rf' )
+parser.add_argument('--method', action="store", dest="method", help='Forecast method to use: '+', '.join(methods) , default='rf' )
 parser.add_argument('--step', action="store", dest="step", help='Rolling assesment step.' , default=1, type=int )
 parser.add_argument('--epochs', action="store", dest="epochs", help='Number of epochs to train ann' , default=1, type=int )
 parser.add_argument('--nodes', action="store", dest="nodes", help='Number of neurons in hidden layer for ann' , default=5000, type=int )
@@ -437,11 +427,22 @@ merged_filename = '{}merged_pre_august.csv'.format(output_dir)
 df_in = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 # print(df_in)
 
+out_cols=['max_demand', 'min_demand']
+if args.model == 'minute':
+    minute_filename = '{}minutely.csv'.format(output_dir)
+    df_out = pd.read_csv(minute_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+else:
 # maxmin data file ( min/max in the period - what we are trying to predict )
-merged_filename = '{}maxmin_pre_august.csv'.format(output_dir)
-df_out = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+    merged_filename = '{}maxmin_pre_august.csv'.format(output_dir)
+    df_out = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 if args.diffs:
     to_diffs(df_in, df_out)
+
+if args.model == 'diffs':
+    df_out['diff'] = df_out['max_demand'] - df_out['min_demand']
+    out_cols = out_cols + ['diff']
+if args.model == 'minute':
+    out_cols = out_cols + ['std', 'var', 'sem']
 # print(df_out)
 
 print(time.strftime("Starting at: %Y-%m-%d %H:%M:%S", time.gmtime()) )
@@ -458,7 +459,7 @@ if args.start == 0:
         df_forecast = naive(df_f_in)
     else:
         # forecast it
-        df_forecast = forecast(df_in, df_out, df_f_in)
+        df_forecast = forecast(df_in, df_out, df_f_in, out_cols)
     if args.diffs:
         # set values in df_forecast back to actual max and min
         from_diffs(df_f_in, df_forecast)
@@ -512,7 +513,7 @@ else:
         # print('df_f_out')
         # print(df_f_out)
         # forecast it
-        df_forecast = forecast(df_train_in, df_train_out, df_f_in)
+        df_forecast = forecast(df_train_in, df_train_out, df_f_in, out_cols)
         # forecasting diffs
         if args.diffs:
             # set values in df_forecast back to actual max and min
@@ -523,11 +524,18 @@ else:
         df_bench = naive(df_f_in)
 
         # assess the forecast
-        rmse, min_rmse, max_rmse = assess(df_forecast, df_f_out)
-        rmse_b, min_rmse, max_rmse = assess(df_bench, df_f_out)
+        rmse, min_mape, max_mape, std_mape, var_mape, sem_mape = assess(df_forecast, df_f_out)
+        rmse_b, min_mape_b, max_mape_b, b_std_mape, b_var_mape, b_sem_mape = assess(df_bench, df_f_out)
         skill = rmse / rmse_b
         # store the assesment
-        rmses.append([rmse, rmse_b, skill, min_rmse, max_rmse])
+        rmses.append([rmse, rmse_b, skill, min_mape, max_mape, std_mape, var_mape, sem_mape])
+        # check max min diff
+        diff_o = check_max_min_diff(df_f_out)
+        diff_f = check_max_min_diff(df_forecast)
+        diff_b = check_max_min_diff(df_bench)
+        print('Diffs original {} forecast {} bench {}'.format(diff_o, diff_f, diff_b) )
+        if args.model == 'diffs':
+            print('Diff prediction {} '.format(df_forecast['diff'].mean() ))
 
         # plot
         if args.plot:
@@ -571,10 +579,16 @@ else:
         
     # output all the assessments
     skill = 0.0
-    print('RMSE  Naive RMSE  Skill  RMSE-min   RMSE-max')
-    for vals in rmses:
-        print("{:.3f} {:.3f}      {:.3f} {:.3f} {:.3f}".format(vals[0], vals[1], vals[2], vals[3], vals[4]))
-        skill += vals[2]
+    if args.model == 'minute':
+        print('RMSE  Naive RMSE  Skill  MAPE-min MAPE-max MAPE-std MAPE-var MAPE-sem')
+        for vals in rmses:
+            print("{:.3f} {:.3f}      {:.3f}  {:.3f}    {:.3f}    {:.3f}    {:.3f}    {:.3f}".format(vals[0], vals[1], vals[2], vals[3], vals[4], vals[5], vals[6], vals[7]))
+            skill += vals[2]
+    else:
+        print('RMSE  Naive RMSE  Skill  MAPE-min MAPE-max')
+        for vals in rmses:
+            print("{:.3f} {:.3f}      {:.3f}  {:.3f}    {:.3f}".format(vals[0], vals[1], vals[2], vals[3], vals[4]))
+            skill += vals[2]
     print('Average skill {}'.format(skill / len(rmses) ) )
     minutes = (time.time() - startTime) / 60.0
     print('It took {0:0.2f} minutes'.format(minutes))

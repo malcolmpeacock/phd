@@ -95,6 +95,16 @@ def add_variance(df, parameter):
     vmin = df[parms].min(axis=1)
     df[parameter+'_var'] = vmax - vmin
 
+def u_curve(u):
+    if u<4.0 or u>25.0:
+        return 0
+    if u <15:
+        return (u-4.0) / 11.0
+    return 1
+
+def wind_curve(df, parameter):
+    df[parameter+'_power'] = df[parameter].apply(u_curve)
+
 def augment(df):
 
     # trend
@@ -118,13 +128,20 @@ def augment(df):
     # heating degree hours
     df['hdh'] = (14.8 - df['temperature1']).clip(0.0)
 
-    # daily mean temperature
+    # daily weather variables
     daily_temp = df['temperature1'].resample('D', axis=0).mean()
+    daily_hume = df['spec_humidity1'].resample('D', axis=0).mean()
+    daily_pres = df['pressure1'].resample('D', axis=0).mean()
 
     # it doesn't matter what these are initialsed to as the weather starts
     # years before the demand and pv
     yesterday_temp = 0.0
     daybefore_temp = 0.0
+
+    yesterday_hume = 0.0
+    daybefore_hume = 0.0
+    yesterday_pres = 0.0
+    daybefore_pres = 0.0
 
     days = pd.Series(df.index.date).unique()
     # loop round each day ...
@@ -140,6 +157,24 @@ def augment(df):
         # yesterdays daily temperature
         df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','tempyd'] = yesterday_temp
         yesterday_temp = daily_temp.loc[day_str+' 00:00:00']
+
+        # daily hume
+        df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','dailyhume'] = daily_hume.loc[day_str+' 00:00:00']
+        # day before yesterdays daily hume
+        df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','humedb'] = daybefore_hume
+        daybefore_hume = yesterday_hume
+        # yesterdays daily hume
+        df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','humeyd'] = yesterday_hume
+        yesterday_hume = daily_hume.loc[day_str+' 00:00:00']
+
+        # daily pres
+        df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','dailypres'] = daily_pres.loc[day_str+' 00:00:00']
+        # day before yesterdays daily hume
+        df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','presdb'] = daybefore_pres
+        daybefore_pres = yesterday_pres
+        # yesterdays daily hume
+        df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','presyd'] = yesterday_pres
+        yesterday_pres = daily_pres.loc[day_str+' 00:00:00']
 
         # day of week and day of year
         df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','wd'] = day.weekday()
@@ -196,6 +231,9 @@ def augment(df):
 
     # cube of windspeed
     add_cube(df, 'windspeed1') 
+
+    # wind power curve
+    wind_curve(df, 'windspeed1')
 
 # main program
 
