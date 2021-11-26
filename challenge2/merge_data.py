@@ -177,6 +177,8 @@ def add_ghi(df):
 def add_cloudy(df):
     df['cloud'] = (df['cs_ghi'] - df['solar_irradiance1'])
     df['cloud'] = df['cloud'] / df['cloud'].max()
+    pi = 3.1415926
+    df['scloud'] = np.sin((df['cloud'] * pi).values)
 
 def augment(df):
 
@@ -324,6 +326,8 @@ def augment(df):
 parser = argparse.ArgumentParser(description='Merge and augment data.')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--weather', action="store", dest="weather", help='Number of weather locations', default=5, type=int)
+parser.add_argument('--test', action="store_true", dest="test", help='Read only the test week data', default=False)
+parser.add_argument('--abs', action="store_true", dest="abs", help='Output absolaute value of correlations', default=False)
 
 args = parser.parse_args()
 
@@ -334,6 +338,10 @@ output_dir = "/home/malcolm/uclan/challenge2/output/"
 # max/min ( what we are trying to predict )
 maxmin_filename = 'MW_Staplegrove_CB905_MW_target_variable_half_hourly_max_min_real_power_MW_pre_august.csv'
 maxmin = pd.read_csv(input_dir+maxmin_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+if not args.test:
+    maxmin_filename = 'MW_Staplegrove_CB905_MW_target_variable_half_hourly_max_min_real_power_MW_august.csv'
+    maxmin2 = pd.read_csv(input_dir+maxmin_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+    maxmin = pd.concat([ maxmin, maxmin2 ])
 
 maxmin.columns = ['max_demand', 'min_demand']
 print('Max and Min Demand')
@@ -345,7 +353,6 @@ for nw in range(args.weather):
     nw_str = str(nw+1)
     weather_filename = 'df_staplegrove_{}_hourly.csv'.format(nw_str)
     weather = pd.read_csv(input_dir+weather_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
-    print(weather)
     # up sample to 30 mins (with interpolation)
     # weather = weather.resample('30min').interpolate(method='cubic')
     weather = weather.resample('30min').interpolate()
@@ -370,18 +377,30 @@ print(weather)
 # demand data
 demand_filename = 'MW_Staplegrove_CB905_MW_observation_variable_half_hourly_real_power_MW_pre_august.csv'
 demand = pd.read_csv(input_dir+demand_filename, header=0, sep=',', parse_dates=[0], index_col=0 )
+
+# demand for the test forecast period
+demand_filename = 'MW_Staplegrove_CB905_MW_observation_variable_half_hourly_real_power_MW_august.csv'
+demandt = pd.read_csv(input_dir+demand_filename, header=0, sep=',', parse_dates=[0], index_col=0)
+print(demandt)
+
+if args.test:
+    demandf = demandt
+else:
+    # demand for the real forecast period
+    demand_filename = 'MW_Staplegrove_CB905_MW_observation_variable_half_hourly_real_power_MW_september.csv'
+    demandf = pd.read_csv(input_dir+demand_filename, header=0, sep=',', parse_dates=[0], index_col=0)
+    print(demandf)
+
+    # data the test period to the end of the original test data
+    demand = pd.concat([demand, demandt])
+
 demand.columns = ['demand']
+demandf.columns = ['demand']
 add_lags(demand, 4)
 add_diff(demand, 'demand') 
-print(demand)
-
-# demand for the forecast period
-demand_filename = 'MW_Staplegrove_CB905_MW_observation_variable_half_hourly_real_power_MW_august.csv'
-demandf = pd.read_csv(input_dir+demand_filename, header=0, sep=',', parse_dates=[0], index_col=0)
-demandf.columns = ['demand']
 add_lags(demandf, 4)
 add_diff(demandf, 'demand') 
-print(demandf)
+print(demand)
 
 augment(weather)
 
@@ -496,8 +515,9 @@ for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True 
 
 #data = { 'corr_max' : pd.Series(corr_max), 'corr_min' : pd.Series(corr_min), 'lass_max': pd.Series(lass_max), 'lass_min' : pd.Series(lass_min) }
 df_parms = pd.concat([pd.Series(corr_max), pd.Series(corr_min), pd.Series(lass_max), pd.Series(lass_min), pd.Series(lass_maxd), pd.Series(lass_mind), pd.Series(lgbm_max), pd.Series(lgbm_min) ], keys = ['corr_max', 'corr_min', 'lass_max', 'lass_min', 'lass_maxd', 'lass_mind', 'lgbm_max', 'lgbm_min'], axis=1)
+if args.abs:
+    df_parms = df_parms.abs()
 print(df_parms)
-
 
 
 output_dir = "/home/malcolm/uclan/challenge2/output/"
