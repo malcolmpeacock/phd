@@ -25,9 +25,55 @@ import math
 from sklearn.linear_model import LassoCV
 from sklearn.preprocessing import MaxAbsScaler
 import matplotlib
+import pvlib
+import lightgbm as lgb
+from sklearn.preprocessing import StandardScaler
 
 # custom code
 import utils
+
+def ghi2irradiance(site_location, tilt, surface_azimuth, in_ghi):
+    # Get solar azimuth and zenith to pass to the transposition function
+    solar_position = site_location.get_solarposition(times=in_ghi.index)
+    # Get the direct normal component of the solar radiation
+    disc = pvlib.irradiance.disc(
+        in_ghi,
+        solar_position['apparent_zenith'],
+        in_ghi.index.dayofyear)
+    in_dni = disc['dni']
+    # Get the diffuse component of the solar radiation
+    in_dhi = in_ghi - in_dni * np.cos(np.radians(solar_position['apparent_zenith']))
+    # Get the irradiance on the plane of the solar array.
+    POA_irradiance = pvlib.irradiance.get_total_irradiance(
+        surface_tilt=tilt,
+        surface_azimuth=surface_azimuth,
+        dni=in_dni,
+        ghi=in_ghi,
+        dhi=in_dhi,
+        solar_zenith=solar_position['apparent_zenith'],
+        solar_azimuth=solar_position['azimuth'])
+    # return poa
+    return POA_irradiance['poa_global'], solar_position['apparent_zenith']
+
+# feature identification using lgbm
+def lgbm(input_df, output):
+    X_train = input_df
+    y_train =  output
+    # normalise the inputs 
+    sc_x = StandardScaler()
+    sc_y = StandardScaler()
+    X_train = sc_x.fit_transform(X_train.values.astype(np.float32))
+    y_train = sc_y.fit_transform(y_train.values.astype(np.float32).reshape(-1, 1))
+    model = lgb.LGBMRegressor(num_leaves=45, learning_rate=0.03, n_estimators=300, boosting_type='gbdt', deterministic=True, max_bin=2550 )
+    print('Fitting model ...')
+    model.fit(X_train, y_train.ravel(), eval_metric='l2')
+#   cv_varimp_df = pd.DataFrame([input_df.columns, model.feature_importances_]).T
+#   cv_varimp_df.columns = ['feature_name', 'varimp']
+#   cv_varimp_df.sort_values(by='varimp', ascending=False, inplace=True)
+#   cv_varimp_df = cv_varimp_df.iloc[0:len(input_df)]   
+    coef = pd.Series(model.feature_importances_, index = input_df.columns)
+    return coef
+
 
 # feature identification using lasso
 def lasso(input_df, output, plot=False):
@@ -104,6 +150,33 @@ def u_curve(u):
 
 def wind_curve(df, parameter):
     df[parameter+'_power'] = df[parameter].apply(u_curve)
+
+def add_diff(df, parameter):
+    df[parameter+'_diff'] = df[parameter].diff()
+    df[parameter+'_diff'].iat[0] = 0.0
+
+def get_zenith(site_location, index):
+    solar_position = site_location.get_solarposition(times=index)
+    return solar_position['apparent_zenith']
+
+# clear sky irradiance
+def add_ghi(df):
+    # Create location object to store lat, lon, timezone
+    # for location of solar farm in devon.
+    lat = 50.33
+    lon = -4.034
+    site_location = pvlib.location.Location(lat, lon, tz=pytz.timezone('UTC'))
+    times = df.index
+    df['zenith'] = get_zenith(site_location, times)
+    # Generate clearsky data using the Ineichen model, which is the default
+    # The get_clearsky method returns a dataframe with values for GHI, DNI,
+    # and DHI
+    clearsky = site_location.get_clearsky(times)
+    df['cs_ghi'] = clearsky['ghi'].fillna(0)
+
+def add_cloudy(df):
+    df['cloud'] = (df['cs_ghi'] - df['solar_irradiance1'])
+    df['cloud'] = df['cloud'] / df['cloud'].max()
 
 def augment(df):
 
@@ -235,6 +308,15 @@ def augment(df):
     # wind power curve
     wind_curve(df, 'windspeed1')
 
+    # diff of variables ie rate of change
+    add_diff(df, 'solar_irradiance1') 
+    add_diff(df, 'windspeed1') 
+
+    # clear sky ghi and zenith
+    add_ghi(df)
+    # cloudy based on cs_ghi and actual irradiance
+    add_cloudy(df)
+
 # main program
 
 # process command line
@@ -290,6 +372,7 @@ demand_filename = 'MW_Staplegrove_CB905_MW_observation_variable_half_hourly_real
 demand = pd.read_csv(input_dir+demand_filename, header=0, sep=',', parse_dates=[0], index_col=0 )
 demand.columns = ['demand']
 add_lags(demand, 4)
+add_diff(demand, 'demand') 
 print(demand)
 
 # demand for the forecast period
@@ -297,6 +380,7 @@ demand_filename = 'MW_Staplegrove_CB905_MW_observation_variable_half_hourly_real
 demandf = pd.read_csv(input_dir+demand_filename, header=0, sep=',', parse_dates=[0], index_col=0)
 demandf.columns = ['demand']
 add_lags(demandf, 4)
+add_diff(demandf, 'demand') 
 print(demandf)
 
 augment(weather)
@@ -309,6 +393,15 @@ print(df)
 print(fdf)
 print(df.columns)
 utils.add_diffs(df, maxmin)
+
+# sanity check
+print(df.columns)
+for col in df.columns:
+    if df[col].isna().sum() >0:
+        print("ERROR nans in {}".format(col))
+#       print(df[df[col].isnull()])
+        print(df[df[col].isna()])
+        quit()
 
 # plot weather
 if args.plot:
@@ -343,6 +436,24 @@ lass_maxd = {}
 lass_mind = {}
 corr_max = {}
 corr_min = {}
+lgbm_max = {}
+lgbm_min = {}
+
+# lgbm max demand
+print('lgbm max_demand')
+coeffs = lgbm(df, maxmin['max_demand'])
+print(coeffs)
+for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
+    print('{:15}         {:.3f}'.format(col,value))
+    lgbm_max[col] = value
+
+# lgbm min demand
+print('lgbm min_demand')
+coeffs = lgbm(df, maxmin['min_demand'])
+for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
+    print('{:15}         {:.3f}'.format(col,value))
+    lgbm_min[col] = value
+
 # lasso max demand
 print('Lasso max_demand')
 coeffs = lasso(df, maxmin['max_demand'], plot=args.plot)
@@ -384,16 +495,9 @@ for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True 
     corr_min[col] = value
 
 #data = { 'corr_max' : pd.Series(corr_max), 'corr_min' : pd.Series(corr_min), 'lass_max': pd.Series(lass_max), 'lass_min' : pd.Series(lass_min) }
-df_parms = pd.concat([pd.Series(corr_max), pd.Series(corr_min), pd.Series(lass_max), pd.Series(lass_min), pd.Series(lass_maxd), pd.Series(lass_mind) ], keys = ['corr_max', 'corr_min', 'lass_max', 'lass_min', 'lass_maxd', 'lass_mind'], axis=1)
+df_parms = pd.concat([pd.Series(corr_max), pd.Series(corr_min), pd.Series(lass_max), pd.Series(lass_min), pd.Series(lass_maxd), pd.Series(lass_mind), pd.Series(lgbm_max), pd.Series(lgbm_min) ], keys = ['corr_max', 'corr_min', 'lass_max', 'lass_min', 'lass_maxd', 'lass_mind', 'lgbm_max', 'lgbm_min'], axis=1)
 print(df_parms)
 
-# sanity check
-print(df.columns)
-for col in df.columns:
-    if df[col].isna().sum() >0:
-        print("ERROR nans in {}".format(col))
-        print(df[df[col].isnull()])
-        quit()
 
 
 output_dir = "/home/malcolm/uclan/challenge2/output/"

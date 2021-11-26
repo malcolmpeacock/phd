@@ -60,22 +60,43 @@ def forecast(df_in, df_out, df_forecast, out_cols=['max_demand', 'min_demand']):
     basic_cols += add_parm('temperature')
     basic_cols += add_parm('pressure')
     max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'spec_humidity1', 'solar_irradiance_var', 'dailytemp', 'spec_humidity1_lag1', 'demand_lag1', 'spec_humidity_var', 'solar_irradiance_var_lag1', 'temperature3', 'temperature1', 'solar_irradiance2', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_var', 'windspeed3', 'windspeed_north3', 'windspeed_north1', 'solar_irradiance1_lag1', 'temperature_var']
+#   lass_max_cols = ['demand', 'solar_irradiance_var', 'solar_irradiance1', 'windspeed_east1', 'cloud', 'windspeed1', 'k', 'dailyhume', 'solar_irradiance_var_lag1', 'solar_irradiance1_lag1', 'windspeed1_diff', 'windspeed3', 'demand_lag1', 'solar_irradiance2']
+    lass_max_cols = ['demand', 'spec_humidity1', 'solar_irradiance_var', 'solar_irradiance1', 'windspeed_east1', 'demand_diff', 'cloud', 'windspeed1', 'k', 'dailyhume', 'solar_irradiance1_diff', 'dailytemp', 'temperature1', 'solar_irradiance_var_lag1', 'solar_irradiance1_lag1', 'windspeed1_diff', 'windspeed3', 'demand_lag1', 'solar_irradiance2']
+#   lass_min_cols = ['demand', 'spec_humidity1', 'windspeed_var', 'temperature_var', 'temperature3', 'dailytemp', 'demand_lag1', 'temperature1_lag1', 'temperature3_lag1', 'demand_lag2', 'demand_lag4', 'demand_lag3', 'windspeed_north3', 'temperature2', 'temperature5_lag1', 'temperature2_lag1', 'windspeed1_cube', 'temperature5', 'cs_ghi', 'spec_humidity_var', 'windspeed_east3', 'zenith', 'windspeed_var_lag1', 'windspeed_east3_lag1']
+#   lass_min_cols = ['demand', 'spec_humidity1', 'windspeed_var', 'temperature_var', 'temperature3', 'dailytemp', 'demand_lag1', 'temperature1_lag1', 'temperature3_lag1', 'demand_lag2', 'demand_lag4', 'demand_lag3', 'windspeed_north3', 'temperature2', 'temperature5_lag1', 'temperature2_lag1', 'windspeed1_cube', 'temperature5', 'cs_ghi', 'spec_humidity_var', 'windspeed_east3', 'zenith', 'windspeed_var_lag1' ]
+    lass_min_cols = ['demand', 'solar_irradiance_var', 'solar_irradiance1', 'demand_diff', 'cloud', 'spec_humidity1', 'windspeed_east1', 'windspeed1', 'k', 'dailyhume', 'dailytemp', 'windspeed1_diff', 'solar_irradiance2', 'windspeed_var', 'temperature3', 'temperature_var', 'solar_irradiance_var_lag1', 'windspeed3', 'demand_lag1', 'cs_ghi', 'spec_humidity_var', 'windspeed_east3', 'zenith', 'windspeed_var_lag1', 'windspeed_east3_lag1', 'temperature1_lag1', 'humedb', 'temperature3_lag1', 'demand_lag2', 'season', 'demand_lag4', 'demand_lag3', 'windspeed_north3', 'temperature2', 'temperature5_lag1', 'temperature2_lag1', 'windspeed1_cube', 'temperature5', 'solar_irradiance2_lag1', 'spec_humidity5_lag1', 'spec_humidity5', 'spec_humidity3', 'spec_humidity4_lag1' ]
+    lgb_max_cols = ['demand', 'demand_diff', 'demand_lag1', 'cs_ghi', 'demand_lag2', 'trend', 'zenith', 'cloud', 'solar_irradiance1_diff', 'presyd', 'demand_lag4', 'presdb', 'k', 'solar_irradiance_var_lag1', 'spec_humidity_var_lag1', 'windspeed_var_lag1', 'windspeed_var', 'wd', 'spec_humidity_var']
+    lgb_min_cols = ['demand', 'solar_irradiance1', 'solar_irradiance_var', 'windspeed_east1', 'windspeed1', 'cloud', 'k', 'dailyhume', 'solar_irradiance_var_lag1', 'solar_irradiance2', 'windspeed1_diff', 'demand_lag1']
+    lass_cols_maxd = ['temperature1_lag1', 'spec_humidity1_lag1', 'humeyd', 'windspeed_east1', 'solar_irradiance5', 'humedb', 'temperature3_lag1', 'windspeed_east2', 'dailyhume', 'solar_irradiance_var_lag1', 'solar_irradiance1_lag1', 'windspeed1_power', 'windspeed5', 'windspeed4', 'windspeed1_diff', 'cloud', 'demand_lag2', 'dsk', 'windspeed_north1_lag1', 'season', 'windspeed_north3_lag1']
+    lass_cols_mind = ['spec_humidity1_lag1', 'solar_irradiance_var', 'windspeed_east1', 'cloud', 'temperature1_lag1', 'spec_humidity3_lag1', 'demand_diff', 'humeyd', 'solar_irradiance5', 'humedb', 'solar_irradiance1', 'solar_irradiance2', 'windspeed_east2', 'solar_irradiance3', 'windspeed5', 'windspeed1_diff', 'windspeed_east4', 'windspeed3', 'solar_irradiance3_lag1', 'windspeed_east4_lag1', 'windspeed3', 'solar_irradiance3_lag1', 'windspeed_east4_lag1', 'dailyhume', 'solar_irradiance_var_lag1', 'solar_irradiance1_lag1', 'windspeed1_power', 'season', 'k', 'trend', 'windspeed_east5', 'windspeed_north2_lag1', 'windspeed_north2_lag1', 'demand']
 #   max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'spec_humidity1', 'solar_irradiance_var', 'dailytemp', 'spec_humidity1_lag1', 'demand_lag1', 'spec_humidity_var', 'solar_irradiance_var_lag1', 'temperature3', 'temperature1', 'solar_irradiance2', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_var', 'windspeed3', 'windspeed_north3', 'windspeed_north1', 'solar_irradiance1_lag1', 'temperature_var', 'windspeed_var_lag1']
-#   min_cols = ['demand', 'spec_humidity1', 'dailytemp', 'temperature3', 'demand_lag1', 'temperature2', 'windspeed_north3', 'windspeed_east3', 'temperature5', 'temperature3_lag1', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_north1']
     if args.diffs:
-#       max_cols = ['demand', 'demand_lag1', 'windspeed_east2', 'windspeed_east4', 'windspeed_east3', 'spec_humidity2', 'spec_humidity1_lag1', 'spec_humidity4', 'solar_irradiance_var', 'temperature3_lag1', 'temperature5', 'temperature1', 'solar_irradiance1_lag1', 'solar_irradiance1']
-        max_cols = ['demand', 'demand_lag1', 'windspeed_east2', 'windspeed_east4', 'windspeed_east3', 'spec_humidity2', 'spec_humidity1_lag1', 'spec_humidity4', 'solar_irradiance_var', 'temperature3_lag1', 'temperature5', 'temperature1', 'solar_irradiance1_lag1', 'solar_irradiance1', 'hdh', 'windspeed_var','windspeed5', 'windspeed_east1_lag1', 'windspeed_east1', 'windspeed_east5','windspeed1_cube', 'windspeed4', 'windspeed2','solar_irradiance_var_lag1','solar_irradiance2', 'solar_irradiance5', 'solar_irradiance3', 'trend', 'demand_lag4', 'windspeed_north5', 'temperature_var', 'dailytemp', 'tempyd', 'tempdb', 'temperature3', 'windspeed3', 'windspeed_north3_lag1', 'season', 'demand_lag2', 'dsk']
+#       max_cols = ['demand', 'demand_lag1', 'windspeed_east2', 'windspeed_east4', 'windspeed_east3', 'spec_humidity2', 'spec_humidity1_lag1', 'spec_humidity4', 'solar_irradiance_var', 'temperature3_lag1', 'temperature5', 'temperature1', 'solar_irradiance1_lag1', 'solar_irradiance1', 'hdh', 'windspeed_var','windspeed5', 'windspeed_east1_lag1', 'windspeed_east1', 'windspeed_east5','windspeed1_cube', 'windspeed4', 'windspeed2','solar_irradiance_var_lag1','solar_irradiance2', 'solar_irradiance5', 'solar_irradiance3', 'trend', 'demand_lag4', 'windspeed_north5', 'temperature_var', 'dailytemp', 'tempyd', 'tempdb', 'temperature3', 'windspeed3', 'windspeed_north3_lag1', 'season', 'demand_lag2', 'dsk']
+#       max_cols = ['demand', 'demand_lag1', 'hdh', 'windspeed_var_lag1', 'windspeed5', 'windspeed1_power', 'windspeed_east1', 'windspeed_east2', 'windspeed1_cube', 'windspeed_east3_lag1', 'windspeed_east4', 'windspeed2', 'spec_humidity2','spec_humidity1_lag1', 'spec_humidity4_lag1', 'spec_humidity1','spec_humidity4','solar_irradiance_var_lag1', 'spec_humidity3_lag1', 'humeyd', 'humedb', 'solar_irradiance_var', 'tempdb', 'tempyd', 'dailytemp', 'temperature3_lag1', 'temperature1_lag1', 'solar_irradiance2_lag1', 'solar_irradiance3_lag1', 'solar_irradiance1_lag1', 'solar_irradiance5', 'solar_irradiance1', 'windspeed_east5', 'windspeed_east3', 'windspeed4', 'temperature2']
+#       max_cols = ['demand', 'windspeed_east1', 'spec_humidity2','spec_humidity1_lag1', 'humeyd', 'solar_irradiance_var', 'temperature1_lag1', 'temperature5', 'temperature1', 'solar_irradiance2_lag1','solar_irradiance1_lag1', 'solar_irradiance5']
+#       max_cols = ['demand', 'windspeed_east1', 'spec_humidity2','spec_humidity1_lag1', 'humeyd', 'solar_irradiance_var', 'temperature1_lag1', 'temperature5', 'temperature1', 'solar_irradiance2_lag1','solar_irradiance1_lag1', 'solar_irradiance5', 'demand_lag1', 'hdh','windspeed_var_lag1', 'windspeed5', 'windspeed1_power', 'windspeed_east2', 'windspeed1_cube', 'windspeed_east3_lag1', 'windspeed_east4', 'windspeed2', 'spec_humidity4_lag1', 'spec_humidity1', 'spec_humidity4', 'solar_irradiance_var_lag1', 'spec_humidity3_lag1']
+        max_cols = ['demand', 'demand_diff', 'windspeed_east1','windspeed_east3_lag1', 'spec_humidity2', 'spec_humidity1_lag1', 'spec_humidity4', 'humeyd', 'solar_irradiance_var','temperature1_lag1', 'temperature5', 'temperature1', 'zenith', 'hdh', 'windspeed_var_lag1', 'windspeed_east2', 'windspeed1_cube','windspeed_east3', 'cloud', 'solar_irradiance_var_lag1', 'temperature5','solar_irradiance5']
+    min_cols = max_cols
     if args.cols == 'all':
         max_cols = df_in.columns
+        min_cols = max_cols
     if args.cols == 'basic':
         max_cols = basic_cols
-    min_cols = max_cols
+        min_cols = max_cols
+    if args.cols == 'lass':
+        max_cols = lass_max_cols
+        min_cols = lass_min_cols
+    if args.cols == 'lassd':
+        max_cols = lass_cols_maxd
+        min_cols = lass_cols_mind
+
+    input_cols = { 'max_demand' : max_cols, 'min_demand' : min_cols }
 
     if args.method=='ann':
 #       ann_cols = ['demand', 'spec_humidity1', 'dailytemp']
 #       ann_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'windspeed3', 'solar_irradiance2', 'spec_humidity1_lag1', 'solar_irradiance1_lag1']
         ann_cols = max_cols
-        prediction = ann_forecast(df_in[ann_cols], df_out, df_forecast[ann_cols], args.plot, args.epochs)
+        prediction = ann_forecast(df_in[ann_cols], df_out[['max_demand', 'min_demand']], df_forecast[ann_cols], args.plot, args.epochs)
     else:
         forecasts = {}
         for out_col in out_cols:
@@ -86,7 +107,7 @@ def forecast(df_in, df_out, df_forecast, out_cols=['max_demand', 'min_demand']):
             if args.method=='gpr':
                 forecasts[out_col] = gpr_forecast(max_cols, df_in, df_forecast, df_out[out_col])
             if args.method=='lgbm':
-                forecasts[out_col] = lgbm_forecast(max_cols, df_in, df_forecast, df_out[out_col])
+                forecasts[out_col] = lgbm_forecast(input_cols[out_col], df_in, df_forecast, df_out[out_col])
             if args.method=='cb':
                 forecasts[out_col] = cb_forecast(max_cols, df_in, df_forecast, df_out['max_demand'])
             if args.method=='xgb':
@@ -275,7 +296,7 @@ class SimpleNet(nn.Module):
 #       Layer 2
 #       self.act2 = nn.LeakyReLU()
         self.act2 = nn.Sigmoid()
-        self.linear2 = nn.Linear(num_hidden, num_hidden)
+        self.linear2 = nn.Linear(num_hidden, num_outputs)
 
     # Perform the computation
     def forward(self, x):
@@ -346,14 +367,10 @@ def ann_forecast(df_in, df_out, df_forecast, plot=False, num_epochs=2):
     learning_rate = 1e-4
 
     # normalise:
-    # normalise
     sc_x = StandardScaler()
     sc_y = StandardScaler()
     x = sc_x.fit_transform(df_in.values.astype(np.float32))
     y = sc_y.fit_transform(df_out.values.astype(np.float32))
-
-#   inputs = torch.tensor(df_in.values.astype(np.float32))
-#   targets = torch.tensor(df_out.values.astype(np.float32))
 
     inputs = torch.tensor(x)
     targets = torch.tensor(y)
@@ -368,24 +385,22 @@ def ann_forecast(df_in, df_out, df_forecast, plot=False, num_epochs=2):
         model = TwoLayers(num_inputs, num_outputs, num_neurons)
     else:
         model = SimpleNet(num_inputs, num_outputs, num_neurons)
+    # adam optimiser
 #   opt = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    # Stochiastic gradient descent
     opt = torch.optim.SGD(model.parameters(), lr=learning_rate)
     loss = loss_fn(model(inputs), targets)
     # Train the model
     losses = fit(num_epochs, model, loss_fn, opt, train_dl)
     print('Training loss: ', loss_fn(model(inputs), targets))
     preds = model(inputs)
-    print(preds)
     # normalise the inputs (using same max as for the model)
     x_f = sc_x.transform(df_forecast.values.astype(np.float32))
     f_inputs = torch.tensor(x_f)
 #   print('f_inputs')
 #   print(f_inputs)
     preds = model(f_inputs)
-    print(preds)
-#   print(preds)
     vals = preds.detach().numpy()
-    print(vals)
     vals = sc_y.inverse_transform(vals)
     if plot:
         plt.plot(losses)
@@ -396,7 +411,6 @@ def ann_forecast(df_in, df_out, df_forecast, plot=False, num_epochs=2):
 
     data = { 'max_demand' :  vals[:,0], 'min_demand': vals[:,1] }
     prediction = pd.DataFrame(data, index=df_forecast.index)
-    print(prediction)
     return prediction
 
 # main program
@@ -498,20 +512,12 @@ else:
         print('Window {} of {} start {} end {}'.format(window+1, math.floor(args.start / args.step), win_start, win_end ) )
         # training data ( weather and demand for prior period )
         df_train_in = df_in[win_start:win_end]
-        # print('df_train_in')
-        # print(df_train_in)
         # training data ( max/min that we are tyring to predict for same period)
         df_train_out = df_out[win_start:win_end]
-        # print('df_train_out')
-        # print(df_train_out)
         # training data ( weather and demand for forecast period)
         df_f_in  = df_in[win_end:win_end+forecast_days*48]
-        # print('df_f_in')
-        # print(df_f_in)
         # training data ( max/min that we are tyring to predict for forecast period)
-        df_f_out  = df_out[win_end:win_end+forecast_days*48]
-        # print('df_f_out')
-        # print(df_f_out)
+        df_f_out  = df_out[win_end:win_end+forecast_days*48].copy()
         # forecast it
         df_forecast = forecast(df_train_in, df_train_out, df_f_in, out_cols)
         # forecasting diffs

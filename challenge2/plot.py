@@ -6,6 +6,7 @@ import argparse
 import numpy as np
 import math
 import matplotlib.pyplot as plt
+from scipy import optimize
 
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
@@ -25,6 +26,9 @@ def regression(X, y):
 #   p = fit.predict(Xp)
     return coeffs[1], coeffs[2]
 
+def test_func(x, a, b):
+    return a * np.sin(b * x)
+
 # main program
 
 # process command line
@@ -41,6 +45,47 @@ print(df_in)
 # merged data file ( demand, weather, augmented variables )
 maxmin_filename = '{}maxmin_pre_august.csv'.format(output_dir)
 df_out = pd.read_csv(maxmin_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+
+# plot daily solar irradiance
+solar = df_in[['solar_irradiance1', 'solar_irradiance2', 'solar_irradiance3', 'solar_irradiance4', 'solar_irradiance5']]
+daily_solar = solar.resample('D').sum()
+daily_solar_max = daily_solar.max(axis=1)
+#monthly_min = daily_solar_max.resample('M').min()
+#monthly_max = daily_solar_max.resample('M').max()
+#max_value = monthly_max.max()
+#min_value = monthly_min.min()
+#print('MAX VALUE: {} MIN VALUE {} '.format(max_value, min_value))
+# 304 = 365 - (number of days between 1st day and december 31st)
+x = np.arange(len(daily_solar)) + 304
+xv = x%365
+pi = 3.1415926
+y = np.sin(xv*pi/365)*16550 + 300
+#month = monthly_max.index
+#print(month.month)
+#data = { 'month' : month.month, 'max' : monthly_max.values, 'min' : monthly_min.values }
+#df = pd.DataFrame(data)
+#print(df)
+#df = df.groupby('month').max()
+#df = df.groupby('month').agg({'max':'max', 'min':'min'})
+#print(df)
+
+# fit a polynomial
+coeffs = np.polyfit( x, daily_solar_max.values, 5)
+p = np.poly1d(coeffs)
+
+daily_solar_max.plot(label='daily irradiance')
+#plt.plot(daily_solar_max.index.values, y, label='max sun')
+plt.plot(daily_solar_max.index.values, p(x), label='fit')
+plt.title('Max irriance per day')
+plt.xlabel('Half Hour of the month', fontsize=15)
+plt.ylabel('Irradiance', fontsize=15)
+plt.legend(loc='lower left', fontsize=15)
+plt.show()
+
+#params, params_covariance = optimize.curve_fit(test_func, daily_solar.index.values, daily_solar.values, p0=[2, 2])
+
+#plt.scatter(daily_solar.index.values, 
+
 
 # plot the diffs demand and max min
 ax1 = df_in['solar_irradiance1'].plot(color='red',label='irradiance')
