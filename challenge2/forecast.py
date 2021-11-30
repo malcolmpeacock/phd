@@ -20,6 +20,29 @@ import xgboost as xgb
 import time
 import datetime
 
+# refine the original forecast using an ANN
+#
+# Forecast week:
+#  prediction  - the original forecast    [max_demand, min_demand]
+#  df_forecast - the augmented demand and weather data
+# Test data (pre-august ):
+#  out_fits    - the values fit test data [max_demand, min_demand]
+#  df_in       - the augmented demand and weather data
+#  df_out      - the actual [max_demand, min_demand]
+#
+# Train an ANN to predict df_out from out_fits and df_in
+# Then use it to do another prediction from prediction and df_in
+def add_refine(prediction, out_fits, df_in, df_forecast, df_out):
+    print('Refining original prediction with ANN')
+#   cols = ['demand']
+    cols = ['solar_irradiance1']
+    in_data = pd.concat([out_fits, df_in[cols] ], axis=1)
+    out_data = df_out
+    f_data = pd.concat([prediction, df_forecast[cols] ], axis=1)
+
+    new_prediction = ann_forecast(in_data, df_out[['max_demand', 'min_demand']], f_data, args.plot, args.epochs)
+    return new_prediction
+
 def to_diffs(df_in, df_out):
     df_out['max_demand'] = df_out['max_demand'] - df_in['demand']
     df_out['min_demand'] = df_in['demand'] - df_out['min_demand']
@@ -302,6 +325,7 @@ def forecast(df_in, df_out, df_forecast, out_cols=['max_demand', 'min_demand']):
         prediction = ann_forecast(df_in[ann_cols], df_out[['max_demand', 'min_demand']], df_forecast[ann_cols], args.plot, args.epochs)
     else:
         forecasts = {}
+        out_fits = {}
         for out_col in out_cols:
             print('Method {} Output {} ...'.format(args.method, out_col) )
     
@@ -310,13 +334,16 @@ def forecast(df_in, df_out, df_forecast, out_cols=['max_demand', 'min_demand']):
             if args.method=='gpr':
                 forecasts[out_col] = gpr_forecast(max_cols, df_in, df_forecast, df_out[out_col])
             if args.method=='lgbm':
-                forecasts[out_col] = lgbm_forecast(input_cols[out_col], df_in, df_forecast, df_out[out_col])
+                forecasts[out_col], out_fits[out_col] = lgbm_forecast(input_cols[out_col], df_in, df_forecast, df_out[out_col])
             if args.method=='cb':
                 forecasts[out_col] = cb_forecast(max_cols, df_in, df_forecast, df_out['max_demand'])
             if args.method=='xgb':
                 forecasts[out_col] = xgb_forecast(max_cols, df_in, df_forecast, df_out[out_col])
 
         prediction = pd.DataFrame(forecasts, index=df_forecast.index)
+        if args.refine:
+            pred_fit = pd.DataFrame(out_fits, index=df_in.index)
+            prediction = add_refine(prediction, pred_fit, df_in, df_forecast, df_out)
     return prediction
 
 def rf_forecast(columns, df_in, df_forecast, df_out):
@@ -373,7 +400,14 @@ def lgbm_forecast(columns, df_in, df_forecast, df_out):
 #   print(np.shape(y_pred))
 #   print(y_pred)
     y_pred = sc_y.inverse_transform(y_pred)
-    return y_pred
+    
+    if args.refine:
+        f_pred = model.predict(X_train)
+        f_pred = sc_y.inverse_transform(f_pred)
+    else:
+        f_pred = None
+    return y_pred, f_pred
+  
 
 # xgBoost
 
@@ -635,6 +669,7 @@ parser.add_argument('--step', action="store", dest="step", help='Rolling assesme
 parser.add_argument('--epochs', action="store", dest="epochs", help='Number of epochs to train ann' , default=1, type=int )
 parser.add_argument('--nodes', action="store", dest="nodes", help='Number of neurons in hidden layer for ann' , default=5000, type=int )
 parser.add_argument('--model', action="store", dest="model", help='ANN Model' , default='simple')
+parser.add_argument('--refine', action="store_true", dest="refine", help='Run an ANN aftwerwards to improve things', default=False)
 args = parser.parse_args()
 
 # read in the data
