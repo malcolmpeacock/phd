@@ -601,7 +601,8 @@ def ann_forecast(df_in, df_out, df_forecast, plot=False, num_epochs=2):
     seed = 1
     batch_size = 48
     num_neurons = args.nodes
-    learning_rate = 1e-4
+    learning_rate = math.pow(10, -1 * args.rate)
+    print('ann_forecast batch {} nodes {} rate {} optimizer {}'.format(batch_size, num_neurons, learning_rate, args.opt) )
 
     # normalise:
     sc_x = StandardScaler()
@@ -623,9 +624,11 @@ def ann_forecast(df_in, df_out, df_forecast, plot=False, num_epochs=2):
     else:
         model = SimpleNet(num_inputs, num_outputs, num_neurons)
     # adam optimiser
-#   opt = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    if args.opt=='adam':
+        opt = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    else:
     # Stochiastic gradient descent
-    opt = torch.optim.SGD(model.parameters(), lr=learning_rate)
+        opt = torch.optim.SGD(model.parameters(), lr=learning_rate)
     loss = loss_fn(model(inputs), targets)
     # Train the model
     losses = fit(num_epochs, model, loss_fn, opt, train_dl)
@@ -668,7 +671,9 @@ parser.add_argument('--method', action="store", dest="method", help='Forecast me
 parser.add_argument('--step', action="store", dest="step", help='Rolling assesment step.' , default=1, type=int )
 parser.add_argument('--epochs', action="store", dest="epochs", help='Number of epochs to train ann' , default=1, type=int )
 parser.add_argument('--nodes', action="store", dest="nodes", help='Number of neurons in hidden layer for ann' , default=5000, type=int )
+parser.add_argument('--rate', action="store", dest="rate", help='Learning rate' , default=4, type=int )
 parser.add_argument('--model', action="store", dest="model", help='ANN Model' , default='simple')
+parser.add_argument('--opt', action="store", dest="opt", help='ANN Optimizer' , default='SGD')
 parser.add_argument('--refine', action="store_true", dest="refine", help='Run an ANN aftwerwards to improve things', default=False)
 args = parser.parse_args()
 
