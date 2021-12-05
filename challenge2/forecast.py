@@ -37,10 +37,10 @@ def add_refine(prediction, out_fits, df_in, df_forecast, df_out):
 #   cols = ['demand']
     cols = ['solar_irradiance1']
     in_data = pd.concat([out_fits, df_in[cols] ], axis=1)
-    out_data = df_out
+    out_data = df_out[['max_demand', 'min_demand']]
     f_data = pd.concat([prediction, df_forecast[cols] ], axis=1)
 
-    new_prediction = ann_forecast(in_data, df_out[['max_demand', 'min_demand']], f_data, args.plot, args.epochs)
+    new_prediction = ann_forecast(in_data, out_data, f_data, args.plot, args.epochs)
     return new_prediction
 
 def to_diffs(df_in, df_out):
@@ -82,6 +82,24 @@ def forecast(df_in, df_out, df_forecast, out_cols=['max_demand', 'min_demand']):
     basic_cols += add_parm('pressure')
     max_cols = ['demand', 'solar_irradiance1', 'windspeed_east1', 'k', 'windspeed1', 'spec_humidity1', 'solar_irradiance_var', 'dailytemp', 'spec_humidity1_lag1', 'demand_lag1', 'spec_humidity_var', 'solar_irradiance_var_lag1', 'temperature3', 'temperature1', 'solar_irradiance2', 'demand_lag2', 'demand_lag3' ,'demand_lag4', 'windspeed_var', 'windspeed3', 'windspeed_north3', 'windspeed_north1', 'solar_irradiance1_lag1', 'temperature_var']
 #   lass_max_cols = ['demand', 'solar_irradiance_var', 'solar_irradiance1', 'windspeed_east1', 'cloud', 'windspeed1', 'k', 'dailyhume', 'solar_irradiance_var_lag1', 'solar_irradiance1_lag1', 'windspeed1_diff', 'windspeed3', 'demand_lag1', 'solar_irradiance2']
+    var_cols = ['spec_humidity1'
+               ,'solar_irradiance1'
+               ,'windspeed_east1'
+               ,'solar_irradiance_var'
+               ,'cloud'
+               ,'windspeed1'
+               ,'temperature1'
+               ,'dailyhume'
+               ,'dailytemp'
+               ,'solar_irradiance1_diff'
+               ,'windspeed_east3'
+#              ,'windspeed_var_lag1'
+#              ,'zenith'
+#              ,'windspeed_east3_lag1'
+               ,'solar_irradiance_var_lag1'
+#              ,'solar_irradiance1_lag1'
+               ,'windspeed3'
+               ]
 #   max demand - lasso
     lass_max_cols = ['demand'
                     ,'spec_humidity1'
@@ -324,26 +342,34 @@ def forecast(df_in, df_out, df_forecast, out_cols=['max_demand', 'min_demand']):
         ann_cols = max_cols
         prediction = ann_forecast(df_in[ann_cols], df_out[['max_demand', 'min_demand']], df_forecast[ann_cols], args.plot, args.epochs)
     else:
-        forecasts = {}
-        out_fits = {}
-        for out_col in out_cols:
-            print('Method {} Output {} ...'.format(args.method, out_col) )
-    
-            if args.method=='rf':
-                forecasts[out_col] = rf_forecast(max_cols, df_in, df_forecast, df_out[out_col])
-            if args.method=='gpr':
-                forecasts[out_col] = gpr_forecast(max_cols, df_in, df_forecast, df_out[out_col])
-            if args.method=='lgbm':
-                forecasts[out_col], out_fits[out_col] = lgbm_forecast(input_cols[out_col], df_in, df_forecast, df_out[out_col])
-            if args.method=='cb':
-                forecasts[out_col] = cb_forecast(max_cols, df_in, df_forecast, df_out['max_demand'])
-            if args.method=='xgb':
-                forecasts[out_col] = xgb_forecast(max_cols, df_in, df_forecast, df_out[out_col])
+        if args.method=='variance':
+            diffs = df_out['max_demand'] - df_out['min_demand']
+            variance, fits = lgbm_forecast(var_cols, df_in, df_forecast, diffs)
+            max_demand = df_forecast['demand'] + (variance * 0.5)
+            min_demand = df_forecast['demand'] - (variance * 0.5)
+            forecasts = {'max_demand' : max_demand, 'min_demand' : min_demand }
+            prediction = pd.DataFrame(forecasts, index=df_forecast.index)
+        else:
+            forecasts = {}
+            out_fits = {}
+            for out_col in out_cols:
+                print('Method {} Output {} ...'.format(args.method, out_col) )
+        
+                if args.method=='rf':
+                    forecasts[out_col] = rf_forecast(max_cols, df_in, df_forecast, df_out[out_col])
+                if args.method=='gpr':
+                    forecasts[out_col] = gpr_forecast(max_cols, df_in, df_forecast, df_out[out_col])
+                if args.method=='lgbm':
+                    forecasts[out_col], out_fits[out_col] = lgbm_forecast(input_cols[out_col], df_in, df_forecast, df_out[out_col])
+                if args.method=='cb':
+                    forecasts[out_col] = cb_forecast(max_cols, df_in, df_forecast, df_out['max_demand'])
+                if args.method=='xgb':
+                    forecasts[out_col] = xgb_forecast(max_cols, df_in, df_forecast, df_out[out_col])
 
-        prediction = pd.DataFrame(forecasts, index=df_forecast.index)
-        if args.refine:
-            pred_fit = pd.DataFrame(out_fits, index=df_in.index)
-            prediction = add_refine(prediction, pred_fit, df_in, df_forecast, df_out)
+            prediction = pd.DataFrame(forecasts, index=df_forecast.index)
+            if args.refine:
+                pred_fit = pd.DataFrame(out_fits, index=df_in.index)
+                prediction = add_refine(prediction, pred_fit, df_in, df_forecast, df_out)
     return prediction
 
 def rf_forecast(columns, df_in, df_forecast, df_out):
@@ -408,7 +434,6 @@ def lgbm_forecast(columns, df_in, df_forecast, df_out):
         f_pred = None
     return y_pred, f_pred
   
-
 # xgBoost
 
 def xgb_forecast(columns, df_in, df_forecast, df_out):
@@ -738,7 +763,7 @@ if args.start == 0:
     # output the forecast
     df_forecast.columns = ['value_max', 'value_min']
     output_filename = '{}predictions.csv'.format(output_dir)
-    df_forecast.to_csv(output_filename, float_format='%.8f')
+    df_forecast.to_csv(output_filename, float_format='%.12f')
 
 else:
     rmses=[]
