@@ -22,6 +22,36 @@ import heat.scripts.download as download
 import heat.scripts.read as read
 from utils.midas_locations import get_locations
 from utils.sanity import sanity
+from utils.generation_functions import rayleigh_bins
+
+def read_adverse(warming='2-4', eno='2', etype='s', period = '5', file_parm='windspeed', parm_name='wind_speed'):
+    etypes = { 'd' : 'duration', 's' : 'severity' }
+    event = 'winter_wind_drought'
+    filename = '/home/malcolm/uclan/data/adverse/{}_uk_return_period_1_in_{}_years_{}_gwl1{}degC_event{}_{}.nc'.format(event, period, etypes[etype], warming, eno, file_parm)
+    # Read the netCDF file
+    print('Reading netcdf file {} ...'.format(filename))
+    nc = Dataset(filename)
+    print(nc.variables)
+    time = nc.variables['time'][:]
+    time_units = nc.variables['time'].units
+    latitude = nc.variables['latitude'][:]
+    longitude = nc.variables['longitude'][:]
+    wind = nc.variables[parm_name][:]
+
+    times=num2date(time, time_units,only_use_cftime_datetimes=False,only_use_python_datetimes=True)
+    df = pd.DataFrame(data=wind.reshape(len(time), len(latitude) * len(longitude)), index=pd.DatetimeIndex(times, name='time'), columns=pd.MultiIndex.from_product([latitude, longitude], names=('latitude', 'longitude')))
+    return df
+
+def daily_wind_power(mean_wind_speed):
+    nbins=100
+    power=np.empty(nbins)
+    cut_in = 4
+    cut_out = 25
+
+    speed, probability = rayleigh_bins(mean_wind_speed, 100, cut_in, cut_out)
+    for i in range(nbins):
+        power[i]=power_from_curve(speed[i]) * probability[i]
+    return np.sum(power)
 
 def power_test(ws):
     return ws+2.3
@@ -57,6 +87,10 @@ parser.add_argument('year', type=int, help='Weather year')
 parser.add_argument('--nyears', type=int, action="store", dest="nyears", help='Number of years', default=1 )
 parser.add_argument('--location', action="store", dest="location", help='Location to generate for z for all: ', default='z' )
 parser.add_argument('--weather', action="store", dest="weather", help='Weather source: midas, era5 or adv', default='midas' )
+parser.add_argument('--warming', action="store", dest="warming", help='Degree of warming: a=2-3, b=2-4 or c=4', default='a' )
+parser.add_argument('--period', action="store", dest="period", help='Return period of event: 2 or 5', default='5' )
+parser.add_argument('--etype', action="store", dest="etype", help='Type of event d=duration or s=severity', default='s' )
+parser.add_argument('--eno', action="store", dest="eno", help='Event number 1,2,3', default='1' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--debug', action="store_true", dest="debug", help='Debug 30 values of wind speed only', default=False)
 
@@ -65,12 +99,19 @@ args = parser.parse_args()
 years=[]
 for year in range(args.year,args.year+args.nyears):
     years.append(str(year))
+#if weather_source == 'adv':
+#    if args.warming == 'a':
+#        years = ['1', '1', 
+#   filename = '/home/malcolm/uclan/data/adverse/{}_uk_return_period_1_in_{}_years_duration_gwl1{}degC_event{}_{}.nc'.format(event, period, warming, eno, file_parm)
 
+# Set up list of wind generators
+# If doing all locations, then every location with wind
 if args.location == 'z':
     generators={}
     for key, location in locations.items():
         if location['wind'] == 'y':
             generators[key] = location
+# otherwise, just a list of the one specific location.
 else:
     generators={ args.location : locations[args.location]}
 
@@ -121,6 +162,7 @@ for year in years:
         print('Using weather data from MIDAS')
         # for each location ...
         for key, generator in generators.items():
+            # If marine weather station
             if generator["wind"] == 's':
                 print('Marine station')
                 # read weather file previously processed from midas marine
@@ -145,6 +187,7 @@ for year in years:
                 z0[z0<0.0001] = 0.0001
                 wind_locations[key] = wind_hourly
                 surface_roughness[key] = z0
+            # otherwise , land station
             else:
                 print('Land station')
                 # read midas weather file
@@ -163,23 +206,17 @@ for year in years:
             print('Using advserse weather event data for climate change')
             event = 'winter_wind_drought'
             period = '5'
-            warming = '2-4'
+            warmings = { 'a' : '2-3', 'b' : '2-4', 'c': '4' }
+#           warming = '2-4'
+            warming = warmings[args.warming]
             eno = '1'
-            parm = 'windspeed'
-            filename = '/home/malcolm/uclan/data/adverse/{}_uk_return_period_1_in_{}_years_duration_gwl1{}degC_event{}_{}.nc'.format(event, period, warming, eno, parm)
-            # Read the netCDF file
-            print('Reading netcdf file {} ...'.format(filename))
-            nc = Dataset(filename)
-            print(nc.variables)
-            time = nc.variables['time'][:]
-            time_units = nc.variables['time'].units
-            latitude = nc.variables['latitude'][:]
-            longitude = nc.variables['longitude'][:]
-            wind = nc.variables['wind_speed'][:]
-
-            times=num2date(time, time_units,only_use_cftime_datetimes=False,only_use_python_datetimes=True)
-            df = pd.DataFrame(data=wind.reshape(len(time), len(latitude) * len(longitude)), index=pd.DatetimeIndex(times, name='time'), columns=pd.MultiIndex.from_product([latitude, longitude], names=('latitude', 'longitude')))
+#           eno = '2'
+#           parm = 'windspeed'
+            # read daily mean wind speed for the weather grid
+            df = read_adverse(warming, args.eno, args.etype, args.period, 'windspeed', 'wind_speed')
             print(df)
+#           gfg = np.random.rayleigh(3.4, 50000)
+#           put into bins of wind speed then work out hourly power for the day.
             # for each location ...
             for key, generator in generators.items():
                 # blinearly interpolate wind from weather grid
@@ -243,10 +280,17 @@ for year in years:
             wind_hourly = wind_hourly * log_law_factor
         # generate wind energy series
         power=[]
+        # if using adverse weather files then use daily wind from rayleigh
+        if weather_source == 'adv':
+            for index, row in  wind_hourly.items():
+                power.append(daily_wind_power(row))
+        else:
+        # othewise, just use the power curve on the hourly wind speed.
         #   this didn't work
         #   power_hourly = wind_hourly.apply(power_from_curve)
-        for index, row in  wind_hourly.items():
-            power.append(power_from_curve(row))
+            for index, row in  wind_hourly.items():
+                power.append(power_from_curve(row))
+        # turn if into a Series
         power_series = pd.Series(power,index=wind_hourly.index,name='power')
 
         # stick power and wind speed into the same dataframe
@@ -275,5 +319,8 @@ df.index = index.strftime('%Y-%m-%dT%H:%M:%SZ')
 
 if args.debug:
     print(df)
-output_file = weather_source + str(args.year) + str(args.nyears) + ".csv"
+if weather_source == 'adv':
+    output_file = '{}{}{}{}{}.csv'.format(weather_source, args.warming, args.period, args.etype, args.eno)
+else:
+    output_file = weather_source + str(args.year) + str(args.nyears) + ".csv"
 df.to_csv(output_dir + output_file, sep=',', decimal='.', float_format='%g')
