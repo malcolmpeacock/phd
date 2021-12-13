@@ -42,9 +42,37 @@ output_dir = "/home/malcolm/uclan/challenge2/output/"
 merged_filename = '{}merged_pre_august.csv'.format(output_dir)
 df_in = pd.read_csv(merged_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
 print(df_in)
-# merged data file ( demand, weather, augmented variables )
+# maxmin data file ( min, max demand )
 maxmin_filename = '{}maxmin_pre_august.csv'.format(output_dir)
 df_out = pd.read_csv(maxmin_filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+
+# plot max-demand against cloud and wind
+maxdiff = df_out['max_demand'] - df_in['demand']
+cloud = df_in['cloud']
+wind = df_in['windspeed1']
+print('Cloud max {} min {} Wind max {} min {}'.format(cloud.max(), cloud.min(), wind.max(), wind.min() ) )
+cloud = (cloud / ( cloud.max() - cloud.min() ) ) - cloud.min()
+wind = (wind / ( wind.max() - wind.min() ) ) - wind.min()
+print('Normalisxed: Cloud max {} min {} Wind max {} min {}'.format(cloud.max(), cloud.min(), wind.max(), wind.min() ) )
+
+pdf = pd.DataFrame({'cloud' : cloud.values, 'wind': wind.values, 'maxdiff': maxdiff.values } )
+print(pdf)
+pdf.plot.scatter(x='cloud', y='wind', c='maxdiff', colormap='viridis')
+plt.show()
+
+plt.scatter(maxdiff.values, cloud.values, label='cloud', color='blue')
+plt.title('Cloud against max demand diff')
+plt.xlabel('Max demand diff', fontsize=15)
+plt.ylabel('Cloud percent', fontsize=15)
+plt.legend(loc='lower left', fontsize=15)
+plt.show()
+
+plt.scatter(maxdiff.values, wind.values, label='wind', color='blue')
+plt.title('wind against max demand diff')
+plt.xlabel('Max demand diff', fontsize=15)
+plt.ylabel('wind percent', fontsize=15)
+plt.legend(loc='lower left', fontsize=15)
+plt.show()
 
 # plot daily solar irradiance
 solar = df_in[['solar_irradiance1', 'solar_irradiance2', 'solar_irradiance3', 'solar_irradiance4', 'solar_irradiance5']]

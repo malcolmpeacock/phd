@@ -303,6 +303,7 @@ def augment(df):
     add_lags(df, 1, 'windspeed_var') 
     add_lags(df, 1, 'temperature_var') 
     add_lags(df, 1, 'spec_humidity_var') 
+    add_lags(df, 2, 'solar_irradiance_var') 
 
     # cube of windspeed
     add_cube(df, 'windspeed1') 

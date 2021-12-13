@@ -105,23 +105,43 @@ def forecast(df_in, df_out, df_forecast, out_cols=['max_demand', 'min_demand']):
                     ,'spec_humidity1'
                     ,'solar_irradiance1'
                     ,'windspeed_east1'
-                    ,'demand_diff'
                     ,'solar_irradiance_var'
-                    ,'cloud'
+                    ,'demand_diff'
                     ,'windspeed1'
+                    ,'cloud'
                     ,'k'
                     ,'temperature1'
-                    ,'dailyhume'
-                    ,'dailytemp'
                     ,'solar_irradiance1_diff'
-                    ,'windspeed_east3'
-#                   ,'windspeed_var_lag1'
+                    ,'dailytemp'
+                    ,'dailyhume'
 #                   ,'zenith'
-#                   ,'windspeed_east3_lag1'
-                    ,'solar_irradiance_var_lag1'
-#                   ,'solar_irradiance1_lag1'
                     ,'windspeed3'
+#                   ,'windspeed1_diff'
+#                   ,'windspeed_var_lag1'
+#                   ,'windspeed_var'
+#                   ,'windspeed_east3_lag1'
+                    ,'windspeed_east3'
+#                   ,'temperature3'
+#                   ,'temperature_var'
+#                   ,'spec_humidity_var'
+#                   ,'solar_irradiance2'
+#                   ,'solar_irradiance1_lag1'
+                    ,'solar_irradiance_var_lag1'
+#                   ,'month'
                     ,'hdh'
+#                   ,'demand_lag1'
+#                   ,'cs_ghi'
+# more from lgbm?
+                    ,'doy'
+#                   ,'presyd'
+#                   ,'demand_lag4'
+#                   ,'presdb'
+#                   ,'wd'
+#                   ,'spec_humidity_var_lag1'
+#                   ,'windspeed_east5'
+#                   ,'solar_irradiance5_lag1'
+#                   ,'solar_irradiance4_lag1'
+#                   ,'solar_irradiance_var_lag2'
                     ]
 #   min demand - lasso
     lass_min_cols = ['demand'
@@ -133,14 +153,57 @@ def forecast(df_in, df_out, df_forecast, out_cols=['max_demand', 'min_demand']):
                    , 'windspeed_east1'
                    , 'windspeed1'
                    , 'k'
-                   , 'dailyhume'
                    , 'dailytemp'
-#                  , 'solar_irradiance2'
+                   , 'dailyhume'
+                   , 'windspeed_var'   # new
+                   , 'temperature3'    # new
 #                  , 'temperature_var'
-#                  , 'temperature3'
-#                  , 'windspeed_var'
+#                  , 'solar_irradiance2'
 #                  , 'temperature1'
+#                   ,'zenith'
+                    ,'windspeed3'    # new
+#                   ,'windspeed1_diff'
+#                   ,'windspeed_var_lag1'
+                    ,'windspeed_east3_lag1'
+#                   ,'windspeed_east3'
+#                   ,'spec_humidity_var'
+#                   ,'solar_irradiance_var_lag1'
+                    ,'hdh'    # new
+#                   ,'demand_lag1'
+                    ,'cs_ghi'    # new
+#                   ,'windspeed1_cube'
+#                   ,'windspeed_north3'
+                    ,'windspeed_north2_lag1'    # new
+                    ,'windspeed_north1'    # new
+#                   ,'trend'
+#                  , 'temperature5_lag1'
+#                  , 'temperature5'
+#                  , 'temperature4'
+                   , 'temperature3_lag1'    # new
+                   , 'temperature2_lag1'    # new
+                   , 'temperature2'    # new
 #                  , 'temperature1_lag1'
+#                  , 'spec_humidity5_lag1'
+#                  , 'spec_humidity5'
+#                  , 'spec_humidity4_lag1'
+#                  , 'spec_humidity4'
+                   , 'spec_humidity3'    # new
+#                   ,'solar_irradiance3'
+#                   ,'solar_irradiance2_lag1'
+#                   ,'season'
+#                   ,'humedb'
+#                   ,'demand_lag4'
+#                   ,'demand_lag3'
+#                   ,'demand_lag2'
+# more from lgbm?
+#                   ,'doy'
+#                   ,'presyd'
+#                   ,'presdb'
+#                   ,'wd'
+#                   ,'spec_humidity_var_lag1'
+#                   ,'windspeed_east5'
+#                   ,'solar_irradiance5_lag1'
+#                   ,'solar_irradiance4_lag1'
                    ]
     lgb_max_cols = ['demand', 'demand_diff', 'demand_lag1', 'cs_ghi', 'demand_lag2', 'trend', 'zenith', 'cloud', 'solar_irradiance1_diff', 'presyd', 'demand_lag4', 'presdb', 'k', 'solar_irradiance_var_lag1', 'spec_humidity_var_lag1', 'windspeed_var_lag1', 'windspeed_var', 'wd', 'spec_humidity_var']
     lgb_min_cols = ['demand', 'solar_irradiance1', 'solar_irradiance_var', 'windspeed_east1', 'windspeed1', 'cloud', 'k', 'dailyhume', 'solar_irradiance_var_lag1', 'solar_irradiance2', 'windspeed1_diff', 'demand_lag1']
@@ -384,7 +447,7 @@ def rf_forecast(columns, df_in, df_forecast, df_out):
     # normalise the inputs (using same max as for the model)
     X_test = sc_x.transform(X_test.values.astype(np.float32))
     # default error is RMSE criterion=“squared_error”
-    regressor = RandomForestRegressor(n_estimators=100, random_state=0)
+    regressor = RandomForestRegressor(n_estimators=300, random_state=0)
 #   regressor = RandomForestRegressor(n_estimators=130, random_state=0)
     regressor.fit(X_train, y_train.ravel())
 #   regressor.fit(X_train, y_train)
@@ -417,7 +480,8 @@ def lgbm_forecast(columns, df_in, df_forecast, df_out):
 #   model = lgb.LGBMRegressor(num_leaves=41, learning_rate=0.05, n_estimators=200, boosting_type='dart', deterministic=True)
     # TODO - try max_bin= 255 is the default . 511 makes it worse
     # 2550 makes it very slightly better.
-    model = lgb.LGBMRegressor(num_leaves=45, learning_rate=0.03, n_estimators=300, boosting_type='gbdt', deterministic=True, max_bin=2550 )
+    # try 2 settings: num_leaves=45, learning_rate=0.03, n_estimators=300, max_bin=2550 )
+    model = lgb.LGBMRegressor(num_leaves=45, learning_rate=0.03, n_estimators=500, boosting_type='gbdt', deterministic=True, max_bin=5000 )
     print('Fitting model ...')
     model.fit(X_train, y_train.ravel(), eval_metric='l2')
     y_pred = model.predict(X_test)
