@@ -37,12 +37,16 @@ args = parser.parse_args()
 
 # scenario files
 #  Of the 3 chars:
-#   1 - scenario P, F, H, G, N, E
+#   1 - scenario P, F, H, B, N, E
+#     ( from hydrogenVsHeatpumps.py )
 #   2 - climate  N, C
 #   3 - demand method S=synthetic, H=historic
 #
 hvh = 'hydrogenVpumps/'
 y40 = '40years/'
+ev40 = 'ev40years/'
+kf = 'kf/'
+kfev = 'kfev/'
 #
 #scenarios = {'HNS' : 'Half Heat Pumps',
 #             'NNS' : 'No   Heat Pumps'
@@ -53,8 +57,19 @@ y40 = '40years/'
 #scenarios = {'PNH' : 'Scaled Historic Time Series + heat',
 #            'PNS' : 'Synthetic Time Series From Weather + heat'
 #           }
-scenarios = {'HNS' : {'file': 'HNS', 'dir' : hvh, 'title': 'Half heat pumps, half hydrogen'}, 'PNS' : {'file': 'PNS', 'dir' : hvh, 'title': 'All heat pumps'}, 'FNS' : {'file': 'FNS', 'dir' : hvh, 'title': 'FES 2019 Net Zero: heat pumps, hydrogen and hybrid heat pumps'} }
+#scenarios = {'HNS' : {'file': 'HNS', 'dir' : hvh, 'title': 'Half heat pumps, half hydrogen'}, 'PNS' : {'file': 'PNS', 'dir' : hvh, 'title': 'All heat pumps'}, 'FNS' : {'file': 'FNS', 'dir' : hvh, 'title': 'FES 2019 Net Zero: heat pumps, hydrogen and hybrid heat pumps'} }
 #scenarios = {'HNSh' : {'file': 'HNS', 'dir' : hvh, 'title': 'Half heat pumps, gen hydrogen'}, 'HNSy' : {'file': 'HNS', 'dir' : y40, 'title': 'Half heat pumps, electric only'} }
+scenarios = {'NNS' :
+   {'file': 'NNS', 'dir' : kf, 'title': 'No Added Electric Heating'},
+             'PNS' :
+   {'file': 'PNS', 'dir' : kf, 'title': 'All heating is heat pumps'}
+}
+scenarios = {'NNS' :
+   {'file': 'NNS', 'dir' : kf, 'title': 'No Added Electric Heating'},
+             'PNS' :
+   {'file': 'PNS', 'dir' : kfev, 'title': '100% heat pumps and evs'}
+}
+# scenarios = {'NNS' : {'file': 'NNS', 'dir' : kf, 'title': 'No Added Electric Heating'} }
 
 output_dir = "/home/malcolm/uclan/output"
 
@@ -80,14 +95,15 @@ if args.plot:
 
 if args.plot:
     # Plot viable solutions
-    for filename, scenario in scenarios.items():
+    for key, scenario in scenarios.items():
         label = scenario['title']
         df = dfs[key]
+#       df['last'].clip(lower=0.0, inplace=True)
         scatterHeat(df, 'last', 'Store remaining in days ', 0.0)
 
 if args.rate:
     # Plot max charge rate. 
-    for filename, scenario in scenarios.items():
+    for key, scenario in scenarios.items():
         label = scenario['title']
         df = dfs[key]
         scatterHeat(df, 'charge', 'Max charge rate in %peak')
@@ -118,9 +134,13 @@ for key, scenario in scenarios.items():
     storage_25 = storage.storage_line(df,25.0)
     storage_25.plot(x='Pw',y='Ps',ax=ax,label='storage 25 days. {}'.format(label))
 
-    # calcuate constant storage line for 2 days and plot
-    storage5_2 = storage.storage_line(df,2.0)
-    storage5_2.plot(x='Pw',y='Ps',ax=ax,label='storage 2 days. {}'.format(label))
+    # calcuate constant storage line for 60 days and plot
+    storage_60 = storage.storage_line(df,60.0)
+    storage_60.plot(x='Pw',y='Ps',ax=ax,label='storage 60 days. {}'.format(label))
+
+    # calcuate constant storage line for 30 days and plot
+    storage5_30 = storage.storage_line(df,30.0)
+    storage5_30.plot(x='Pw',y='Ps',ax=ax,label='storage 30 days. {}'.format(label))
 
 
 plt.title('Constant storage lines for different scenarios')

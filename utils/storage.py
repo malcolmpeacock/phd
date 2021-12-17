@@ -44,11 +44,13 @@ def storage(net_demand, eta=0.75, hydrogen=None):
 # constant storage line
 
 def storage_line(df,storage_value):
+#   print('storage_line for {} days '.format(storage_value) )
     x=[]
     y=[]
     # for each wind value ...
     for i_wind in range(0,14):
         f_wind = i_wind * 0.5
+#       print('Fwind {} '.format(f_wind) )
         # extract those values with a wind=xs
         is_xs = df['f_wind'] == f_wind
         df_xs = df[is_xs]
@@ -56,12 +58,14 @@ def storage_line(df,storage_value):
         if storage_value < df_xs['storage'].max() and storage_value > df_xs['storage'].min():
             # sort them by storage
             df_xs = df_xs.sort_values('storage',ascending=False)
+#           print(df_xs)
             # interpolate a pv value for the storage
             y_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['f_pv'])
             f_pv = y_interp(storage_value)
             # store the points
             x.append(f_wind)
             y.append(f_pv.item())
+#           print('Point: f_wind {} f_pv {}'.format(f_wind, f_pv.item()) )
 
     sline = { 'Pw' : x, 'Ps' :y }
     df = pd.DataFrame(data=sline)
@@ -111,6 +115,8 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=7, base=0.0, hydrogen
             results['f_wind'].append(f_wind)
             storage_days = store_size * store_factor * -1.0
             store_last = store_hist.iat[-1] * store_factor * -1.0
+            if store_last <0:
+                store_last = 0
             if store_size == store_hist.iat[-1] or storage_days>200:
                 storage_days = 200
             results['storage'].append(storage_days)

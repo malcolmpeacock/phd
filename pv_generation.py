@@ -17,6 +17,7 @@ import heat.scripts.download as download
 import heat.scripts.read as read
 from utils.midas_locations import get_locations
 from utils.sanity import sanity
+from utils.generation_functions import read_adverse
 import pytz
 import pvlib
 import numpy as np
@@ -54,7 +55,11 @@ parser = argparse.ArgumentParser(description='Generate pv energy time series.')
 parser.add_argument('year', type=int, help='Weather year')
 parser.add_argument('--nyears', type=int, action="store", dest="nyears", help='Number of years', default=1 )
 parser.add_argument('--location', action="store", dest="location", help='Location to generate for z for all: ', default='z' )
-parser.add_argument('--weather', action="store", dest="weather", help='Weather source', default='midas' )
+parser.add_argument('--weather', action="store", dest="weather", help='Weather source: midas, era5 or adv', default='midas' )
+parser.add_argument('--warming', action="store", dest="warming", help='Degree of warming: a=2-3, b=2-4 or c=4', default='a' )
+parser.add_argument('--period', action="store", dest="period", help='Return period of event: 2 or 5', default='2' )
+parser.add_argument('--etype', action="store", dest="etype", help='Type of event d=duration or s=severity', default='s' )
+parser.add_argument('--eno', action="store", dest="eno", help='Event number 1,2,3', default='1' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--debug', action="store_true", dest="debug", help='Debug 30 values of irradiance only', default=False)
 
@@ -109,22 +114,43 @@ for year in years:
             pv_locations[key] = pv_hourly
     # ERA5 weather
     else:
-        print('Using weather data from ERA5')
-        download.weather_era5(input_path, year, 1, 'I', 'pv',  ['surface_solar_radiation_downwards', 'surface_solar_radiation_downward_clear_sky'], [ 60, -8, 48, 2, ])
-        df_ir = read.weather_era5(input_path, year, 1, 'I', 'pv','ssrd')
-        df_cs = read.weather_era5(input_path, year, 1, 'I', 'pv','ssrdc')
-        # for each location ...
-        for key, generator in generators.items():
-            # blinearly interpolate irradiance from weather grid
-            coords = generator['coords']
-            lat = coords[0]
-            lon = coords[1]
-            print('Bilinear interpolation: {} {} {} '.format(key, lat, lon))
-            df_bl,x,y = bil.bilinear(lat, lon, df_ir)
-            era5_ir = df_bl['t_interp']
-            # convert from J/m2 to wh/m2
-            era5_ir = era5_ir * 0.000277778
-            pv_locations[key] = era5_ir
+        if weather_source == 'adv':
+        # Adverse climate change weather events
+            print('Using advserse weather event data for climate change')
+            event = 'winter_wind_drought'
+            warmings = { 'a' : '12-3', 'b' : '12-4', 'c': '4' }
+            warming = warmings[args.warming]
+            df = read_adverse(warming, args.eno, args.etype, args.period, 'ssr', 'ssr')
+            print(df)
+            # for each location ...
+            for key, generator in generators.items():
+                # blinearly interpolate wind from weather grid
+                coords = generator['coords']
+                lat = coords[0]
+                lon = coords[1]
+                bl,x,y = bil.bilinear(lat, lon, df)
+                era5_ir = bl['t_interp']
+                # convert from J/m2 to wh/m2 TODO ??
+#               era5_ir = era5_ir * 0.000277778
+                pv_locations[key] = era5_ir
+        else:
+        # ERA5 weather
+            print('Using weather data from ERA5')
+            download.weather_era5(input_path, year, 1, 'I', 'pv',  ['surface_solar_radiation_downwards', 'surface_solar_radiation_downward_clear_sky'], [ 60, -8, 48, 2, ])
+            df_ir = read.weather_era5(input_path, year, 1, 'I', 'pv','ssrd')
+            df_cs = read.weather_era5(input_path, year, 1, 'I', 'pv','ssrdc')
+            # for each location ...
+            for key, generator in generators.items():
+                # blinearly interpolate irradiance from weather grid
+                coords = generator['coords']
+                lat = coords[0]
+                lon = coords[1]
+                print('Bilinear interpolation: {} {} {} '.format(key, lat, lon))
+                df_bl,x,y = bil.bilinear(lat, lon, df_ir)
+                era5_ir = df_bl['t_interp']
+                # convert from J/m2 to wh/m2
+                era5_ir = era5_ir * 0.000277778
+                pv_locations[key] = era5_ir
 
 
     # calculate power from the weather
@@ -190,5 +216,8 @@ df.index = index.strftime('%Y-%m-%dT%H:%M:%SZ')
 if args.debug:
     print(df)
 output_dir = "/home/malcolm/uclan/output/pv/";
-output_file = weather_source + str(args.year) + str(args.nyears) + ".csv"
+if weather_source == 'adv':
+    output_file = '{}{}{}{}{}.csv'.format(weather_source, args.warming, args.period, args.etype, args.eno)
+else:
+    output_file = weather_source + str(args.year) + str(args.nyears) + ".csv"
 df.to_csv(output_dir + output_file, sep=',', decimal='.', float_format='%g')

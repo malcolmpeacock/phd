@@ -27,16 +27,6 @@ parser = argparse.ArgumentParser(description='Compare and plot scenarios')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 args = parser.parse_args()
 
-# scenario files
-#scenarios = {'HNS' : 'Half Heat Pumps',
-#             'NNS' : 'No   Heat Pumps'
-#            }
-scenarios = {'NNH' : 'Scaled Historic Time Series',
-             'ENS' : 'Synthetic Time Series From Weather'
-            }
-#scenarios = {'PNH' : 'Scaled Historic Time Series + heat',
-#            'PNS' : 'Synthetic Time Series From Weather + heat'
-#           }
 filename = 'sharesPNS.csv'
 output_dir = "/home/malcolm/uclan/output/40years/"
 path = output_dir + filename

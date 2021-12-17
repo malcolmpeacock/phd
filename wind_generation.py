@@ -23,24 +23,7 @@ import heat.scripts.read as read
 from utils.midas_locations import get_locations
 from utils.sanity import sanity
 from utils.generation_functions import rayleigh_bins
-
-def read_adverse(warming='2-4', eno='2', etype='s', period = '5', file_parm='windspeed', parm_name='wind_speed'):
-    etypes = { 'd' : 'duration', 's' : 'severity' }
-    event = 'winter_wind_drought'
-    filename = '/home/malcolm/uclan/data/adverse/{}_uk_return_period_1_in_{}_years_{}_gwl1{}degC_event{}_{}.nc'.format(event, period, etypes[etype], warming, eno, file_parm)
-    # Read the netCDF file
-    print('Reading netcdf file {} ...'.format(filename))
-    nc = Dataset(filename)
-    print(nc.variables)
-    time = nc.variables['time'][:]
-    time_units = nc.variables['time'].units
-    latitude = nc.variables['latitude'][:]
-    longitude = nc.variables['longitude'][:]
-    wind = nc.variables[parm_name][:]
-
-    times=num2date(time, time_units,only_use_cftime_datetimes=False,only_use_python_datetimes=True)
-    df = pd.DataFrame(data=wind.reshape(len(time), len(latitude) * len(longitude)), index=pd.DatetimeIndex(times, name='time'), columns=pd.MultiIndex.from_product([latitude, longitude], names=('latitude', 'longitude')))
-    return df
+from utils.generation_functions import read_adverse
 
 def daily_wind_power(mean_wind_speed):
     nbins=100
@@ -88,8 +71,8 @@ parser.add_argument('--nyears', type=int, action="store", dest="nyears", help='N
 parser.add_argument('--location', action="store", dest="location", help='Location to generate for z for all: ', default='z' )
 parser.add_argument('--weather', action="store", dest="weather", help='Weather source: midas, era5 or adv', default='midas' )
 parser.add_argument('--warming', action="store", dest="warming", help='Degree of warming: a=2-3, b=2-4 or c=4', default='a' )
-parser.add_argument('--period', action="store", dest="period", help='Return period of event: 2 or 5', default='5' )
-parser.add_argument('--etype', action="store", dest="etype", help='Type of event d=duration or s=severity', default='s' )
+parser.add_argument('--period', action="store", dest="period", help='Return period of event: 2 or 5', default='2' )
+parser.add_argument('--etype', action="store", dest="etype", help='Type of event d=duration or s=severity', default='d' )
 parser.add_argument('--eno', action="store", dest="eno", help='Event number 1,2,3', default='1' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--debug', action="store_true", dest="debug", help='Debug 30 values of wind speed only', default=False)
@@ -99,10 +82,6 @@ args = parser.parse_args()
 years=[]
 for year in range(args.year,args.year+args.nyears):
     years.append(str(year))
-#if weather_source == 'adv':
-#    if args.warming == 'a':
-#        years = ['1', '1', 
-#   filename = '/home/malcolm/uclan/data/adverse/{}_uk_return_period_1_in_{}_years_duration_gwl1{}degC_event{}_{}.nc'.format(event, period, warming, eno, file_parm)
 
 # Set up list of wind generators
 # If doing all locations, then every location with wind
@@ -206,7 +185,7 @@ for year in years:
             print('Using advserse weather event data for climate change')
             event = 'winter_wind_drought'
             period = '5'
-            warmings = { 'a' : '2-3', 'b' : '2-4', 'c': '4' }
+            warmings = { 'a' : '12-3', 'b' : '12-4', 'c': '4' }
 #           warming = '2-4'
             warming = warmings[args.warming]
             eno = '1'

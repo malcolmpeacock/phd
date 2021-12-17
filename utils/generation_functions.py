@@ -4,11 +4,12 @@ import numpy as np
 import math
 import pandas as pd
 import matplotlib.pyplot as plt
+from netCDF4 import Dataset, num2date
 
 def read_adverse(warming='2-4', eno='2', etype='s', period = '5', file_parm='windspeed', parm_name='wind_speed'):
     etypes = { 'd' : 'duration', 's' : 'severity' }
     event = 'winter_wind_drought'
-    filename = '/home/malcolm/uclan/data/adverse/{}_uk_return_period_1_in_{}_years_{}_gwl1{}degC_event{}_{}.nc'.format(event, period, etypes[etype], warming, eno, file_parm)
+    filename = '/home/malcolm/uclan/data/adverse/{}_uk_return_period_1_in_{}_years_{}_gwl{}degC_event{}_{}.nc'.format(event, period, etypes[etype], warming, eno, file_parm)
     # Read the netCDF file
     print('Reading netcdf file {} ...'.format(filename))
     nc = Dataset(filename)
@@ -18,9 +19,11 @@ def read_adverse(warming='2-4', eno='2', etype='s', period = '5', file_parm='win
     latitude = nc.variables['latitude'][:]
     longitude = nc.variables['longitude'][:]
     wind = nc.variables[parm_name][:]
+#   print(wind)
 
     times=num2date(time, time_units,only_use_cftime_datetimes=False,only_use_python_datetimes=True)
     df = pd.DataFrame(data=wind.reshape(len(time), len(latitude) * len(longitude)), index=pd.DatetimeIndex(times, name='time'), columns=pd.MultiIndex.from_product([latitude, longitude], names=('latitude', 'longitude')))
+    print('Read Adverse data length {} NaNs {}'.format(len(df), df.isna().sum().sum() ) )
     return df
 
 def rayleigh(mean_wind_speed, wind_speed):

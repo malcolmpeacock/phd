@@ -122,16 +122,18 @@ def hybrid_heat_pump(heat, efficiency, threshold):
 #                pv  - pv capacity factor time series
 #           scenario - percentage of heating from heat pumps
 #              years - list of years to do the analysis for
+#   normalise_factor - factor to normalise by.
+#                      If doing daily is the max daily demand so that storage
+#                      is relative to peak daily demand energy.
 def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly, ref_temp, climate, historic, heat_that_is_electric, normalise_factor, base=False):
-#   normalise_factor = mod_electric_ref.max()
-    # factor to normalise by.
-    # If doing daily is the max daily demand so that storage is relative to 
-    # peak daily demand energy.
     total_demand = 0
+
+    # create the synthetic years
     if not historic:
         # ordinary year
         ordinary_year = mod_electric_ref.values
         # leap year
+        # create a feb 29th by interpolating between feb 28th and Mar 1st
         # find doy for feb 28th ( 31 days in jan )
         feb28 = 31 + 28
         if hourly:
@@ -144,6 +146,18 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
             feb29a = np.array([feb29])
             leap_year = np.concatenate([ordinary_year[0:feb28], feb29a, ordinary_year[feb28:] ] )
 
+    if args.adverse:
+        # make up full file name from the abreviation
+        etypes = { 'd' : 'duration', 's': 'severity' }
+        warmings = { 'a' : '2-3', 'b' : '2-4', 'c': '4' }
+        warming = args.adverse[0:1]
+        period = args.adverse[1:2]
+        etype = args.adverse[2:3]
+        eno = args.adverse[3:4]
+        demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/adv/winter_wind_drought_uk_return_period_1_in_{}_years_{}_gwl1{}degC_event{}.csv'.format(period, etypes[etype], warmings[warming], eno)
+        adv_demand = readers.read_copheat(demand_filename,['electricity','heat','temperature'])
+        # get list of years in the file
+        years = pd.Series(adv_demand.index.year).unique()
 
     demand_years=[]
     hydrogen_years=[]
@@ -154,17 +168,20 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
     yearly_wd={}
     # for each weather year ...
     for year in years:
-#       print('Creating demand for {}'.format(year))
+        print('Year {}'.format(year) )
 
-        # file name contructed from:
-        # B    - the BDEW method
-        # rhpp - the rhpp hourly (heat pump) profile
-        # C    - climate change adjusted for temperature increase.
-        file_base = 'Brhpp'
-        if climate:
-            file_base = 'BrhppC'
-        demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{1:}Weather{0:}I-{2:}.csv'.format(year, args.reference, file_base)
-        demand = readers.read_copheat(demand_filename,['electricity','heat','temperature'])
+        if args.adverse:
+            demand = adv_demand[str(year) + '-01-01' : str(year) + '-12-31']
+        else:
+            # file name contructed from:
+            # B    - the BDEW method
+            # rhpp - the rhpp hourly (heat pump) profile
+            # C    - climate change adjusted for temperature increase.
+            file_base = 'Brhpp'
+            if climate:
+                file_base = 'BrhppC'
+            demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{1:}Weather{0:}I-{2:}.csv'.format(year, args.reference, file_base)
+            demand = readers.read_copheat(demand_filename,['electricity','heat','temperature'])
         # store total heat demand
         total_heat_demand_years[year] = demand['heat'].sum() * 1e-6
         mean_temp_years[year] = demand['temperature'].mean()
@@ -179,6 +196,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         if not hourly:
             demand = demand.resample('D').sum()
         heat_weather = demand['heat']
+        print(heat_weather)
 
         if historic:
             electric_ref = mod_electric_ref[str(year) + '-01-01' : str(year) + '-12-31']
@@ -417,6 +435,7 @@ parser = argparse.ArgumentParser(description='Show the impact of heat pumps or h
 parser.add_argument('--start', action="store", dest="start", help='Start Year', type=int, default=2017 )
 parser.add_argument('--end', action="store", dest="end", help='End Year', type=int, default=2019 )
 parser.add_argument('--reference', action="store", dest="reference", help='Reference Year', default='2018' )
+parser.add_argument('--adverse', action="store", dest="adverse", help='Use specified Adverse scenario file', default=None )
 parser.add_argument('--scenario', action="store", dest="scenario", help=str(scenarios), default='H' )
 parser.add_argument('--dir', action="store", dest="dir", help='Output directory', default='40years' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
@@ -426,6 +445,7 @@ parser.add_argument('--climate', action="store_true", dest="climate", help='Use 
 parser.add_argument('--base', action="store_true", dest="base", help='Use baseload shares', default=False)
 parser.add_argument('--ev', action="store_true", dest="ev", help='Include Electric Vehicles', default=False)
 parser.add_argument('--genh', action="store_true", dest="genh", help='Assume hydrogen made from electricity and stored in the same store', default=False)
+parser.add_argument('--annual', action="store_true", dest="annual", help='Normalise by the annual demand instead of the peak.', default=False)
 args = parser.parse_args()
 
 last_weather_year = args.end
@@ -467,7 +487,10 @@ total_energy = electric_ref.sum()
 # Normalise by the unmodified reference year time series
 # so comparisons are possible
 daily_original_electric_with_heat = electric_ref.resample('D').sum()
-normalise_factor = daily_original_electric_with_heat.max()
+if args.annual:
+    normalise_factor = daily_original_electric_with_heat.mean()
+else:
+    normalise_factor = daily_original_electric_with_heat.max()
 
 if not args.historic:
 
@@ -514,33 +537,101 @@ if args.plot:
         plt.legend(loc='upper right')
     plt.show()
 
-# weather years from the start to 2019
-# ( need to download more ninja to get up to 2020 )
-#last_weather_year = 2019
-years = range(args.start, last_weather_year+1)
-print(years)
-# read ninja
-ninja_start = str(years[0]) + '-01-01 00:00:00'
-ninja_end = str(years[-1]) + '-12-31 23:00:00'
-print(ninja_start, ninja_end)
-# Ninja capacity factors for pv
-ninja_filename_pv = '/home/malcolm/uclan/data/ninja/ninja_pv_country_GB_merra-2_corrected.csv'
-# Ninja capacity factors for wind
-ninja_filename_wind = '/home/malcolm/uclan/data/ninja/ninja_wind_country_GB_near-termfuture-merra-2_corrected.csv'
+if args.adverse:
+    print('Loading adverse PV')
+    pv_filename = '/home/malcolm/uclan/output/pv/adv{}.csv'.format(args.adverse)
+    pv_adv = pd.read_csv(pv_filename, header=0, parse_dates=[0], index_col=0 )
 
-print('Loading ninja ...')
-ninja_pv = readers.read_ninja_country(ninja_filename_pv)
-ninja_wind = readers.read_ninja_country(ninja_filename_wind)
+    annual_pv = {}
+#   TODO there seems to be a problem with the c location for pv?
+#   locations =  ['a', 'c', 'e', 'u']
+    locations =  ['a', 'e', 'u']
+    for location in locations:
+        annual_pv[location] = pv_adv['power_' + location].sum()
+        print(location, annual_pv[location])
+    max_pv = max(annual_pv.values())
 
-print('Extracting PV ...')
-ninja_pv = ninja_pv[ninja_start : ninja_end]
-pv = ninja_pv['national']
+    # PV rated power in kW ????
+    rated_power = 1000.0
 
-print('Extracting Wind ...')
-ninja_wind = ninja_wind[ninja_start : ninja_end]
-wind = ninja_wind['national']
+    for location in locations:
+        # scale to max energy
+        pv_adv['power_' + location] = pv_adv['power_' + location] * (max_pv / annual_pv[location])
 
-print('Read PV {} Wind {} '.format(len(pv), len(wind) ) )
+    for location in locations:
+        # convert to capacity factor
+        pv_adv['power_' + location] = pv_adv['power_' + location] / (rated_power * 24)
+
+    pv_cf = pd.concat([pv_adv['power_' + location] for location in locations], axis=1)
+
+    # create mean to represent whole country
+    pv = pv_cf.sum(axis=1) / len(locations)
+    # adjust the capacity factor inline with the assumed load factor of 0.116
+    # from KF
+    pv = pv * ( 0.116 / pv.mean() )
+    print(pv)
+
+    print('Loading adverse Wind')
+    wind_filename = '/home/malcolm/uclan/output/wind/adv{}.csv'.format(args.adverse)
+    wind_adv = pd.read_csv(wind_filename, header=0, parse_dates=[0], index_col=0 )
+    locations =  ['a', 'b', 'c', 'l', 's', 'w']
+    annual_wind={}
+    for location in locations:
+        annual_wind[location] = wind_adv['power_' + location].sum()
+        print(location, annual_wind[location])
+    max_wind = max(annual_wind.values())
+
+    rated_power = 2500
+
+    for location in locations:
+        # scale to max energy
+        wind_adv['power_' + location] = wind_adv['power_' + location] * (max_wind / annual_wind[location])
+
+    for location in locations:
+        # convert to capacity factor
+        wind_adv['power_' + location] = wind_adv['power_' + location] / (rated_power * 24)
+
+    wind_cf = pd.concat([wind_adv['power_' + location] for location in locations], axis=1)
+
+    # create mean to represent whole country
+    wind = wind_cf.sum(axis=1) / len(locations)
+
+    # adjust the capacity factor inline with the assumed load factor of 0.28
+    # from KF
+    wind = wind * ( 0.28 / wind.mean() )
+    print(wind)
+
+    years = pd.Series(wind.index.year).unique()
+    print(years)
+else:
+
+    # weather years from the start to 2019
+    # ( need to download more ninja to get up to 2020 )
+    #last_weather_year = 2019
+    years = range(args.start, last_weather_year+1)
+    print(years)
+    # read ninja
+    ninja_start = str(years[0]) + '-01-01 00:00:00'
+    ninja_end = str(years[-1]) + '-12-31 23:00:00'
+    print(ninja_start, ninja_end)
+    # Ninja capacity factors for pv
+    ninja_filename_pv = '/home/malcolm/uclan/data/ninja/ninja_pv_country_GB_merra-2_corrected.csv'
+    # Ninja capacity factors for wind
+    ninja_filename_wind = '/home/malcolm/uclan/data/ninja/ninja_wind_country_GB_near-termfuture-merra-2_corrected.csv'
+
+    print('Loading ninja ...')
+    ninja_pv = readers.read_ninja_country(ninja_filename_pv)
+    ninja_wind = readers.read_ninja_country(ninja_filename_wind)
+
+    print('Extracting PV ...')
+    ninja_pv = ninja_pv[ninja_start : ninja_end]
+    pv = ninja_pv['national']
+
+    print('Extracting Wind ...')
+    ninja_wind = ninja_wind[ninja_start : ninja_end]
+    wind = ninja_wind['national']
+
+print('Generation PV: Number of value {} mean CF {} ,  Wind: number of values {} meaqn CF {} '.format(len(pv), pv.mean(), len(wind), wind.mean() ) )
 
 if args.plot:
 #   print(wind)
@@ -592,8 +683,9 @@ if hourly:
 else:
     print('Using daily time series')
     mod_electric_ref = mod_electric_ref.resample('D').sum()
-    wind = wind.resample('D').mean()
-    pv = pv.resample('D').mean()
+    if not args.adverse:
+        wind = wind.resample('D').mean()
+        pv = pv.resample('D').mean()
 
 df, yd, all_demand, all_hydrogen = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, ref_temperature, args.climate, args.historic, heat_that_is_electric, normalise_factor, args.base)
 print("Max storage {} Min Storage {}".format(df['storage'].max(), df['storage'].min()) )
