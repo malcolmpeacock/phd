@@ -6,6 +6,22 @@ import math
 from scipy import interpolate
 import pandas as pd
 
+# If one of the points contains NaNs as happens with the Adverse
+# weather files because we sometimes need a grid point in the sea which
+# does not have PV values then set to one which is OK
+def replace_nans(df_in, dfs):
+    if df_in.isna().sum() > 0:
+        for df in dfs:
+            if df.isna().sum() == 0:
+                print("Replace NANS in")
+                print(df_in)
+                print("WITH")
+                print(df)
+                return df.copy()
+    
+    return df_in
+    
+
 def distance(x1,y1,x2,y2):
     d = math.sqrt( ( x1-x2 )**2 + ( y1-y2)**2 )
     return d
@@ -30,10 +46,14 @@ def bilinear(location_latitude, location_longitude, df):
     print(box_long_min,box_long_max)
 
     t_min_min = df[(box_lat_min,box_long_min)]
-    print(t_min_min)
     t_min_max = df[(box_lat_min,box_long_max)]
     t_max_min = df[(box_lat_max,box_long_min)]
     t_max_max = df[(box_lat_max,box_long_max)]
+
+    t_min_min = replace_nans(t_min_min, [t_min_max, t_max_min, t_max_max])
+    t_min_max = replace_nans(t_min_max, [t_min_min, t_max_min, t_max_max])
+    t_max_min = replace_nans(t_max_min, [t_min_max, t_min_min, t_max_max])
+    t_max_max = replace_nans(t_max_max, [t_min_max, t_max_min, t_min_min])
 
     y = [box_lat_min,box_lat_max,box_lat_min,box_lat_max,location_latitude]
     x = [box_long_min,box_long_max,box_long_max,box_long_min,location_longitude]

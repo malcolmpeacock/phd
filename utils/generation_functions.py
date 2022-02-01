@@ -23,7 +23,7 @@ def read_adverse(warming='2-4', eno='2', etype='s', period = '5', file_parm='win
 
     times=num2date(time, time_units,only_use_cftime_datetimes=False,only_use_python_datetimes=True)
     df = pd.DataFrame(data=wind.reshape(len(time), len(latitude) * len(longitude)), index=pd.DatetimeIndex(times, name='time'), columns=pd.MultiIndex.from_product([latitude, longitude], names=('latitude', 'longitude')))
-    print('Read Adverse data length {} NaNs {}'.format(len(df), df.isna().sum().sum() ) )
+#   print('Read Adverse data length {} NaNs {}'.format(len(df), df.isna().sum().sum() ) )
     return df
 
 def rayleigh(mean_wind_speed, wind_speed):

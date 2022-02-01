@@ -104,13 +104,13 @@ times=num2date(time, time_units,only_use_cftime_datetimes=False,only_use_python_
 # population mapping part.
 print('Getting Mapped population ... ')
 
-heat_path = "/home/malcolm/uclan/tools/python/scripts/heat/"
-input_path = heat_path + 'input'
-interim_path = heat_path + 'interim'
-year = '2018'
-mapped_population = preprocess.map_population(input_path, interim_path, 'GB', False, year, 'I', False)
-print(mapped_population)
-total_population = mapped_population.sum()
+#heat_path = "/home/malcolm/uclan/tools/python/scripts/heat/"
+#input_path = heat_path + 'input'
+#interim_path = heat_path + 'interim'
+#year = '2018'
+#mapped_population = preprocess.map_population(input_path, interim_path, 'GB', False, year, 'I', False)
+#print(mapped_population)
+#total_population = mapped_population.sum()
 
 # Transform to pd.DataFrame
 print('Creating DataFrame ...')

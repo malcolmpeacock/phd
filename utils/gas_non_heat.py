@@ -183,8 +183,6 @@ plt.show()
 
 print('HDH gives non heat gas {} heat gas {} total {}'.format(base.sum(), gas_hdh.sum(), gas.sum() ) )
 
-quit()
-
 gas_hdh  = daily_weather ['hdh'] * c1 + c0
 
 # correlation after heat removed

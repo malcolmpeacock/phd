@@ -13,7 +13,8 @@ import heat.scripts.preprocess as preprocess
 
 # ERA5 file name
 #year = '2018'
-year = '2009'
+#year = '2009'
+year = '2019'
 filename = '/home/malcolm/uclan/tools/python/scripts/heat/input/weather/ERA5_parms{}.nc'.format(year)
 
 # Read the netCDF file

@@ -1,7 +1,8 @@
-# augment weather with zenith, month, hour, doy etc.
-# train ML model on 2018 weather to predict demand
-# compare with actual 2017 and 2009 and synthetic addition of heat.
-# 
+# Look at the variation in the correlation of the electricity demand
+# time series over 40 years with weather variables.
+# Look at how the amount of heat as estimated by a linear regression  
+# of hdh and cdh changes 
+# TODO TODO TODO
 
 import os
 import pandas as pd
@@ -363,9 +364,9 @@ plt.show()
 daily_electric2018_heat = electric2018_heat.resample('D').sum()
 daily_electric2018_no_heat = electric2018_no_heat.resample('D').sum()
 
-daily_electric_2018.plot(color='green', label='Electricity demand time series 2018')
+daily_electric_2018.plot(color='blue', label='Electricity demand time series 2018')
 daily_electric2018_heat.plot(color='red', label='Existing Electric heat 2018')
-daily_electric2018_no_heat.plot(color='blue', label='Electricity 2018 with heat removed')
+daily_electric2018_no_heat.plot(color='green', label='Electricity 2018 with heat removed')
 plt.title('Removing existing heat from daily electricty demand series')
 plt.xlabel('day', fontsize=15)
 plt.ylabel('Energy (Twh) per day', fontsize=15)
