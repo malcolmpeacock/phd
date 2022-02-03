@@ -151,9 +151,10 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         etypes = { 'd' : 'duration', 's': 'severity' }
         warmings = { 'a' : '12-3', 'b' : '12-4', 'c': '4' }
         warming = args.adverse[0:1]
-        period = args.adverse[1:2]
-        etype = args.adverse[2:3]
-        eno = args.adverse[3:4]
+        p_end = len(args.adverse)-2
+        period = args.adverse[1:p_end]
+        etype = args.adverse[p_end:p_end+1]
+        eno = args.adverse[p_end+1:p_end+2]
         demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/adv/winter_wind_drought_uk_return_period_1_in_{}_years_{}_gwl{}degC_event{}.csv'.format(period, etypes[etype], warmings[warming], eno)
         adv_demand = readers.read_copheat(demand_filename,['electricity','heat','temperature'])
         # get list of years in the file

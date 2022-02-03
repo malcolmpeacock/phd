@@ -54,6 +54,7 @@ parser.add_argument('--kf', action="store_true", dest="kf", help='Scale PV axis 
 parser.add_argument('--last', action="store_true", dest="last", help='Only consider solutions where store ended up full ie last=0', default=False)
 parser.add_argument('--annotate', action="store_true", dest="annotate", help='Annotate the shares heat map', default=False)
 parser.add_argument('--scenario', action="store", dest="scenario", help='Scenarion to plot', default='adhoc')
+parser.add_argument('--adverse', action="store", dest="adverse", help='Adverse file mnemonic', default='5s1')
 args = parser.parse_args()
 
 # scenario files
@@ -115,16 +116,20 @@ if args.scenario == 'kfig8':
 if args.scenario == 'kfig6':
     scenarios = {'NNH' : {'file': 'NNH', 'dir' : kfig6, 'title': 'Historic Electric Series'} }
 if args.scenario == 'adv':
+    file23 = 'a{}NNS'.format(args.adverse)
+    file4 = 'c{}NNS'.format(args.adverse)
     scenarios = {'NNSa' :
-       {'file': 'a5s1NNS', 'dir' : adv, 'title': 'ADV a5s1 2-3 deg warming (normal heat) '},
+       {'file': file23, 'dir' : adv, 'title': 'ADV {} 2-3 deg warming (normal heat) '.format(args.adverse)},
              'NNSc' :
-       {'file': 'c5s1NNS', 'dir' : adv, 'title': 'ADV c5s1 4 deg warming (normal heat)'}
+       {'file': file4, 'dir' : adv, 'title': 'ADV {} 4 deg warming (normal heat)'.format(args.adverse)}
     }
 if args.scenario == 'advp':
+    file23 = 'a{}PNS'.format(args.adverse)
+    file4 = 'c{}PNS'.format(args.adverse)
     scenarios = {'NNSa' :
-       {'file': 'a5s1PNS', 'dir' : adv, 'title': 'ADV a5s1 2-3 degrees warming (all heat punps) '},
+       {'file': file23, 'dir' : adv, 'title': 'ADV {} 2-3 degrees warming (all heat punps) '.format(args.adverse)},
              'NNSc' :
-       {'file': 'c5s1PNS', 'dir' : adv, 'title': 'ADV c5s1 4 degrees warming (all heat pumps)'}
+       {'file': file4, 'dir' : adv, 'title': 'ADV {} 4 degrees warming (all heat pumps)'.format(args.adverse)}
     }
 
 output_dir = "/home/malcolm/uclan/output"
@@ -291,7 +296,7 @@ for key, scenario in scenarios.items():
     # of storage, pv and wind with the previous scenario
     if not first:
         storage_diff = df['storage'] - last_df['storage']
-        print('Mean storage difference between {} and {} is {}'.format(key, last_key, storage_diff.mean() ) )
+        print('Mean storage difference between {} {} and {} {} is {}'.format(key, df['storage'].mean(), last_key, last_df['storage'].mean(), storage_diff.mean() ) )
     last_df = df
     last_key = key
     first = False
