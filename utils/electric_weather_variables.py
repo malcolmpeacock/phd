@@ -44,11 +44,13 @@ def regression(X, y):
 def cooling(temperature, cooling_energy):
     print(cooling_energy)
     print(temperature)
-    cdd = (temperature - 15.0).clip(0.0)
-    print(cdd)
+#   cdd = (temperature - 15.0).clip(0.0)
+#   Bloomfield et. al. suplementary material
+    cdd = (temperature - 22.0).clip(0.0)
+#   print(cdd)
     cooling = cdd * ( cooling_energy / cdd.sum() )
-    print('Cooling Degree Hours {}'.format(cdd.sum() ) )
-    print(cooling)
+#   print('Cooling Degree Hours {}'.format(cdd.sum() ) )
+#   print(cooling)
     return cooling
 
 # augment weather variables with time dependent ones.
@@ -75,11 +77,12 @@ def augment(df):
     df['hour'] = df.index.hour
 
     # cooling degree hours
-#   df['cdh'] = (df['temp'] - 22.0).clip(0.0)
-    df['cdh'] = (df['temp'] - 20.0).clip(0.0)
+    # 22 is Bloomfield et. al.
+    df['cdh'] = (df['temp'] - 22.0).clip(0.0)
+#   df['cdh'] = (df['temp'] - 20.0).clip(0.0)
     # heating degree hours
     df['hdh'] = (14.8 - df['temp']).clip(0.0)
-    print(df[['cdh', 'hdh']])
+#   print(df[['cdh', 'hdh']])
 
     # solar zenith at population centre of GB in Leicestershire 
     # 2011 census. ( could work this out )
@@ -89,6 +92,8 @@ def augment(df):
     site_location = pvlib.location.Location(lat, lon, tz=pytz.timezone('UTC'))
     solar_position = site_location.get_solarposition(times=df.index)
     df['zenith'] = solar_position['apparent_zenith']
+
+    df['ghi_w'] = df['clear_sky'] - df['ghi']
 
     days = pd.Series(df.index.date).unique()
     # loop round each day ...
@@ -148,8 +153,8 @@ def lasso(input_df, output, title, plot=False):
 
 # feature correlation
 def correlation(input_df, output, title, plot=False):
-    print(input_df.index)
-    print(output.index)
+#   print(input_df.index)
+#   print(output.index)
     coef = {}
     for column in input_df.columns:
         coef[column] = output.corr(input_df[column])
@@ -200,6 +205,7 @@ parser.add_argument('--espini', action="store_true", dest="espini", help='Use th
 parser.add_argument('--noheat', action="store_true", dest="noheat", help='Remove the existing heat', default=False)
 parser.add_argument('--features', action="store_true", dest="features", help='Stop after feature investigation', default=False)
 parser.add_argument('--plot', action="store_true", dest="plot", help='Includes plots', default=False)
+parser.add_argument('--variables', action="store_true", dest="variables", help='Show lasso variables and correlation', default=False)
 args = parser.parse_args()
 
 
@@ -208,13 +214,14 @@ weather18 = pd.read_csv(weather_file, header=0, parse_dates=[0], index_col=0)
 weather18.index = pd.DatetimeIndex(weather18.index).tz_localize('UTC')
 
 augment(weather18)
+daily_weather18 = weather18.resample('D').mean()
 #print(weather['hour'])
 #print(weather['hour'].isna().sum())
 
 espini = args.espini
 year = '2018'
 electric_2018 = get_demand('2018', espini)
-print(electric_2018)
+#print(electric_2018)
 
 # input assumptions for reference year
 heat_that_is_electric = 0.06     # my spreadsheet from DUKES
@@ -249,35 +256,35 @@ daily_electric_2018 = electric_2018.resample('D').sum()
 
 print('Historic demand 2018: max {} min {} total {} '.format(electric_2018.max(), electric_2018.min(), electric_2018.sum() ) )
 
-# correlation of the various forecasting parameters with the demand
-p_title = 'unmodified '
-if args.noheat:
-    p_title = 'heat removed '
-coeffs = correlation(weather18, electric_2018, 'hourly {} '.format(p_title), plot=True)
-print('Hourly Feature correlation')
-print(coeffs)
-for col, value in sorted(coeffs.items(), key=lambda item: abs(item[1]), reverse=True ):
-    print('{:15}         {:.3f}'.format(col,value))
+if args.variables:
+    # correlation of the various forecasting parameters with the demand
+    p_title = 'unmodified '
+    if args.noheat:
+        p_title = 'heat removed '
+    coeffs = correlation(weather18, electric_2018, 'hourly {} '.format(p_title), plot=True)
+    print('Hourly Feature correlation')
+    print(coeffs)
+    for col, value in sorted(coeffs.items(), key=lambda item: abs(item[1]), reverse=True ):
+        print('{:15}         {:.3f}'.format(col,value))
 
-daily_weather18 = weather18.resample('D').mean()
-coeffs = correlation(daily_weather18, daily_electric_2018, 'daily {} '.format(p_title), plot=True)
-print('Daily Feature correlation')
-for col, value in sorted(coeffs.items(), key=lambda item: abs(item[1]), reverse=True ):
-    print('{:15}         {:.3f}'.format(col,value))
+    coeffs = correlation(daily_weather18, daily_electric_2018, 'daily {} '.format(p_title), plot=True)
+    print('Daily Feature correlation')
+    for col, value in sorted(coeffs.items(), key=lambda item: abs(item[1]), reverse=True ):
+        print('{:15}         {:.3f}'.format(col,value))
 
-# lasso
-print('Hourly Lasso')
-coeffs = lasso(weather18, electric_2018, 'hourly {} '.format(p_title), plot=True)
-for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
-    print('{:15}         {:.3f}'.format(col,value))
-print('Daily Lasso')
-coeffs = lasso(daily_weather18, daily_electric_2018, 'daily {} '.format(p_title), plot=True)
-for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
-    print('{:15}         {:.3f}'.format(col,value))
+    # lasso
+    print('Hourly Lasso')
+    coeffs = lasso(weather18, electric_2018, 'hourly {} '.format(p_title), plot=True)
+    for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
+        print('{:15}         {:.3f}'.format(col,value))
+    print('Daily Lasso')
+    coeffs = lasso(daily_weather18, daily_electric_2018, 'daily {} '.format(p_title), plot=True)
+    for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
+        print('{:15}         {:.3f}'.format(col,value))
 
-# stop if desired
-if args.features:
-    exit()
+    # stop if desired
+    if args.features:
+        exit()
 
 # read historical electricity demand for 2017
 
@@ -285,7 +292,7 @@ electric_2017 = get_demand('2017', espini)
 # electric_2017 = demand_ref['ENGLAND_WALES_DEMAND']
 # give it the same index as 2018 so we can plot
 electric_2017.index = electric_2018.index
-print(electric_2017)
+#print(electric_2017)
 daily_electric_2017 = electric_2017.resample('D').sum()
 
 # read historical electricity demand for 2009
@@ -293,7 +300,7 @@ daily_electric_2017 = electric_2017.resample('D').sum()
 electric_2009 = get_demand('2009', espini)
 # give it the same index as 2018 so we can plot
 electric_2009.index = electric_2018.index
-print(electric_2009)
+#print(electric_2009)
 daily_electric_2009 = electric_2009.resample('D').sum()
 
 # 2017 weather variables
@@ -349,10 +356,10 @@ weekly_heat_demand = resistive_heat_2018.resample('W').sum()
 weekly_electric2018_heat = electric2018_heat.resample('W').sum()
 weekly_electric2018_no_heat = electric2018_no_heat.resample('W').sum()
 
-weekly_electric_2018.plot(color='blue', label='Weekly Electricity demand 2018')
-#weekly_heat_demand.plot(color='yellow', label='Weekly Electric heat 2018 all resistive')
-weekly_electric2018_heat.plot(color='red', label='Weekly Electric heat 2018')
-weekly_electric2018_no_heat.plot(color='green', label='Weekly Electricity demand 2018 minus heat')
+weekly_electric_2018.plot(color='blue', label='Historic Weekly Electricity demand 2018')
+weekly_heat_demand.plot(color='yellow', label='Weekly Electric used for heating 2018 - from heat demand')
+weekly_electric2018_heat.plot(color='red', label='Weekly Electricicty used for heating 2018 - from regression')
+#weekly_electric2018_no_heat.plot(color='green', label='Weekly Electricity demand 2018 minus heating electricity (baseline) ')
 plt.title('Weekly electricty demand series')
 plt.xlabel('day', fontsize=15)
 plt.ylabel('Energy (Twh) per week', fontsize=15)
@@ -363,8 +370,8 @@ plt.show()
 daily_electric2018_heat = electric2018_heat.resample('D').sum()
 daily_electric2018_no_heat = electric2018_no_heat.resample('D').sum()
 
-daily_electric_2018.plot(color='green', label='Electricity demand time series 2018')
-daily_electric2018_heat.plot(color='red', label='Existing Electric heat 2018')
+daily_electric_2018.plot(color='green', label='Historic electricity demand time series 2018')
+daily_electric2018_heat.plot(color='red', label='Electricty used for heating 2018')
 daily_electric2018_no_heat.plot(color='blue', label='Electricity 2018 with heat removed')
 plt.title('Removing existing heat from daily electricty demand series')
 plt.xlabel('day', fontsize=15)
@@ -447,7 +454,7 @@ electric2018_no_heat_or_cooling = electric2018_no_heat - cooling2018
 weekly_cooling2018 = cooling2018.resample('W').sum()
 weekly_electric2018_no_heat_or_cooling = electric2018_no_heat_or_cooling.resample('W').sum()
 
-weekly_electric_2018.plot(color='blue', label='Weekly Electricity demand 2018')
+weekly_electric_2018.plot(color='blue', label='Historic Weekly Electricity demand 2018')
 weekly_cooling2018.plot(color='red', label='Weekly Electric cooling 2018')
 weekly_electric2018_no_heat.plot(color='green', label='Weekly Electricity demand 2018 minus heat')
 weekly_electric2018_no_heat_or_cooling.plot(color='yellow', label='Weekly Electricity demand 2018 minus heat and cooling')
@@ -472,7 +479,7 @@ plt.legend(loc='upper center')
 plt.show()
 
 # heating and cooling energy ?
-print('Total 2018 {} Heating {} Cooling {}'.format(electric_2018.sum(), base_heating.sum(), base_cooling.sum() ) )
+print('Total 2018 {} Heating {} (h={}) Cooling {} (c={}) '.format(electric_2018.sum(), base_heating.sum(), c1, base_cooling.sum(), c2 ) )
 
 # use the linear regression from 2018 to predict 2017
 regress17 = base18 + weather17['hdh']*c1
