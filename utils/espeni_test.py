@@ -1,6 +1,4 @@
-# augment weather with zenith, month, hour, doy etc.
-# train ML model on 2018 weather to predict demand
-# compare with actual 2017 and 2009 and synthetic addition of heat.
+# Investigate the espini electricity demand time series.
 
 import os
 import pandas as pd

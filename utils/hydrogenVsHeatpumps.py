@@ -504,9 +504,26 @@ ref_temperature = ref_resistive['temperature']
 mod_electric_ref = electric_ref - (ref_resistive_heat * heat_that_is_electric)
 total_energy = electric_ref.sum()
 
+daily_original_electric_with_heat = electric_ref.resample('D').sum()
+
+# plot the 2018 series with all heat pumps vs the historic 2018
+if args.plot:
+    demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{0:}Weather{0:}I-Bbdew.csv'.format(args.reference) 
+    ref_electric_hp = readers.read_copheat(demand_filename, ['electricity'])
+    electric2018_withhp = mod_electric_ref + ref_electric_hp
+    daily_new_2018 = electric2018_withhp.resample('D').sum()
+    daily_original_electric_with_heat.plot(color='blue', label='Historic 2018 electricity demand')
+    daily_new_2018.plot(color='red', label='2018 electricity demand with all heating as heat pumps')
+    plt.title('Impact of all heat pumps on 2018 daily electricity demand')
+    plt.xlabel('Time', fontsize=15)
+    plt.ylabel('Electricity demand (TWh)', fontsize=15)
+    plt.legend(loc='upper right')
+    plt.show()
+    
+    
+
 # Normalise by the unmodified reference year time series
 # so comparisons are possible
-daily_original_electric_with_heat = electric_ref.resample('D').sum()
 if args.normalise == 'annual':
     normalise_factor = daily_original_electric_with_heat.mean()
 else:

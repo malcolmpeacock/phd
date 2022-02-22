@@ -32,7 +32,7 @@ args = parser.parse_args()
 # read kf data
 kf_filename = "/home/malcolm/uclan/data/kf/Storage75.csv"
 s75 = pd.read_csv(kf_filename, header=0)
-s75.columns = ['f_pv', 'f_wind', 'w', 'fg', 'storage']
+s75.columns = ['f_wind', 'f_pv', 'w', 'fg', 'storage']
 # add extra columns
 s75['last'] = 0.0
 s75['charge'] = 0.0

@@ -38,7 +38,20 @@ combi['CS'] = 1 - combi['CW']
 #
 combi['f_wind'] = combi['CW'] * combi['SF'] / 0.28
 combi['f_pv'] = combi['CS'] * combi['SF'] / 0.116
-#
+##
+if args.plot:
+    # plot kf storage 30 line
+    sl30 = combi[(combi['storage'] < 32) & (combi['storage'] > 28)]
+    print(sl30)
+    # plot a heat map of the kf storage. 
+    ax = sl30.plot.scatter(x='f_wind', y='f_pv')
+    plt.xlabel('Proportion of wind')
+    plt.ylabel('Porportion of solar')
+    plt.title('Storage 30 days ish from MatLab output')
+    for i, point in sl30.iterrows():
+        ax.text(point['f_wind'],point['f_pv'],'{:.1f}'.format(point['storage']))
+    plt.show()
+
 s75 = combi[['f_wind', 'f_pv', 'storage']].copy()
 # add extra columns
 s75['last'] = 0.0
@@ -48,7 +61,8 @@ s75['wind_energy'] = 0.0
 s75['pv_energy'] = 0.0
 s75['gw_wind'] = 0.0
 s75['gw_pv'] = 0.0
-s75['fg'] = combi['CW'] * combi['SF']
+#s75['fg'] = combi['CW'] * combi['SF']
+s75['fg'] = combi['SF']
 
 # sort the same way
 shares = s75.sort_values(['f_pv', 'f_wind'], ascending=[True, True])
@@ -58,6 +72,7 @@ output_filename = "/home/malcolm/uclan/output/kfig8/sharesCM.csv"
 shares.to_csv(output_filename)
 
 if args.plot:
+
     # read in mp shares data
     mp = pd.read_csv("/home/malcolm/uclan/output/kfig8/sharesNNH.csv")
     # Only include viable storage

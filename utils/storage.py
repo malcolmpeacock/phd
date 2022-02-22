@@ -36,6 +36,9 @@ def storage(net_demand, eta=0.75, hydrogen=None):
         if hydrogen is not None:
             store = store - hydrogen.iat[count] / eta_discharge
 #           print('Hydrogen: {} '.format(store))
+        # TODO the store starts full and it can never be over filled
+        if store>0:
+            store=0
         # record the size of the store
         history.iat[count] = store
         count += 1
@@ -43,34 +46,45 @@ def storage(net_demand, eta=0.75, hydrogen=None):
 
 # constant storage line
 
-def storage_line(df,storage_value, wind_parm='f_wind', pv_parm='f_pv'):
-#   print('storage_line for {} days '.format(storage_value) )
-    x=[]
-    y=[]
-    # for each wind value ...
-    wind_values = df[wind_parm].unique()
+def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_parm='f_pv'):
+    # just take data points with storage values in a range
+    if method=='threshold':
+        threshold = 4.2
+        s_df = df[(df['storage'] < storage_value + threshold) & (df['storage'] > storage_value - threshold)]
+        if len(s_df.index)<2:
+            print('WARNING: storage line {} days had only {} points'.format(storage_value, len(s_df.index) ) )
+        sline = { 'Pw' : s_df[wind_parm].values, 'Ps' :s_df[pv_parm].values }
+        df = pd.DataFrame(data=sline)
+    # linearly interpolate along wind and then pv
+    else:
+#       print('storage_line for {} days '.format(storage_value) )
+        x=[]
+        y=[]
+        # for each wind value ...
+        wind_values = df[wind_parm].unique()
 #   for i_wind in range(0,14):
 #       f_wind = i_wind * 0.5
-    for f_wind in wind_values:
+        for f_wind in wind_values:
 #       print('Fwind {} '.format(f_wind) )
         # extract those values with a wind=xs
-        is_xs = df[wind_parm] == f_wind
-        df_xs = df[is_xs]
+            is_xs = df[wind_parm] == f_wind
+            df_xs = df[is_xs]
         # check storage in range
-        if storage_value < df_xs['storage'].max() and storage_value > df_xs['storage'].min():
-            # sort them by storage
-            df_xs = df_xs.sort_values('storage',ascending=False)
-#           print(df_xs)
-            # interpolate a pv value for the storage
-            y_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs[pv_parm])
-            f_pv = y_interp(storage_value)
-            # store the points
-            x.append(f_wind)
-            y.append(f_pv.item())
-#           print('Point: f_wind {} f_pv {}'.format(f_wind, f_pv.item()) )
+            if storage_value < df_xs['storage'].max() and storage_value > df_xs['storage'].min():
+                # sort them by storage
+                df_xs = df_xs.sort_values('storage',ascending=False)
+#               if storage_value==25:
+#                   print(df_xs[['f_pv', 'f_wind', 'storage']])
+                # interpolate a pv value for the storage
+                y_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs[pv_parm])
+                f_pv = y_interp(storage_value)
+                # store the points
+                x.append(f_wind)
+                y.append(f_pv.item())
+#               print('Point: f_wind {} f_pv {}'.format(f_wind, f_pv.item()) )
 
-    sline = { 'Pw' : x, 'Ps' :y }
-    df = pd.DataFrame(data=sline)
+        sline = { 'Pw' : x, 'Ps' :y }
+        df = pd.DataFrame(data=sline)
 #   print('Line: Pw max {} min {} '.format(df['Pw'].max(), df['Pw'].min() ) )
 #   print(df)
     return df

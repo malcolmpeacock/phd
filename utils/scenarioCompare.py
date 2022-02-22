@@ -54,6 +54,7 @@ parser.add_argument('--kf', action="store_true", dest="kf", help='Scale PV axis 
 parser.add_argument('--last', action="store_true", dest="last", help='Only consider solutions where store ended up full ie last=0', default=False)
 parser.add_argument('--annotate', action="store_true", dest="annotate", help='Annotate the shares heat map', default=False)
 parser.add_argument('--scenario', action="store", dest="scenario", help='Scenarion to plot', default='adhoc')
+parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1')
 parser.add_argument('--adverse', action="store", dest="adverse", help='Adverse file mnemonic', default='5s1')
 args = parser.parse_args()
 
@@ -73,6 +74,8 @@ kfig8 = 'kfig8/'
 kfig6 = 'kfig6/'
 mfig8 = 'mfig8/'
 adv = 'adv/'
+fixed = 'fixed/'
+fixeds = 'fixed_scaleKF/'
 #
 #scenarios = {'HNS' : 'Half Heat Pumps',
 #             'NNS' : 'No   Heat Pumps'
@@ -87,7 +90,7 @@ adv = 'adv/'
 #scenarios = {'HNSh' : {'file': 'HNS', 'dir' : hvh, 'title': 'Half heat pumps, gen hydrogen'}, 'HNSy' : {'file': 'HNS', 'dir' : y40, 'title': 'Half heat pumps, electric only'} }
 if args.scenario == 'eheat':
     scenarios = {'NNS' :
-       {'file': 'NNS', 'dir' : kf, 'title': 'No Added Electric Heating'},
+       {'file': 'NNS', 'dir' : kf, 'title': '2018 with electricity for heating removed'},
                  'PNS' :
        {'file': 'PNS', 'dir' : kf, 'title': 'All heating is heat pumps'}
     }
@@ -109,8 +112,10 @@ if args.scenario == 'kfmp':
               'KF' :
     {'file': 'KF', 'dir' : kfig8, 'title': 'KF data'}
     }
-if args.scenario == 'mfig8':
-    scenarios = {'NNS' : {'file': 'NNS', 'dir' : mfig8, 'title': 'Synthetic Electric Series'} }
+if args.scenario == 'fixeds':
+    scenarios = {'NNS' : {'file': 'ENS', 'dir' : fixeds, 'title': 'Synthetic Electric Series'} }
+if args.scenario == 'fixed':
+    scenarios = {'NNS' : {'file': 'ENS', 'dir' : fixed, 'title': 'Synthetic Electric Series'} }
 if args.scenario == 'kfig8':
     scenarios = {'NNH' : {'file': 'NNH', 'dir' : kfig8, 'title': 'Historic Electric Series'} }
 if args.scenario == 'kfig6':
@@ -266,7 +271,7 @@ for key, scenario in scenarios.items():
 #       generation_capacity = 1/generation_capacity
     # remove negative values of storage (excess)
     # calculate constant storage line for 40 days
-    storage_40 = storage.storage_line(df,40.0, wind_parm, pv_parm)
+    storage_40 = storage.storage_line(df,40.0, args.sline, wind_parm, pv_parm)
     if args.kf:
         scalekf(storage_40)
     # save axis for the first one, and plot
@@ -276,19 +281,19 @@ for key, scenario in scenarios.items():
         storage_40.plot(x='Pw',y='Ps',ax=ax,label='storage 40 days. {}'.format(label))
 
     # calcuate constant storage line for 25 days and plot
-    storage_25 = storage.storage_line(df,25.0, wind_parm, pv_parm)
+    storage_25 = storage.storage_line(df,25.0, args.sline, wind_parm, pv_parm)
     if args.kf:
         scalekf(storage_25)
     storage_25.plot(x='Pw',y='Ps',ax=ax,label='storage 25 days. {}'.format(label))
 
     # calcuate constant storage line for 60 days and plot
-    storage_60 = storage.storage_line(df,60.0, wind_parm, pv_parm)
+    storage_60 = storage.storage_line(df,60.0, args.sline, wind_parm, pv_parm)
     if args.kf:
         scalekf(storage_60)
     storage_60.plot(x='Pw',y='Ps',ax=ax,label='storage 60 days. {}'.format(label))
 
     # calcuate constant storage line for 30 days and plot
-    storage_30 = storage.storage_line(df,30.0, wind_parm, pv_parm)
+    storage_30 = storage.storage_line(df,30.0, args.sline, wind_parm, pv_parm)
     if args.kf:
         scalekf(storage_30)
     storage_30.plot(x='Pw',y='Ps',ax=ax,label='storage 30 days. {}'.format(label))

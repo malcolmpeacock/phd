@@ -141,8 +141,8 @@ def print_stats(heat, gas, method, nvars=1, plot=False, xl='Heat Demand (from th
         plt.ylabel('Residual ( x - m*y )')
         plt.show()
 
-def print_stats_header():
-    print(' Method      Correlation RMSE NRMSE R-SQUARED Variance Gas   ResGrad   ResConst Adj-R-SQUARED Pred-R-SQUARED Max  ESM')
+def print_stats_header(header=' Method     '):
+    print('{} Correlation RMSE NRMSE R-SQUARED Variance Gas   ResGrad   ResConst Adj-R-SQUARED Pred-R-SQUARED Max  ESM'.format(header))
 
 def print_large_small(heat, gas, method):
     # smallest and largest diffs

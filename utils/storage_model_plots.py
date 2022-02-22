@@ -12,6 +12,29 @@ import numpy as np
 from scipy import interpolate
 import math
 
+# model specific storage size
+
+def model(net, capacity, start, eta):
+    store_history=[]
+    store = start
+    store_history.append(store)
+    for i in range(len(net)-1):
+        if net[i]>0:
+            store+=net[i] * eta
+        else:
+            store+=net[i] / eta
+
+        if store>capacity:
+            store = capacity
+        if store<=0:
+            print('Out of storage at {:.2f} for capacity {:.2f}'.format(i, capacity))
+            return False, store_history
+    if store>start:
+        print('Viable Solution for capacity {:.2f} store {:.2f} back to start {:.2f}'.format(capacity, store, start))
+    else:
+        print('Non-Viable Solution for capacity {:.2f} as store end at {:.2f} below start {:.2f}'.format(capacity, store, start))
+    return True, store_history
+
 # main program
 
 # process command line
@@ -33,16 +56,18 @@ pv = pv * 4.5
 
 net = pv + wind - demand 
 
-plt.plot(time, wind, label='wind')
-plt.plot(time, demand, label='demand')
-plt.plot(time, pv, label='pv')
-plt.plot(time, net, label='net')
-plt.title('Demand and Supply ')
-plt.xlabel('Time (months)')
-plt.ylabel('Energy generation')
-plt.legend(loc='upper right')
-plt.show()
+if args.plot:
+    plt.plot(time, wind, label='wind')
+    plt.plot(time, demand, label='demand')
+    plt.plot(time, pv, label='pv')
+    plt.plot(time, net, label='net')
+    plt.title('Demand and Supply ')
+    plt.xlabel('Time (months)')
+    plt.ylabel('Energy generation')
+    plt.legend(loc='upper right')
+    plt.show()
 
+# original energy storage model
 
 eta=0.75
 store=0
@@ -85,13 +110,31 @@ min_t = np.array([0,60])
 # 
 print('Max line {} Min line {} Last point {}'.format(max_s[0], min_s[0], s2[-1]) )
 
-plt.plot(time, s, linestyle='dashed')
-plt.plot(time, s2)
-plt.plot(zero_t, zero_s, linestyle='dotted',label='Store Full')
-plt.plot(max_t, max_s, linestyle='dotted',label='Store Excess')
-plt.plot(min_t, min_s, linestyle='dotted',label='Store Empty')
-plt.title('Storage size')
-plt.xlabel('Time (months)')
-plt.ylabel('Storage size (days)')
-plt.legend(loc='lower left')
-plt.show()
+if args.plot:
+    plt.plot(time, s, linestyle='dashed')
+    plt.plot(time, s2)
+    plt.plot(zero_t, zero_s, linestyle='dotted',label='Store Full')
+    plt.plot(max_t, max_s, linestyle='dotted',label='Store Excess')
+    plt.plot(min_t, min_s, linestyle='dotted',label='Store Empty')
+    plt.title('Storage size')
+    plt.xlabel('Time (months)')
+    plt.ylabel('Storage size (days)')
+    plt.legend(loc='lower left')
+    plt.show()
+
+min_store = -min_s[0]
+with_diff = -( min_s[0] + s2[-1] )
+capacities = [20, min_store, with_diff, with_diff+2, 25]
+for capacity in capacities:
+    print('Starts full')
+    viable, hist = model(net, capacity, capacity, eta)
+    print('Starts at 0.8')
+    viable, hist = model(net, capacity, capacity*0.8, eta)
+    print('Starts at 0.5')
+    viable, hist = model(net, capacity, capacity*0.5, eta)
+
+# new energy storage model ?
+# don't know the upper limit of curtailment until we know the 
+# capacity
+# so perhaps set a loop as above which will converge on a viable
+# solution ? or decide its not viable.
