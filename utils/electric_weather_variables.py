@@ -123,6 +123,7 @@ parser.add_argument('--input', action="store", dest="input", help='What to perfo
 parser.add_argument('--plot', action="store_true", dest="plot", help='Includes plots', default=False)
 parser.add_argument('--year', action="store", dest="year", help='Training year', default='2018')
 parser.add_argument('--frequency', action="store", dest="frequency", help='Frequency H=hourly, D=Daily, W=weekly', default='D')
+parser.add_argument('--vplot', action="store", dest="vplot", help='Variable to scatter plot against bastline demand.', default=None)
 
 args = parser.parse_args()
 
@@ -134,46 +135,59 @@ weather_file = '/home/malcolm/uclan/output/wparms/weather_parms{}.csv'.format(ar
 weather = pd.read_csv(weather_file, header=0, parse_dates=[0], index_col=0) 
 weather.index = pd.DatetimeIndex(weather.index).tz_localize('UTC')
 
-augment.augment(weather)
+augment.augment(weather, False)
+#weather.to_csv('/home/malcolm/uclan/output/temp/weather_ref.csv', float_format='%g')
 
 # Get electricity demand
 
 electric = get_demand(args.year, args.espini)
+
+
+# input assumptions for reference year
+heat_that_is_electric = 0.06     # my spreadsheet from DUKES
+# remove the existing heat
+if args.input == 'noheat':
+    demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{0:}Weather{0:}I-Bbdew_resistive.csv'.format(args.year)
+    ref_resistive = readers.read_copheat(demand_filename, ['electricity', 'temperature'])
+    ref_resistive_heat = ref_resistive['electricity'] * heat_that_is_electric
+#   ref_temperature = ref_resistive['temperature']
 
 # Resamble to required frequency Hourly or Daily
 
 if args.frequency != 'H':
     electric = electric.resample(args.frequency).sum()
     weather = weather.resample(args.frequency).mean()
-
-# input assumptions for reference year
-heat_that_is_electric = 0.06     # my spreadsheet from DUKES
-heat_that_is_heat_pumps = 0.01   # greenmatch.co.uk, renewableenergyhub.co.uk
-# remove the existing heat
-if args.input == 'noheat':
-    demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{0:}Weather{0:}I-Bbdew_resistive.csv'.format(args.year)
-    ref_resistive = readers.read_copheat(demand_filename, ['electricity', 'temperature'])
-    ref_resistive_heat = ref_resistive['electricity']
-    ref_temperature = ref_resistive['temperature']
+    unmodified = electric.copy()
+    if args.input == 'noheat':
+        ref_resistive_heat = ref_resistive_heat.resample(args.frequency).sum()
 
 #  To remove existing space and water heating from the electricity demand time 
 #  series for the reference year - subtract the resistive heat series
 #  ( even if using historic series we calculate it so can scale to it )
 
-    unmodified = electric.copy()
-    existing_heat = ref_resistive_heat * heat_that_is_electric * 1e-6
-    electric = electric - existing_heat
+        existing_heat = ref_resistive_heat * 1e-6
+        electric = electric - existing_heat
 
     if args.plot:
         unmodified.plot(color='blue', label='Unmodified electicity')
-        existing_heat.sum().plot(color='red', label='Heat')
-        electric_2018.plot(color='green', label='Electiricty with heat removed')
+        if args.input == 'noheat':
+            existing_heat.plot(color='red', label='Heat')
+            electric.plot(color='green', label='Electiricty with heat removed')
         plt.title('Electricity with heat removed')
         plt.xlabel('Time', fontsize=15)
         plt.ylabel('Energy', fontsize=15)
         plt.legend(loc='upper right')
         plt.show()
 
+    if args.vplot:
+        label = 'historic'
+        if args.input == 'noheat':
+            label = 'baseline'
+        plt.scatter(weather[args.vplot]/1000.0, electric)
+        plt.title('Relationship between {} and {} electricity demand'.format(args.vplot, label))
+        plt.xlabel('{}'.format(args.vplot), fontsize=15)
+        plt.ylabel('Energy', fontsize=15)
+        plt.show()
 
 # correlation of the various forecasting parameters with the demand
 coeffs = correlation(weather, electric, '{} {} '.format(freqs[args.frequency],args.year), plot=True)

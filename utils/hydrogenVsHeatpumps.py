@@ -465,7 +465,9 @@ parser.add_argument('--eta', action="store", dest="eta", help='Efficiency of cha
 parser.add_argument('--grid', action="store", dest="grid", help='Number of pionts in grid.', type=int, default=60)
 parser.add_argument('--step', action="store", dest="step", help='Step size.', type=float, default=0.1)
 parser.add_argument('--kf', action="store_true", dest="kf", help='Scale the generation data to KF Capacity factors', default=False)
+parser.add_argument('--kf2', action="store_true", dest="kf2", help='Scale the generation data to KF Capacity factors ', default=False)
 parser.add_argument('--onshore', action="store_true", dest="onshore", help='Use only onshore wind', default=False)
+parser.add_argument('--kfgen', action="store_true", dest="kfgen", help='Use KF generation from matlab', default=False)
 
 args = parser.parse_args()
 
@@ -520,7 +522,7 @@ if args.plot:
     plt.legend(loc='upper right')
     plt.show()
     
-    
+    print('Historic Electric {} With Heat Pumps added {}'.format(daily_original_electric_with_heat.sum(), daily_new_2018.sum() ) )
 
 # Normalise by the unmodified reference year time series
 # so comparisons are possible
@@ -653,42 +655,74 @@ if args.adverse:
     years = pd.Series(wind.index.year).unique()
     print(years)
 else:
+    if args.kfgen:
+        print('Loading KF generation')
+        wind_filename = '/home/malcolm/uclan/data/kf/wind.txt'
+        wind = pd.read_csv(wind_filename, header=None, squeeze=True)
+        pv_filename = '/home/malcolm/uclan/data/kf/pv.txt'
+        pv = pd.read_csv(pv_filename, header=None, squeeze=True)
+        # create index
+        kf_start = '1984-01-01'
+        kf_end = '2013-12-31'
+        kf_index = pd.date_range(start = kf_start, end = kf_end, freq='D', tz='UTC' )
+        wind.index = kf_index
+        pv.index = kf_index
+#       kf_wcf = 0.405
+        kf_wcf = 0.28
+#       kf_pcf = 0.115176519
+        kf_pcf = 0.116
+        energy_per_day = 836758271617.0925
+        wind = wind * kf_wcf / energy_per_day
+        pv = pv * kf_pcf / energy_per_day
+        years = range(1984, 2014)
 
-    # weather years from the start to 2019
-    # ( need to download more ninja to get up to 2020 )
-    #last_weather_year = 2019
-    years = range(args.start, last_weather_year+1)
-    print(years)
-    # read ninja
-    ninja_start = str(years[0]) + '-01-01 00:00:00'
-    ninja_end = str(years[-1]) + '-12-31 23:00:00'
-    print(ninja_start, ninja_end)
-    # Ninja capacity factors for pv
-    ninja_filename_pv = '/home/malcolm/uclan/data/ninja/ninja_pv_country_GB_merra-2_corrected.csv'
-    # Ninja capacity factors for wind
-    ninja_filename_wind = '/home/malcolm/uclan/data/ninja/ninja_wind_country_GB_near-termfuture-merra-2_corrected.csv'
-
-    print('Loading ninja ...')
-    ninja_pv = readers.read_ninja_country(ninja_filename_pv)
-    ninja_wind = readers.read_ninja_country(ninja_filename_wind)
-
-    print('Extracting PV ...')
-    ninja_pv = ninja_pv[ninja_start : ninja_end]
-    pv = ninja_pv['national']
-
-    print('Extracting Wind ...')
-    ninja_wind = ninja_wind[ninja_start : ninja_end]
-    if args.onshore:
-        wind = ninja_wind['onshore']
     else:
-        wind = ninja_wind['national']
+
+        # weather years from the start to 2019
+        # ( need to download more ninja to get up to 2020 )
+        #last_weather_year = 2019
+        years = range(args.start, last_weather_year+1)
+        print(years)
+        # read ninja
+        ninja_start = str(years[0]) + '-01-01 00:00:00'
+        ninja_end = str(years[-1]) + '-12-31 23:00:00'
+        print(ninja_start, ninja_end)
+        # Ninja capacity factors for pv
+        ninja_filename_pv = '/home/malcolm/uclan/data/ninja/ninja_pv_country_GB_merra-2_corrected.csv'
+        # Ninja capacity factors for wind
+        ninja_filename_wind = '/home/malcolm/uclan/data/ninja/ninja_wind_country_GB_near-termfuture-merra-2_corrected.csv'
+
+        print('Loading ninja ...')
+        ninja_pv = readers.read_ninja_country(ninja_filename_pv)
+        ninja_wind = readers.read_ninja_country(ninja_filename_wind)
+
+        print('Extracting PV ...')
+        ninja_pv = ninja_pv[ninja_start : ninja_end]
+        pv = ninja_pv['national']
+
+        print('Extracting Wind ...')
+        ninja_wind = ninja_wind[ninja_start : ninja_end]
+        if args.onshore:
+            wind = ninja_wind['onshore']
+        else:
+            wind = ninja_wind['national']
 
     if args.kf:
+        pcf = 0.116
+        wcf = 0.28
         wind_mean = wind.mean()
         pv_mean = pv.mean()
-        print('Converting to KF capacity factors from wind {} pv {} ...'.format(wind_mean, pv_mean))
-        pv = pv * 0.116 / pv_mean
-        wind = wind * 0.28 / wind_mean
+        print('Converting to KF capacity factors from wind {} pv {} to wind {} pv {} ...'.format(wind_mean, pv_mean, wcf, pcf))
+        pv = pv * pcf / pv_mean
+        wind = wind * wcf / wind_mean
+    if args.kf2:
+        pcf = 0.11517
+        wcf = 0.40746
+        wind_mean = wind.mean()
+        pv_mean = pv.mean()
+        print('Converting to KF capacity factors from wind {} pv {} to wind {} pv {} ...'.format(wind_mean, pv_mean, wcf, pcf))
+        pv = pv * pcf / pv_mean
+        wind = wind * wcf / wind_mean
 
 print('Generation PV: Number of value {} mean CF {} ,  Wind: number of values {} meaqn CF {} '.format(len(pv), pv.mean(), len(wind), wind.mean() ) )
 
@@ -698,6 +732,8 @@ if args.plot:
     weather_source = 'ninja'
     if args.adverse:
         weather_source = 'adv ' + args.adverse
+    if args.kfgen:
+        weather_source = 'kf'
   
     # daily plot
     wind_daily = wind.resample('D').mean()

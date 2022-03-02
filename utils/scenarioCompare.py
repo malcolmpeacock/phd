@@ -102,10 +102,12 @@ if args.scenario == 'eheat':
 # scenarios = {'NNS' : {'file': 'NNS', 'dir' : kf, 'title': 'No Added Electric Heating'} }
 if args.scenario == 'mlmp':
     scenarios = {'MP' :
-    {'file': 'NNH', 'dir' : kfig8, 'title': 'MP method with historic electric'},
+    {'file': 'ENH', 'dir' : kfig8, 'title': 'MP method with historic electric'},
               'KF' :
     {'file': 'CM', 'dir' : kfig8, 'title': 'KF matlab data'}
     }
+if args.scenario == 'kfcm':
+    scenarios = {'KF' : {'file': 'CM', 'dir' : kfig8, 'title': 'Output from matlab code'} }
 if args.scenario == 'kfmp':
     scenarios = {'MP' :
     {'file': 'NNH', 'dir' : kfig8, 'title': 'MP method with historic electric'},

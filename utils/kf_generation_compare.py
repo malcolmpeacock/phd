@@ -5,6 +5,7 @@ import sys
 import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
+import argparse
 
 # custom code
 import stats
@@ -92,11 +93,25 @@ if args.scale:
 else:
     kf_pv = kf_pv * pv_cf /energy_per_day
     kf_wind = kf_wind * wind_cf /energy_per_day
-print('Capacity Factor after change : wind {} pv {}'.format(kf_wind.mean(), kf_pv.mean() ) )
+print('Capacity Factor after change : wind {} pv {} energy/day {}'.format(kf_wind.mean(), kf_pv.mean(), energy_per_day ) )
 
 stats.print_stats_header()
 stats.print_stats(kf_pv, ninja_pv,     'PV   Compared to Ninja')
 stats.print_stats(kf_wind, ninja_wind, 'Wind Compared to Ninja')
+
+print('            Ninja      KF')
+print('PV   max    {:.2f}    {:.2f} '.format(ninja_pv.max(), kf_pv.max() ) )
+print('PV   min    {:.2f}    {:.2f} '.format(ninja_pv.min(), kf_pv.min() ) )
+print('PV   mean   {:.2f}    {:.2f} '.format(ninja_pv.mean(), kf_pv.mean() ) )
+print('PV   std    {:.2f}    {:.2f} '.format(ninja_pv.std(), kf_pv.std() ) )
+print('PV   var    {:.2f}    {:.2f} '.format(ninja_pv.var(), kf_pv.var() ) )
+print('            Ninja      KF')
+print('WIND max    {:.2f}    {:.2f} '.format(ninja_wind.max(), kf_wind.max() ) )
+print('WIND min    {:.2f}    {:.2f} '.format(ninja_wind.min(), kf_wind.min() ) )
+print('WIND mean   {:.2f}    {:.2f} '.format(ninja_pv.mean(), kf_pv.mean() ) )
+print('WIND std    {:.2f}    {:.2f} '.format(ninja_wind.std(), kf_wind.std() ) )
+print('WIND var    {:.2f}    {:.2f} '.format(ninja_wind.var(), kf_wind.var() ) )
+
 
 kf_pv.plot(color='blue', label='PV Generation from Fragaki et. al')
 ninja_pv.plot(color='red', label='PV Generation from ninja')
@@ -111,5 +126,26 @@ ninja_wind.plot(color='red', label='Wind Generation from ninja')
 plt.title('Comparison of daily UK Wind genreation')
 plt.xlabel('Time', fontsize=15)
 plt.ylabel('Energy', fontsize=15)
+plt.legend(loc='upper right')
+plt.show()
+
+# Distributions
+#ax = kf_pv.plot.hist(bins=20, label='kf', facecolor="None", edgecolor='red')
+ax = kf_pv.plot.hist(bins=20, label='kf' )
+plt.title('PV distribution')
+plt.xlabel('Capacity Factor', fontsize=15)
+
+#ninja_pv.plot.hist(bins=20, ax=ax, label='ninja', facecolor="None", edgecolor='blue')
+ninja_pv.plot.hist(bins=20, ax=ax, label='ninja' )
+plt.xlabel('Capacity Factor', fontsize=15)
+plt.legend(loc='upper right')
+plt.show()
+
+ax = kf_wind.plot.hist(bins=20, label='kf')
+plt.title('Wind distribution')
+plt.xlabel('Capacity Factor', fontsize=15)
+
+ninja_wind.plot.hist(bins=20, ax=ax, label='ninja' )
+plt.xlabel('Capacity Factor', fontsize=15)
 plt.legend(loc='upper right')
 plt.show()

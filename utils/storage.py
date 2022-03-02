@@ -49,7 +49,7 @@ def storage(net_demand, eta=0.75, hydrogen=None):
 def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_parm='f_pv'):
     # just take data points with storage values in a range
     if method=='threshold':
-        threshold = 4.2
+        threshold = 1.2
         s_df = df[(df['storage'] < storage_value + threshold) & (df['storage'] > storage_value - threshold)]
         if len(s_df.index)<2:
             print('WARNING: storage line {} days had only {} points'.format(storage_value, len(s_df.index) ) )
@@ -104,7 +104,8 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
         for i_wind in range(0,grid):
             f_pv = i_pv * step
             f_wind = i_wind * step
-            print('Calculating f_pv {} f_wind {} '.format(f_pv, f_wind) )
+            sys.stdout.write('\rCalculating f_pv {:.2f} f_wind {:.2f} '.format(f_pv, f_wind) )
+
             # energy supply is calculated using the capacity factors
             wind_energy = wind * f_wind
             pv_energy = pv * f_pv
