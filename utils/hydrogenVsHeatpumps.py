@@ -219,14 +219,19 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
             heat_pump_share = 1.0
         if scenario == 'F':
             heat_pump_share = 0.28  # fes 2019 Net Zero 2050
+        if scenario == 'G':
+            heat_pump_share = 0.41  # fes 2019 Net Zero 2050 but lumping 
+                                    # the hybrid heat pumps in with others.
 
         # Half Heat pumps of all heat pumps
-        if scenario == 'H' or scenario == 'P' or scenario == 'F':
+        if scenario == 'H' or scenario == 'P' or scenario == 'F' or scenario == 'G':
             electric_heat = demand['electricity'] * heat_pump_share
             electric_ref = electric_ref + electric_heat
             heat_added = electric_heat.sum()
         # Existing heat only
         if scenario == 'E' :
+            if historic:
+                heat_that_is_electric = 0
             electric_heat = heat_weather * heat_that_is_electric
             electric_ref = electric_ref + electric_heat
             heat_added = electric_heat.sum()
@@ -438,6 +443,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
 # Scenarios
 scenarios = { 'P' : 'All Heat Pumps', 
               'F' : 'FES Net Zero Hybrid Heat Pumps',
+              'G' : 'FES Net Zero with Hybrid Heat Pumps combined in',
               'H' : 'Half Heat Pumps',
               'B' : 'All Hydrgoen Boilers',
               'N' : 'No heating',
@@ -513,16 +519,19 @@ if args.plot:
     demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{0:}Weather{0:}I-Bbdew.csv'.format(args.reference) 
     ref_electric_hp = readers.read_copheat(demand_filename, ['electricity'])
     electric2018_withhp = mod_electric_ref + ref_electric_hp
+    fes_withhp = mod_electric_ref + ref_electric_hp * 0.41
     daily_new_2018 = electric2018_withhp.resample('D').sum()
+    daily_fes = fes_withhp.resample('D').sum()
     daily_original_electric_with_heat.plot(color='blue', label='Historic 2018 electricity demand')
     daily_new_2018.plot(color='red', label='2018 electricity demand with all heating as heat pumps')
-    plt.title('Impact of all heat pumps on 2018 daily electricity demand')
+    daily_fes.plot(color='green', label='2018 electricity demand with 41% heating as heat pumps')
+    plt.title('Impact of heat pumps on 2018 daily electricity demand')
     plt.xlabel('Time', fontsize=15)
     plt.ylabel('Electricity demand (TWh)', fontsize=15)
     plt.legend(loc='upper right')
     plt.show()
     
-    print('Historic Electric {} With Heat Pumps added {}'.format(daily_original_electric_with_heat.sum(), daily_new_2018.sum() ) )
+    print('Historic Electric {} With all Heat Pumps added {} with 41% heat pumps {}'.format(daily_original_electric_with_heat.sum(), daily_new_2018.sum(), daily_fes.sum() ) )
 
 # Normalise by the unmodified reference year time series
 # so comparisons are possible
@@ -670,8 +679,11 @@ else:
 #       kf_wcf = 0.405
         kf_wcf = 0.28
 #       kf_pcf = 0.115176519
-        kf_pcf = 0.116
+        kf_pcf = 0.1156
+        energy_per_day = daily_electric_ref.mean() * 1e6
+        print('KF GEN Energy {}'.format(energy_per_day))
         energy_per_day = 836758271617.0925
+        energy_per_day = 836757995855.537
         wind = wind * kf_wcf / energy_per_day
         pv = pv * kf_pcf / energy_per_day
         years = range(1984, 2014)
@@ -708,7 +720,7 @@ else:
             wind = ninja_wind['national']
 
     if args.kf:
-        pcf = 0.116
+        pcf = 0.1156
         wcf = 0.28
         wind_mean = wind.mean()
         pv_mean = pv.mean()

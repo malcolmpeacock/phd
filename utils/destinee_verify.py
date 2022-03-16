@@ -94,20 +94,29 @@ plt.show()
 # read destinee electric heat only
 destinee_filename = '/home/malcolm/uclan/data/destinee/heat.csv'
 destinee_heat = readers.read_destinee(destinee_filename)
-print(destinee_heat)
+destinee_filename = '/home/malcolm/uclan/data/destinee/heat3.csv'
+destinee_heat3 = readers.read_destinee(destinee_filename)
+destinee_filename = '/home/malcolm/uclan/data/destinee/heat35.csv'
+destinee_heat35 = readers.read_destinee(destinee_filename)
 # convert from TJ to Kwh then to GWh
 # destinee_electric_heat = destinee_heat['electric'] * 277777.77777778 * 1e-6
 # convert from TWh to GWh
 destinee_electric_heat = destinee_heat['electric'] * 1e+3
+destinee_electric_heat3 = destinee_heat3['electric'] * 1e+3
+destinee_electric_heat35 = destinee_heat35['electric'] * 1e+3
 
 print('Electric heat annual mine: {} destinee: {}'.format(heat.sum(), destinee_electric_heat.sum() ) )
 
 daily_heat = heat.resample('D').sum()
 daily_destinee_electric_heat = destinee_electric_heat.resample('D').sum()
+daily_destinee_electric_heat3 = destinee_electric_heat3.resample('D').sum()
+daily_destinee_electric_heat35 = destinee_electric_heat35.resample('D').sum()
 
 # daily  plot of historic and electric
 daily_heat.plot(label='BDEW')
 daily_destinee_electric_heat.plot(label='DESSTINEE')
+#daily_destinee_electric_heat3.plot(label='DESSTINEE 2.9')
+daily_destinee_electric_heat35.plot(label='DESSTINEE 3.5')
 plt.title('Daily UK Electric Heat 2010 BDEW and DESSTINEE')
 plt.xlabel('Day of the year')
 plt.ylabel('Demand (MWh)')

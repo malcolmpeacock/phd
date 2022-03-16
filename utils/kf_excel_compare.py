@@ -25,6 +25,7 @@ parser = argparse.ArgumentParser(description='Compare and plot scenarios')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1')
 parser.add_argument('--dir', action="store", dest="dir", help='Directory for my files', default='fixed_scaleKF')
+parser.add_argument('--electric', action="store", dest="electric", help='Electricity H=historic, S=snythetic', default='H')
 args = parser.parse_args()
 
 # read kf data
@@ -37,8 +38,8 @@ kf = s75.sort_values(['f_pv', 'f_wind'], ascending=[True, True])
 #print(kf)
 
 # read in mp shares data
-#mp = pd.read_csv("/home/malcolm/uclan/output/{}/sharesENS.csv".format(args.dir))
-mp = pd.read_csv("/home/malcolm/uclan/output/{}/sharesENH.csv".format(args.dir))
+mp = pd.read_csv("/home/malcolm/uclan/output/{}/sharesEN{}.csv".format(args.dir,args.electric))
+#mp = pd.read_csv("/home/malcolm/uclan/output/{}/sharesENH.csv".format(args.dir))
 #mp = mp[mp['last']==mp['storage']]
 #mp = mp.sort_values(['f_pv', 'f_wind'], ascending=[True, True])
 #print(mp)
@@ -61,7 +62,7 @@ for line in lines:
     kf_line.plot(x='f_wind', y='f_pv', ax=ax,color=colours[count],linestyle='dotted',label='Storage KF {} days'.format(line))
     count+=1
 
-plt.title('Constant storage lines')
+plt.title('Constant storage lines {} {}'.format(args.dir, args.electric))
 plt.xlabel('Wind ( capacity in proportion to nomarlised demand)')
 plt.ylabel('Solar PV ( capacity in proportion to normalised demand)')
 plt.show()

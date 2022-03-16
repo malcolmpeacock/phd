@@ -22,6 +22,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import MaxAbsScaler
 import calendar
 import argparse
+import scipy.stats as statsp
 
 # custom code
 import stats
@@ -45,8 +46,8 @@ def regression(X, y):
 # split cooling energy by CDD
 
 def cooling(temperature, cooling_energy):
-    print(cooling_energy)
-    print(temperature)
+#   print(cooling_energy)
+#   print(temperature)
 #   cdd = (temperature - 15.0).clip(0.0)
 #   Bloomfield et. al. suplementary material
     cdd = (temperature - 22.0).clip(0.0)
@@ -88,6 +89,8 @@ def correlation(input_df, output, title, plot=False):
     coef = {}
     for column in input_df.columns:
         coef[column] = output.corr(input_df[column])
+        tt = statsp.ttest_rel(input_df[column], output)
+        print(tt)
     coefs = pd.Series(coef, index = input_df.columns)
     print(coefs)
     imp_coef = coefs.sort_values()

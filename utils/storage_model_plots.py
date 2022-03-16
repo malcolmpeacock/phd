@@ -33,7 +33,29 @@ def model(net, capacity, start, eta):
         print('Viable Solution for capacity {:.2f} store {:.2f} back to start {:.2f}'.format(capacity, store, start))
     else:
         print('Non-Viable Solution for capacity {:.2f} as store end at {:.2f} below start {:.2f}'.format(capacity, store, start))
+        return False, store_history
     return True, store_history
+
+def find_storage(net, eta, a, b, c):
+    count=0
+    max_count=10
+    last_viable = a+b
+    next_try = b
+    threshold = 0.2
+    print('find_storage: last_viable {} next_try {} threshold {}'.format(last_viable, next_try, threshold) )
+    while abs(last_viable - next_try) > threshold and count<max_count:
+        print('last_viable {} next_try {} threshold {}'.format(last_viable, next_try, threshold) )
+        viable, store = model(net, next_try, b, eta)
+        if viable:
+            last_viable = next_try
+            next_try = next_try - ( last_viable - next_try ) / 2
+        else:
+            next_try = next_try + ( last_viable - next_try ) / 2
+        count+=1
+
+    if count >= max_count:
+        print('finished without finding a solution at count {} '.format(count))
+    return last_viable
 
 # main program
 
@@ -138,3 +160,9 @@ for capacity in capacities:
 # capacity
 # so perhaps set a loop as above which will converge on a viable
 # solution ? or decide its not viable.
+a = abs(s.min() )
+b = s.max()
+c = s[-1]
+print('a {} b {} c {} '.format(a, b, c))
+last_viable = find_storage(net, eta, a, b, c)
+print('Found storage last_viable {}'.format(last_viable))

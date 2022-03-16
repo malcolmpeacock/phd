@@ -131,7 +131,7 @@ real.plot(label='Actual Electricity Time Series (measured heat pumps)', color='r
 plt.title('Hourly synthetic electric heat vs measured data 4 days')
 plt.xlabel('Hour of the day', fontsize=15)
 plt.ylabel('Electricity Demand (kWh)', fontsize=15)
-plt.legend(loc='upper right', fontsize=15)
+plt.legend(loc='upper left', fontsize=15)
 plt.show()
 
 # COP calculation
@@ -207,11 +207,11 @@ stats.print_stats(fixed_synthetic  * mean_factor, daily_real, 'Electric Fixed', 
 #print(dfd.columns)
 daily_synthetic.plot(label='Modelled Electricity Time Series', color='blue')
 daily_real.plot(label='Actual Measured Electricity Time Series', color='red')
-fixed_synthetic.plot(label='Fixed Electricity Time Series', color='green')
+#fixed_synthetic.plot(label='Fixed Electricity Time Series', color='green')
 plt.title('Comparison of predicted electricty demand and measured from heat pumps')
 plt.xlabel('Day of the year', fontsize=15)
 plt.ylabel('Electricity Demand (kWh)', fontsize=15)
-plt.legend(loc='upper right', fontsize=15)
+plt.legend(loc='upper left', fontsize=15)
 plt.show()
 
 # load duration curves

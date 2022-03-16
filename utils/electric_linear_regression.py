@@ -79,13 +79,19 @@ def get_heat_bdew(year):
     existing_heat = ref_resistive_heat * heat_that_is_electric * 1e-6
     return existing_heat
 
-def get_wdd_regression(demand, weather, model, freq, hdh=False):
+def get_wdd_regression(demand, weather, model, hdh=False):
     print('Model {} '.format(model))
     parms = ['hdh']
     if model == 'cdhd':
         parms.append('cdh')
     if model == 'bloomfield':
         parms = ['doy', 'hdh', 'cdh', 'd0','d1','d2','d3','d4','d5','d6' ]
+    if model == 'light':
+        parms = ['hdh', 'cdh', 'ghi_w', 'ghi_w2', 'ghi_w3' ]
+    if model == 'lightcp':
+        parms = ['hdh', 'ghi_w', 'ghi_w2', 'cp' ]
+    if model == 'cp':
+        parms = ['hdh', 'cdh', 'cp']
     if args.parm:
         parms.append(args.parm)
     if hdh:
@@ -161,7 +167,7 @@ if args.frequency != 'H':
 
 # get the base electricity for reference year using regression.
 base_ref_bdew = electric_ref - heat_ref
-heat_regression_ref = get_wdd_regression(electric_ref, weather_ref, args.model, args.frequency, args.hdh)
+heat_regression_ref = get_wdd_regression(electric_ref, weather_ref, args.model, args.hdh)
 base_ref_regression = electric_ref - heat_regression_ref
 print('Reference year regression wdd {:.2f} base {:.2f} total {:.2f} bdew {:.2f}'.format(heat_regression_ref.sum(), base_ref_regression.sum(), electric_ref.sum(), heat_ref.sum() ))
 
@@ -180,7 +186,7 @@ if args.plot:
 # Get heat in the test year electricity series - linear regression
 base_test_regression = base_ref_regression.copy()
 base_test_regression.index = electric_test.index
-heat_regression_test = get_wdd_regression(electric_test, weather_test, args.model, args.frequency, args.hdh)
+heat_regression_test = get_wdd_regression(electric_test, weather_test, args.model, args.hdh)
 synthetic_test_regression = base_test_regression + heat_regression_test
 
 # Add the 2017 heat using heat demand BDEW.
@@ -194,7 +200,7 @@ if args.plot:
     electric_test.plot(color='blue', label='{} historic electicity demand'.format(args.test))
     synthetic_test_regression.plot(color='red', label='Heat electricity for {} added to {} baseline using our method'.format(args.test, args.year))
     synthetic_test_bdew.plot(color='green', label='Heat electricity for {} added to {} baseline using linear regression'.format(args.test, args.year))
-    plt.title('Comparison of adding heat by different methods - {}'.format(freqs[args.frequency]))
+    plt.title('Adding heating electricity by different methods - {}'.format(freqs[args.frequency]))
     plt.xlabel('Time', fontsize=15)
     plt.ylabel('Energy', fontsize=15)
     plt.legend(loc='upper right')
@@ -209,7 +215,9 @@ stats.print_stats(electric_test, synthetic_test_bdew, 'bdew')
 if args.new:
     base_reindex = base_ref_bdew.copy()
     base_reindex.index = electric_test.index
-    variables = ['ghi_w','temp_dp','surface_pressure']
+#   variables = ['ghi_w','temp_dp','surface_pressure']
+#   variables = ['ghi_w','ghi_w2', 'ghi_w3', 'cp']
+    variables = ['temp_dp']
     # train a model using the reference year weather to forecast the baseline
     # then use it to get the test year baseline
     base_rf = forecast_demand(weather_ref[variables], base_reindex, weather_test[variables])

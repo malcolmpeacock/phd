@@ -46,14 +46,17 @@ electric_heat = electric_heat * gas_heat[args.year]
 new_electric = electric + electric_heat
 
 # look at ramp rates etc and annual demands and peak
+print('HOURLY')
 peaks_header()
 peaks(args.method, args.profile, new_electric)
 peaks('Historic', 'Historic', electric)
 
+# convert to daily
+daily_electric = electric.resample('D').sum()
+daily_new_electric = new_electric.resample('D').sum()
+
 # daily plots
 if args.plot:
-    daily_electric = electric.resample('D').sum()
-    daily_new_electric = new_electric.resample('D').sum()
 
     daily_electric.plot(color='blue', label='Daily Electricity demand {}'.format(args.year))
     daily_new_electric.plot(color='red', label='Daily Electric with heat 2018')
@@ -63,3 +66,8 @@ if args.plot:
     plt.legend(loc='upper center')
     plt.show()
 
+# look at ramp rates etc and annual demands and peak
+print('DAILY')
+peaks_header()
+peaks(args.method, args.profile, daily_new_electric)
+peaks('Historic', 'Historic', daily_electric)

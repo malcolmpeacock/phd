@@ -2,6 +2,7 @@
 import pvlib
 import pytz
 import pandas as pd
+import numpy as np
 
 def augment(df, timed=True):
     # convert temperature to degrees C from kelvin
@@ -27,6 +28,8 @@ def augment(df, timed=True):
         df['month'] = 0
         # hour of the day
         df['hour'] = df.index.hour
+        # weekend
+        df['weekend'] = 0
 
     # cooling degree hours ( 22 is Bloomfield et. al. )
     df['cdh'] = (df['temp'] - 22.0).clip(0.0)
@@ -41,8 +44,12 @@ def augment(df, timed=True):
     site_location = pvlib.location.Location(lat, lon, tz=pytz.timezone('UTC'))
     solar_position = site_location.get_solarposition(times=df.index)
     df['zenith'] = solar_position['apparent_zenith']
-
+    # weather dependent ghi
     df['ghi_w'] = df['clear_sky'] - df['ghi']
+    df['ghi_w2'] = df['ghi_w'] **2
+    df['ghi_w3'] = df['ghi_w'] **3
+    # cooling power of the wind ( National Grid )
+    df['cp'] = np.sqrt(df['wind']) * (18.3 - df['temp'] ).clip(0.0)
 
     days = pd.Series(df.index.date).unique()
     # loop round each day ...
@@ -67,10 +74,11 @@ def augment(df, timed=True):
     
         if timed:
             # day of week
-            df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','wd'] = day.weekday()
+            wd = day.weekday()
+            df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','wd'] = wd
             df['wd'] = df['wd'].astype(int)
             # binary day flag
-            d_key = 'd{}'.format(d)
+            d_key = 'd{}'.format(wd)
             df.loc[day_str+' 00:00:00' : day_str+' 23:30:00',d_key] = 1
 
             # day of year
@@ -79,4 +87,8 @@ def augment(df, timed=True):
 
             df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','month'] = day.month
             df['month'] = df['month'].astype(int)
+
+            # weekend
+            if wd in [5,6]:
+                df.loc[day_str+' 00:00:00' : day_str+' 23:30:00','weekend'] = 1
 

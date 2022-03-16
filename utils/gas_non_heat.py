@@ -50,6 +50,7 @@ def get_weather(year):
 
     augment.augment(weather)
     daily_weather = weather.resample('D').mean()
+#   daily_weather.to_csv('/home/malcolm/uclan/output/temp/augment.csv', float_format='%g');
     return daily_weather
 
 def regression(X, y):
@@ -291,6 +292,14 @@ daily_weather17 = weather17.resample('D').mean()
 variables = ['hdh', 'dailytemp', 'cdh', 'thermal', 'wind']
 gas_rf = forecast_demand(daily_weather17[variables], gas, daily_weather[variables])
 
+# regression on mean hdh and weekend
+coeffs = regression(daily_weather[['hdh', 'weekend']], gas.values)
+print(coeffs)
+c1 = coeffs[1]
+c2 = coeffs[2]
+base_heating  = daily_weather ['hdh'] * c1 + daily_weather ['weekend'] *c2
+gas_hdh_weekend = base_heating + coeffs[0]
+
 # compare models
 stats.print_stats_header()
 stats.print_stats(gas_hdh, gas, 'hdh only')
@@ -300,6 +309,7 @@ stats.print_stats(gas17_hdh_wind, gas17, 'hdh and wind 2017')
 stats.print_stats(gas19_hdh_wind, gas19, 'hdh and wind 2019')
 stats.print_stats(gas_lasso, gas, 'lasso')
 stats.print_stats(gas_rf, gas, 'rf forecast')
+stats.print_stats(gas_hdh_weekend, gas, 'hdh and weekend')
 
 # compare by plotting
 gas.plot(color='blue', label='Daily gas demand 2018')

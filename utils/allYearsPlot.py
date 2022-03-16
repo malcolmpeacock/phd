@@ -34,7 +34,7 @@ filename = 'GNS'
 path = '{}/{}/demand{}.csv'.format(output_dir, folder, filename)
 demand = pd.read_csv(path, header=0, index_col=0, squeeze=True)
 demand.index = pd.DatetimeIndex(pd.to_datetime(demand.index).date)
-print(demand)
+#print(demand)
 
 reference_year = demand[str(2018) + '-01-01' : str(2018) + '-12-31']
 print(reference_year)
@@ -52,7 +52,18 @@ for year in years:
         values = demand_year.values
     demands[year] = values
 
-#df = pd.DataFrame(data=demands, index=reference_year.index)
-df = pd.DataFrame(data=demands)
-#df.index = reference_year.index
+df = pd.DataFrame(data=demands, index=reference_year.index)
+average = df.mean(axis=1)
+print(average)
 print(df)
+for year in years:
+
+    df[year].plot(color='blue')
+
+average.plot(color='red')
+
+plt.title('Daily average and variation of electricity demand with 40 years weather')
+plt.xlabel('day', fontsize=15)
+plt.ylabel('Demand (TWh / day)', fontsize=15)
+plt.show()
+
