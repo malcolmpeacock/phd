@@ -75,6 +75,7 @@ kfig6 = 'kfig6/'
 mfig8 = 'mfig8/'
 adv = 'adv/'
 fixed = 'fixed/'
+sm = 'smodel/'
 fixeds = 'fixed_scaleKF/'
 #
 #scenarios = {'HNS' : 'Half Heat Pumps',
@@ -87,7 +88,11 @@ fixeds = 'fixed_scaleKF/'
 #            'PNS' : 'Synthetic Time Series From Weather + heat'
 #           }
 #scenarios = {'HNS' : {'file': 'HNS', 'dir' : hvh, 'title': 'Half heat pumps, half hydrogen'}, 'PNS' : {'file': 'PNS', 'dir' : hvh, 'title': 'All heat pumps'}, 'FNS' : {'file': 'FNS', 'dir' : hvh, 'title': 'FES 2019 Net Zero: heat pumps, hydrogen and hybrid heat pumps'} }
-#scenarios = {'HNSh' : {'file': 'HNS', 'dir' : hvh, 'title': 'Half heat pumps, gen hydrogen'}, 'HNSy' : {'file': 'HNS', 'dir' : y40, 'title': 'Half heat pumps, electric only'} }
+if args.scenario == 'models':
+    scenarios = {'HNSh' :
+       {'file': 'PNS', 'dir' : sm, 'title': 'All heat pumps, mp storage model'},
+                 'HNSy' : 
+       {'file': 'PNS', 'dir' : y40, 'title': 'All heat pumps, kf storage model'}    }
 if args.scenario == 'eheat':
     scenarios = {'NNS' :
        {'file': 'NNS', 'dir' : kf, 'title': '2018 with electricity for heating removed'},

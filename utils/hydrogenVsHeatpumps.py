@@ -416,14 +416,14 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         for i_base in range(0,grid):
             base_load = i_base * 0.05
             print('Base load {}'.format(base_load))
-            df= storage.storage_grid(all_demand, wind, pv, args.eta, hourly, grid, step, base_load, h_input)
+            df= storage.storage_grid(all_demand, wind, pv, args.eta, hourly, grid, step, base_load, h_input, args.storage)
             df['base'] = df['storage'] * 0.0 + base_load
             df_list.append(df)
         df = pd.concat(df_list)
 #       print(df)
     else:
         print('Base load Zero')
-        df= storage.storage_grid(all_demand, wind, pv, args.eta, hourly, grid, step, 0.0, h_input)
+        df= storage.storage_grid(all_demand, wind, pv, args.eta, hourly, grid, step, 0.0, h_input, args.storage)
 
     # store actual capacity in GW
     df['gw_wind'] = df['f_wind'] * normalise_factor / ( 24 * 1000.0 )
@@ -467,6 +467,7 @@ parser.add_argument('--ev', action="store_true", dest="ev", help='Include Electr
 parser.add_argument('--genh', action="store_true", dest="genh", help='Assume hydrogen made from electricity and stored in the same store', default=False)
 parser.add_argument('--normalise', action="store", dest="normalise", help='Method of normalise by: annual, peak, kf.', default='annual')
 parser.add_argument('--scale', action="store", dest="scale", help='How to scale : average (energy over the period), reference (year) or kf.', default="reference")
+parser.add_argument('--storage', action="store", dest="storage", help='Storage model kf or mp.', default="kf")
 parser.add_argument('--eta', action="store", dest="eta", help='Efficiency of charge and discharge.', type=float, default=0.80)
 parser.add_argument('--grid', action="store", dest="grid", help='Number of pionts in grid.', type=int, default=60)
 parser.add_argument('--step', action="store", dest="step", help='Step size.', type=float, default=0.1)

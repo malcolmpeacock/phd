@@ -13,9 +13,50 @@ import stats
 import readers
 import storage
 
+def kf_storage(demand, wind, pv, eta, fine=False):
+    ndays = len(demand)
+    print('Number of days {}'.format(ndays))
+    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'sf' : [], 'cw' : [], 'kf_storage' : [] }
+    sf_step = 10
+    cw_step = 5
+    sf_start = 170
+    sf_stop = 210
+    if fine:
+        sf_step = 1
+        cw_step = 1
+        sf_start = 140
+        sf_stop = 230
+
+    for i_sf in range(sf_start,sf_stop,sf_step):
+        sf = i_sf / 100
+        sys.stdout.write('\rCalculating sf {:.2f}'.format(sf) )
+        for icw in range(0, 101, cw_step):
+            cw = icw/100
+            cs = 1 - cw
+            f_wind = sf * cw / kf_wcf
+            f_pv = sf * cs / kf_pcf
+            net = demand - (wind * f_wind + pv * f_pv)
+            store_hist = storage.storage(net, eta)
+            store_size = store_hist.min()
+            storage_days = store_size * -1.0
+            results['f_pv'].append(f_pv)
+            results['f_wind'].append(f_wind)
+            results['storage'].append(storage_days)
+            results['sf'].append(sf)
+            results['cw'].append(cw)
+            results['kf_storage'].append(storage_days * 100 / ndays)
+
+    df = pd.DataFrame(data=results)
+    print(' ')
+    print('Storage calculation Finished')
+    return df
+
 # process command line
-parser = argparse.ArgumentParser(description='Compare and plot scenarios')
+parser = argparse.ArgumentParser(description='Recreate kf output')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--kf', action="store_true", dest="kf", help='Do shares as per kf method', default=False)
+parser.add_argument('--fine', action="store_true", dest="fine", help='Fine resolition', default=False)
+parser.add_argument('--eta', action="store", dest="eta", help='Efficiency', default=0.75, type=float)
 args = parser.parse_args()
 
 # Demand MWh
@@ -55,7 +96,6 @@ print(kf_electric)
 print('Scaled Electric min max mean n_values')
 print('KF              {:.2f}  {:.2f}  {:.2f}   {}'.format(kf_electric.min(), kf_electric.max(), kf_electric.mean(), len(kf_electric) ) )
 print('MP              {:.2f}  {:.2f}  {:.2f}   {}'.format(electric.min(), electric.max(), electric.mean(), len(electric) ) )
-quit()
 
 # generation
 wind_filename = '/home/malcolm/uclan/data/kf/wind.txt'
@@ -87,9 +127,14 @@ wind = wind * kf_wcf
 pv = pv * kf_pcf
 
 # calculate storage
+int_eta = round(args.eta * 100)
+if args.kf:
+    df = kf_storage(electric, wind, pv, args.eta, args.fine)
+    output_file = '/home/malcolm/uclan/output/kf_recreate/sharesKFS{:02d}.csv'.format(int_eta)
 
-eta = 0.75
-df = storage.storage_grid(electric, wind, pv, eta, False, 60, 0.1, 0.0, None)
+else:
 
-output_file = '/home/malcolm/uclan/output/kf_recreate/sharesENH.csv'
+    df = storage.storage_grid(electric, wind, pv, args.eta, False, 60, 0.1, 0.0, None)
+    output_file = '/home/malcolm/uclan/output/kf_recreate/sharesENHS{:02d}.csv'.format(int_eta)
+
 df.to_csv(output_file)

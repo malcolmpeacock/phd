@@ -35,6 +35,8 @@ path = '{}/{}/demand{}.csv'.format(output_dir, folder, filename)
 demand = pd.read_csv(path, header=0, index_col=0, squeeze=True)
 demand.index = pd.DatetimeIndex(pd.to_datetime(demand.index).date)
 #print(demand)
+normalise_factor = 728400.086232
+demand = demand * normalise_factor
 
 reference_year = demand[str(2018) + '-01-01' : str(2018) + '-12-31']
 print(reference_year)
