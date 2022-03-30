@@ -20,9 +20,9 @@ import storage
 # main program
 
 # process command line
-parser = argparse.ArgumentParser(description='Compare and plot scenarios')
+parser = argparse.ArgumentParser(description='Plot all years of modified demand')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
-parser.add_argument('--scenario', action="store", dest="scenario", help='Scenarion to plot', default='adhoc')
+parser.add_argument('--shift', action="store_true", dest="shift", help='Shift the days to match weekly pattern', default=False)
 args = parser.parse_args()
 
 output_dir = "/home/malcolm/uclan/output"

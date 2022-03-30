@@ -16,7 +16,7 @@ import storage
 def kf_storage(demand, wind, pv, eta, fine=False):
     ndays = len(demand)
     print('Number of days {}'.format(ndays))
-    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'sf' : [], 'cw' : [], 'kf_storage' : [] }
+    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'sf' : [], 'cw' : [], 'kf_storage' : [], 'last_zero' : [], 'non_zero' : [] }
     sf_step = 10
     cw_step = 5
     sf_start = 170
@@ -45,6 +45,10 @@ def kf_storage(demand, wind, pv, eta, fine=False):
             results['sf'].append(sf)
             results['cw'].append(cw)
             results['kf_storage'].append(storage_days * 100 / ndays)
+            #
+            last_zero, non_zero = storage.check_zero(store_hist)
+            results['last_zero'].append(last_zero)
+            results['non_zero'].append(non_zero)
 
     df = pd.DataFrame(data=results)
     print(' ')

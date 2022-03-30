@@ -77,6 +77,7 @@ adv = 'adv/'
 fixed = 'fixed/'
 sm = 'smodel/'
 fixeds = 'fixed_scaleKF/'
+temp = 'temp/'
 #
 #scenarios = {'HNS' : 'Half Heat Pumps',
 #             'NNS' : 'No   Heat Pumps'
@@ -116,6 +117,8 @@ if args.scenario == 'mpml':
      'KF' : {'file': 'CM' , 'dir' : kfig8, 'title': 'KF matlab data'},
      'MP' : {'file': 'ENH', 'dir' : kfig8, 'title': 'MP method with historic electric'}
     }
+if args.scenario == 'temp':
+    scenarios = {'temp' : {'file': 'NNS', 'dir' : temp, 'title': 'Synthetic Electric with shift'} }
 if args.scenario == 'kfcm':
     scenarios = {'KF' : {'file': 'CM', 'dir' : kfig8, 'title': 'Output from matlab code'} }
 if args.scenario == 'kfmp':

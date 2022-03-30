@@ -16,6 +16,19 @@ import stats
 import readers
 from misc import upsample_df
 
+# check that the store returns to zero at least once per year
+
+def check_zero(store_hist):
+    last_zero = store_hist.index[0].year
+    non_zero = 0
+    for index, value in store_hist.items():
+        if value == 0:
+            year = index.year
+            if year - last_zero > 1:
+                non_zero +=1
+            last_zero = year
+    return last_zero, non_zero
+
 # calculate storage ( old kf method )
 
 def storage(net_demand, eta=0.75, hydrogen=None):
@@ -36,7 +49,7 @@ def storage(net_demand, eta=0.75, hydrogen=None):
         if hydrogen is not None:
             store = store - hydrogen.iat[count] / eta_discharge
 #           print('Hydrogen: {} '.format(store))
-        # TODO the store starts full and it can never be over filled
+        # The store starts full and it can never be over filled
         if store>0:
             store=0
         # record the size of the store
@@ -189,4 +202,51 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
 
     df = pd.DataFrame(data=results)
     return df
+
+# Shift days so that days of the week pattern is continued
+#   baseline    - original baseline demand.
+#   synthesised - modified baseline including heat and with index
+#                 from weather year.
+
+def shiftdays(values, baseline_index, weather_index):
+    # these days we don't want to shift so over write
+    #   1 New years day  1st January
+    #  89 Good Friday   30th March
+    #  92 Easter Monday  2nd April
+    # 127 Bank holiday   7th May
+    # 148 Bank holiday  28th May
+    # 239 Bank holiday  27th August
+    # 359 Christmas     25th December
+    # 360 Boxing Day    26th December
+    special_days = [1, 89, 92, 127, 148, 239, 359, 360]
+    # before shifting need set the sepcial days to the nearest
+    # ordinary day
+    special_values = {}
+    for day in special_days:
+        special_values[day] = values[day]
+        new_day = day + 7
+        if day>358:
+            new_day = day - 7
+        values[day] = values[new_day]
+    # Jan 1st 2018 is a Monday
+    extra=[]
+    day_of_week_weather = weather_index[0].weekday()
+    shift = day_of_week_weather
+    print('SHIFT {}'.format(shift))
+    while day_of_week_weather <7:
+        extra.append(values[day_of_week_weather])
+        day_of_week_weather +=1
+    if shift > 0:
+        extra_values = np.array(extra)
+        new_values = np.concatenate([extra_values, values[:-len(extra_values)] ])
+    else:
+        new_values = values
+#       
+    print('Original {} new {} extra {}'.format(len(values), len(new_values), len(extra) ) )
+
+    # put the special day values back
+    for day in special_days:
+        new_values[day] = special_values[day]
+    
+    return new_values
 

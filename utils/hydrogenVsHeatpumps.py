@@ -116,6 +116,7 @@ def hybrid_heat_pump(heat, efficiency, threshold):
 
     return demand['electricity'], hydrogen
 
+
 #
 #  mod_electric_ref  - reference electricity with heat removed
 #              wind  - wind capacity factor time series
@@ -205,9 +206,18 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         else:
             # use leap year data or ordinary year data
             if calendar.isleap(year):
-                electric_ref = pd.Series(leap_year, index=heat_weather.index)
+                year_values = leap_year
             else:
-                electric_ref = pd.Series(ordinary_year, index=heat_weather.index)
+                year_values = ordinary_year
+
+            # Shift for days of the week here to match weather year
+            if args.shift:
+                year_values = storage.shiftdays(year_values, mod_electric_ref.index, heat_weather.index)
+
+            # Convert to a series
+            electric_ref = pd.Series(year_values, index=heat_weather.index)
+            
+
         heat_added = 0.0
         hydrogen = demand['electricity'] * 0.0
         hydrogen_efficiency = 0.85  # hydrogen boiler efficiency
@@ -475,8 +485,12 @@ parser.add_argument('--kf', action="store_true", dest="kf", help='Scale the gene
 parser.add_argument('--kf2', action="store_true", dest="kf2", help='Scale the generation data to KF Capacity factors ', default=False)
 parser.add_argument('--onshore', action="store_true", dest="onshore", help='Use only onshore wind', default=False)
 parser.add_argument('--kfgen', action="store_true", dest="kfgen", help='Use KF generation from matlab', default=False)
+parser.add_argument('--shift', action="store_true", dest="shift", help='Shift the days to match weather calender', default=False)
 
 args = parser.parse_args()
+
+if args.shift and args.reference != '2018':
+    print('Error Can not have shift if reference year not 2018')
 
 last_weather_year = args.end
 hourly = args.hourly
@@ -510,10 +524,23 @@ ref_temperature = ref_resistive['temperature']
 #  series for the reference year - subtract the resistive heat series
 #  ( even if using historic series we calculate it so can scale to it )
 
+# existing_heat = ref_resistive_heat * heat_that_is_electric * 1e-6
 mod_electric_ref = electric_ref - (ref_resistive_heat * heat_that_is_electric)
 total_energy = electric_ref.sum()
 
+
 daily_original_electric_with_heat = electric_ref.resample('D').sum()
+daily_electric_ref = mod_electric_ref.resample('D').sum()
+
+# plot the electricity time series with heating removed
+if args.plot:
+    daily_original_electric_with_heat.plot(color='green', label='Historic 2018 electricity demand')
+    daily_electric_ref.plot(color='blue', label='Baseline electricity demand with heat removed')
+    plt.title('Removing existing heating from reference year electricity')
+    plt.xlabel('Time', fontsize=15)
+    plt.ylabel('Electricity demand (TWh)', fontsize=15)
+    plt.legend(loc='upper right')
+    plt.show()
 
 # plot the 2018 series with all heat pumps vs the historic 2018
 if args.plot:
