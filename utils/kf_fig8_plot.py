@@ -22,7 +22,7 @@ import bilinear2 as bil
 
 # process command line
 parser = argparse.ArgumentParser(description='Compare and plot scenarios')
-parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--last', action="store_true", dest="last", help='Only include configs which ended with store full', default=False)
 parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1')
 parser.add_argument('--dir', action="store", dest="dir", help='Directory for my files', default='fixed_scaleKF')
 parser.add_argument('--electric', action="store", dest="electric", help='Electricity H=historic, S=snythetic', default='H')
@@ -41,10 +41,15 @@ first = True
 
 ecount=0
 for eta in etas:
+    print('eta {} '.format(eta) )
     count=0
     # read in mp shares data
     if args.data == 'S':
         mp = pd.read_csv("/home/malcolm/uclan/output/{}/sharesEN{}S{:02d}.csv".format(args.dir,args.electric,eta))
+        print('Synthetic time series {} values'.format(len(mp)))
+        if args.last:
+            mp = mp[mp['last']==0.0]
+            print('Only use configs where store ends full {} values'.format(len(mp)))
     for line in lines:
         if args.data == 'K':
             # read kf data

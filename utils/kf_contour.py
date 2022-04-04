@@ -14,6 +14,7 @@ import readers
 # process command line
 parser = argparse.ArgumentParser(description='Extract days of storage')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--last', action="store_true", dest="last", help='Only include configurations ending with full store', default=False)
 parser.add_argument('--source', action="store", dest="source", help='Input file to Use ', default='combi')
 parser.add_argument('--eta', action="store", dest="eta", help='Efficiency ', default='75')
 args = parser.parse_args()
@@ -40,6 +41,10 @@ if args.source == 'recreate':
     filename = '/home/malcolm/uclan/output/kf_recreate/sharesKFS{}.csv'.format(args.eta)
     data = pd.read_csv(filename, header=0, squeeze=True, index_col=0)
     data['days'] = data['storage']
+    if args.last:
+        original = len(data)
+        data = data[data['last']==0]
+        print('Only including configs ending with full store {} from {}'.format(len(data), original) )
 if args.source == 'copy':
     filename = '/home/malcolm/uclan/output/kf_copy/sharesKFS{}.csv'.format(args.eta)
     data = pd.read_csv(filename, header=0, squeeze=True, index_col=0)

@@ -7,6 +7,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import argparse
 import numpy as np
+import math
 
 # custom code
 import stats
@@ -16,7 +17,7 @@ import storage
 def kf_storage(demand, wind, pv, eta, fine=False):
     ndays = len(demand)
     print('Number of days {}'.format(ndays))
-    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'sf' : [], 'cw' : [], 'kf_storage' : [], 'last_zero' : [], 'non_zero' : [] }
+    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'sf' : [], 'cw' : [], 'kf_storage' : [], 'last_zero' : [], 'non_zero' : [], 'last' : [] }
     sf_step = 10
     cw_step = 5
     sf_start = 170
@@ -24,7 +25,7 @@ def kf_storage(demand, wind, pv, eta, fine=False):
     if fine:
         sf_step = 1
         cw_step = 1
-        sf_start = 140
+        sf_start = 100
         sf_stop = 230
 
     for i_sf in range(sf_start,sf_stop,sf_step):
@@ -39,12 +40,14 @@ def kf_storage(demand, wind, pv, eta, fine=False):
             store_hist = storage.storage(net, eta)
             store_size = store_hist.min()
             storage_days = store_size * -1.0
+            store_last = store_hist.iat[-1]
             results['f_pv'].append(f_pv)
             results['f_wind'].append(f_wind)
             results['storage'].append(storage_days)
             results['sf'].append(sf)
             results['cw'].append(cw)
             results['kf_storage'].append(storage_days * 100 / ndays)
+            results['last'].append(store_last)
             #
             last_zero, non_zero = storage.check_zero(store_hist)
             results['last_zero'].append(last_zero)
@@ -57,10 +60,9 @@ def kf_storage(demand, wind, pv, eta, fine=False):
 
 # process command line
 parser = argparse.ArgumentParser(description='Recreate kf output')
-parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--kf', action="store_true", dest="kf", help='Do shares as per kf method', default=False)
 parser.add_argument('--fine', action="store_true", dest="fine", help='Fine resolition', default=False)
-parser.add_argument('--eta', action="store", dest="eta", help='Efficiency', default=0.75, type=float)
+parser.add_argument('--eta', action="store", dest="eta", help='Efficiency', default=75, type=int)
 args = parser.parse_args()
 
 # Demand MWh
@@ -130,15 +132,19 @@ kf_pcf = 0.1156
 wind = wind * kf_wcf
 pv = pv * kf_pcf
 
+# calculate charge and discharge efficiency from round trip efficiency
+eta = math.sqrt(args.eta / 100)
+print('Round trip efficiency {} Charge/Discharge {} '.format(args.eta / 100, eta) )
+
+
 # calculate storage
-int_eta = round(args.eta * 100)
 if args.kf:
-    df = kf_storage(electric, wind, pv, args.eta, args.fine)
-    output_file = '/home/malcolm/uclan/output/kf_recreate/sharesKFS{:02d}.csv'.format(int_eta)
+    df = kf_storage(electric, wind, pv, eta, args.fine)
+    output_file = '/home/malcolm/uclan/output/kf_recreate/sharesKFS{:02d}.csv'.format(args.eta)
 
 else:
 
-    df = storage.storage_grid(electric, wind, pv, args.eta, False, 60, 0.1, 0.0, None)
-    output_file = '/home/malcolm/uclan/output/kf_recreate/sharesENHS{:02d}.csv'.format(int_eta)
+    df = storage.storage_grid(electric, wind, pv, eta, False, 60, 0.1, 0.0, None)
+    output_file = '/home/malcolm/uclan/output/kf_recreate/sharesENHS{:02d}.csv'.format(args.eta)
 
 df.to_csv(output_file)

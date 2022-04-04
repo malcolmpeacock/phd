@@ -561,6 +561,14 @@ if args.plot:
     
     print('Historic Electric {} With all Heat Pumps added {} with 41% heat pumps {}'.format(daily_original_electric_with_heat.sum(), daily_new_2018.sum(), daily_fes.sum() ) )
 
+# output time series for KF
+#   timeseries_dir = '/home/malcolm/uclan/output/timeseries/'
+#   daily_electric_ref.to_csv(timeseries_dir + 'baseline_daily_2018.csv', float_format='%g')
+#   daily_original_electric_with_heat.to_csv(timeseries_dir + 'historic_daily_2018.csv', float_format='%g')
+#   daily_new_2018.to_csv(timeseries_dir + 'heatpumps_all_daily_2018.csv', float_format='%g')
+#   daily_fes.to_csv(timeseries_dir + 'heatpumps_41_daily_2018.csv', float_format='%g')
+ 
+
 # Normalise by the unmodified reference year time series
 # so comparisons are possible
 if args.normalise == 'annual':

@@ -78,6 +78,7 @@ fixed = 'fixed/'
 sm = 'smodel/'
 fixeds = 'fixed_scaleKF/'
 temp = 'temp/'
+hp = 'heatpaper/'
 #
 #scenarios = {'HNS' : 'Half Heat Pumps',
 #             'NNS' : 'No   Heat Pumps'
@@ -99,6 +100,12 @@ if args.scenario == 'eheat':
        {'file': 'NNS', 'dir' : kf, 'title': '2018 with electricity for heating removed'},
                  'PNS' :
        {'file': 'PNS', 'dir' : kf, 'title': 'All heating is heat pumps'}
+    }
+if args.scenario == 'hp':
+    scenarios = {'GNS' :
+       {'file': 'GNS', 'dir' : hp, 'title': '41% Heat Pumps'},
+                 'FNS' :
+       {'file': 'FNS', 'dir' : hp, 'title': '13% Hybrid Heat pumps'}
     }
 #scenarios = {'NNS' :
 #   {'file': 'NNS', 'dir' : kf, 'title': 'No Added Electric Heating'},
@@ -157,6 +164,8 @@ output_dir = "/home/malcolm/uclan/output"
 # load the demands
 demands = {}
 capacities = {}
+print('number of annual  capacity')
+print('days      energy  to supply load')
 for key, scenario in scenarios.items():
     folder = scenario['dir']
     label = scenario['title']
@@ -168,9 +177,9 @@ for key, scenario in scenarios.items():
     demands[key] = demand
     ndays = len(demand)
     annual_energy = demand.sum() * 365 / ndays
-    capacity = annual_energy * 1000.0 / 8760
+#   capacity = annual_energy * 1000.0 / 8760
     capacity = demand.max() * 1000.0 / 24.0
-    print('ndays {} annual {} cpacity {}'.format(ndays, annual_energy, capacity))
+    print('{}  {}  {:.2f}  {:.2f}'.format(key, ndays, annual_energy, capacity))
     capacities[key] = capacity
 
 # Load the shares dfs

@@ -7,6 +7,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import argparse
 import numpy as np
+import math
 
 # custom code
 import stats
@@ -42,17 +43,17 @@ def kf_storage(demand, wind, pv, eta):
             results['sf'].append(sf)
             results['cw'].append(cw)
             results['kf_storage'].append(kf_storage )
-            output_file = '/home/malcolm/uclan/output/kf_copy/hist/sf{:02d}cw{:02d}.csv'.format(isf, icw)
 #           if isf==17 and icw==0:
-            s = pd.Series(store_hist, index=demand.index)
-            s.to_csv(output_file)
+#           output_file = '/home/malcolm/uclan/output/kf_copy/hist/sf{:02d}cw{:02d}.csv'.format(isf, icw)
+#           s = pd.Series(store_hist, index=demand.index)
+#           s.to_csv(output_file)
 
     df = pd.DataFrame(data=results)
     return df
 
 # process command line
 parser = argparse.ArgumentParser(description='Compare and plot scenarios')
-parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--eta', action="store", dest="eta", help='Round trip efficiency.', type=int, default=85)
 args = parser.parse_args()
 
 # Demand MWh
@@ -112,10 +113,11 @@ print(pv)
 print('KF energy totals: wind {} pv {} Number of values: wind {} pv {}'.format(wind.sum(), pv.sum(), len(wind), len(pv)) )
 print('Demand peak {} min {} mean {} total {}'.format(electric.max(), electric.min(), electric.mean(), electric.sum() ) )
 
+# calculate charge and discharge efficiency from round trip efficiency
+eta = math.sqrt(args.eta / 100)
+print('Round trip efficiency {} Charge/Discharge {} '.format(args.eta / 100, eta) )
 # calculate storage
-#eta = 0.75
-eta = 0.806225775
 df = kf_storage(electric, wind, pv, eta)
-output_file = '/home/malcolm/uclan/output/kf_copy/sharesKF.csv'
-
+output_file = '/home/malcolm/uclan/output/kf_copy/sharesKFS{:02d}.csv'.format(args.eta)
+print('Writing to: ' + output_file)
 df.to_csv(output_file)

@@ -90,7 +90,7 @@ def storage_mp(net_demand, eta=0.75, hydrogen=None):
 def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_parm='f_pv'):
     # just take data points with storage values in a range
     if method=='threshold':
-        threshold = 1.2
+        threshold = storage_value * 0.05
         s_df = df[(df['storage'] < storage_value + threshold) & (df['storage'] > storage_value - threshold)]
         if len(s_df.index)<2:
             print('WARNING: storage line {} days had only {} points'.format(storage_value, len(s_df.index) ) )
@@ -175,8 +175,8 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
             if method == 'kf' or store_hist.iat[-1] > 0:
                 # store last is the same in both cases its just that for
                 # mp model it didn't start off full
-                store_last = store_hist.iat[-1] * store_factor * -1.0
-                store_remaining = storage_days - store_last
+                store_last = store_hist.iat[-1] * store_factor
+                store_remaining = storage_days - store_last * -1.0
 
                 #  rate of charge or discharge in a period
                 charge=0.0
@@ -194,7 +194,7 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
                 results['f_pv'].append(f_pv)
                 results['f_wind'].append(f_wind)
                 results['storage'].append(storage_days)
-                results['last'].append(store_remaining)
+                results['last'].append(store_last)
                 results['charge'].append(charge)
                 results['discharge'].append(discharge)
                 results['wind_energy'].append(wind_energy.sum() / demand.sum())
