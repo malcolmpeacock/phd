@@ -23,6 +23,7 @@ import bilinear2 as bil
 # process command line
 parser = argparse.ArgumentParser(description='Compare and plot scenarios')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--last', action="store_true", dest="last", help='Only use configs where store ends full', default=False)
 parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1')
 parser.add_argument('--eta', action="store", dest="eta", help='Storage efficiency', default=75, type=int)
 parser.add_argument('--etak', action="store", dest="etak", help='Storage efficiency for kf', default=0, type=int)
@@ -33,9 +34,11 @@ args = parser.parse_args()
 
 # read in mp shares data
 mp = pd.read_csv("/home/malcolm/uclan/output/{}/sharesEN{}S{:02d}.csv".format(args.dir,args.electric,args.eta))
-#mp = mp[mp['last']==mp['storage']]
-#mp = mp.sort_values(['f_pv', 'f_wind'], ascending=[True, True])
-#print(mp)
+
+if args.last:
+    original = len(mp)
+    mp = mp[mp['last']==0.0]
+    print('Using only store full at end {} from {} '.format(len(mp), original))
 
 lines = [25, 30, 40, 60]
 colours = ['red', 'green', 'blue', 'purple']
@@ -59,10 +62,9 @@ for line in lines:
         y_var = 'f_pv'
         mp_line = mp.sort_values(['f_pv', 'f_wind'], ascending=[True, True])
     else:
-        mp_line = storage.storage_line(mp,line, args.sline, 'f_wind', 'f_pv')
+        mp_line = storage.storage_line(mp, line, args.sline, 'f_wind', 'f_pv')
         x_var = 'Pw'
         y_var = 'Ps'
-    #print(mp_line)
     if first:
         ax = mp_line.plot(x=x_var,y=y_var,color=colours[count],label='Storage MP {} days'.format(line))
         first = False

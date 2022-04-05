@@ -62,7 +62,7 @@ def kf_storage(demand, wind, pv, eta, fine=False):
 parser = argparse.ArgumentParser(description='Recreate kf output')
 parser.add_argument('--kf', action="store_true", dest="kf", help='Do shares as per kf method', default=False)
 parser.add_argument('--fine', action="store_true", dest="fine", help='Fine resolition', default=False)
-parser.add_argument('--eta', action="store", dest="eta", help='Efficiency', default=75, type=int)
+parser.add_argument('--eta', action="store", dest="eta", help='Round Trip Efficiency', default=75, type=int)
 args = parser.parse_args()
 
 # Demand MWh

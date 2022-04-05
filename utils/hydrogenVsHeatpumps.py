@@ -19,6 +19,7 @@ from icecream import ic
 import stats
 import readers
 import storage
+import math
 
 # electric vehicle time series
 ev_annual_energy = 95.83  # annual ev energy TWh fes Net Zero 2050
@@ -356,7 +357,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
 #   print(net)
 
     #  calculate how much storage we need
-    store_hist = storage.storage(net, args.eta)
+    store_hist = storage.storage(net, eta)
 #   print(store_hist)
     store_size = store_hist.min()
     storage_days = round(store_size * -1.0)
@@ -426,14 +427,14 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         for i_base in range(0,grid):
             base_load = i_base * 0.05
             print('Base load {}'.format(base_load))
-            df= storage.storage_grid(all_demand, wind, pv, args.eta, hourly, grid, step, base_load, h_input, args.storage)
+            df= storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, base_load, h_input, args.storage)
             df['base'] = df['storage'] * 0.0 + base_load
             df_list.append(df)
         df = pd.concat(df_list)
 #       print(df)
     else:
         print('Base load Zero')
-        df= storage.storage_grid(all_demand, wind, pv, args.eta, hourly, grid, step, 0.0, h_input, args.storage)
+        df= storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, 0.0, h_input, args.storage)
 
     # store actual capacity in GW
     df['gw_wind'] = df['f_wind'] * normalise_factor / ( 24 * 1000.0 )
@@ -478,7 +479,7 @@ parser.add_argument('--genh', action="store_true", dest="genh", help='Assume hyd
 parser.add_argument('--normalise', action="store", dest="normalise", help='Method of normalise by: annual, peak, kf.', default='annual')
 parser.add_argument('--scale', action="store", dest="scale", help='How to scale : average (energy over the period), reference (year) or kf.', default="reference")
 parser.add_argument('--storage', action="store", dest="storage", help='Storage model kf or mp.', default="kf")
-parser.add_argument('--eta', action="store", dest="eta", help='Efficiency of charge and discharge.', type=float, default=0.80)
+parser.add_argument('--eta', action="store", dest="eta", help='Round Trip Efficiency.', type=int, default=85)
 parser.add_argument('--grid', action="store", dest="grid", help='Number of pionts in grid.', type=int, default=60)
 parser.add_argument('--step', action="store", dest="step", help='Step size.', type=float, default=0.1)
 parser.add_argument('--kf', action="store_true", dest="kf", help='Scale the generation data to KF Capacity factors', default=False)
@@ -498,6 +499,10 @@ if args.historic:
     hourly = False
 # print arguments
 print('Start year {} End Year {} Reference year {} plot {} hourly {} climate {} historic {} base {} ev {} genh {}'.format(args.start, args.end, args.reference, args.plot, args.hourly, args.climate, args.historic, args.base, args.ev, args.genh) )
+
+# calculate charge and discharge efficiency from round trip efficiency
+eta = math.sqrt(args.eta / 100)
+print('Round trip efficiency {} Charge/Discharge {} '.format(args.eta / 100, eta) )
 
 # input assumptions for reference year
 heat_that_is_electric = 0.06     # my spreadsheet from DUKES

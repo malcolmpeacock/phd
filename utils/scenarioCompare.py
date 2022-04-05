@@ -79,6 +79,8 @@ sm = 'smodel/'
 fixeds = 'fixed_scaleKF/'
 temp = 'temp/'
 hp = 'heatpaper/'
+kfgen = 'kfgen/'
+ninja = 'ninja/'
 #
 #scenarios = {'HNS' : 'Half Heat Pumps',
 #             'NNS' : 'No   Heat Pumps'
@@ -90,6 +92,16 @@ hp = 'heatpaper/'
 #            'PNS' : 'Synthetic Time Series From Weather + heat'
 #           }
 #scenarios = {'HNS' : {'file': 'HNS', 'dir' : hvh, 'title': 'Half heat pumps, half hydrogen'}, 'PNS' : {'file': 'PNS', 'dir' : hvh, 'title': 'All heat pumps'}, 'FNS' : {'file': 'FNS', 'dir' : hvh, 'title': 'FES 2019 Net Zero: heat pumps, hydrogen and hybrid heat pumps'} }
+if args.scenario == 'historic':
+    scenarios = {'historic' :
+       {'file': 'ENH', 'dir' : ninja, 'title': 'Historic time series'},
+                 'synthetic' : 
+       {'file': 'ENS', 'dir' : ninja, 'title': 'Synthetic time series'}    }
+if args.scenario == 'generation':
+    scenarios = {'kf' :
+       {'file': 'ENS', 'dir' : kfgen, 'title': 'Generation from KF Paper'},
+                 'ninja' : 
+       {'file': 'ENS', 'dir' : ninja, 'title': 'Generation from Ninja'}    }
 if args.scenario == 'models':
     scenarios = {'HNSh' :
        {'file': 'PNS', 'dir' : sm, 'title': 'All heat pumps, mp storage model'},

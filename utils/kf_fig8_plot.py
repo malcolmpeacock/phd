@@ -29,10 +29,6 @@ parser.add_argument('--electric', action="store", dest="electric", help='Electri
 parser.add_argument('--data', action="store", dest="data", help='Data to use K=KF, S=MP shares, T=mp threshold', default='T')
 args = parser.parse_args()
 
-#mp = mp[mp['last']==mp['storage']]
-#mp = mp.sort_values(['f_pv', 'f_wind'], ascending=[True, True])
-#print(mp)
-
 lines = [25, 30, 40, 60]
 colours = ['red', 'yellow', 'green', 'blue']
 etas = [75, 85]

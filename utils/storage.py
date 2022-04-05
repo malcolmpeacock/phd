@@ -126,6 +126,7 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
 
         sline = { 'Pw' : x, 'Ps' :y }
         df = pd.DataFrame(data=sline)
+        df = df.sort_values(['Ps', 'Pw'], ascending=[True, True])
 #   print('Line: Pw max {} min {} '.format(df['Pw'].max(), df['Pw'].min() ) )
 #   print(df)
     return df
