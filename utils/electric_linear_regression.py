@@ -69,7 +69,7 @@ def get_demand(year, espini):
     return electric
 
 def get_heat_bdew(year):
-    # input assumptions for reference year
+    # input assumptions for reference year ( true for both 2018 and 2017 )
     heat_that_is_electric = 0.06     # my spreadsheet from DUKES
     heat_that_is_heat_pumps = 0.01   # greenmatch.co.uk, renewableenergyhub.co.uk
     # remove the existing heat using the heat demand method

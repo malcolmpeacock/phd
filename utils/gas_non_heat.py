@@ -59,9 +59,9 @@ def regression(X, y):
     pf = poly.fit_transform(X)
     fit = estimator.fit(pf, y)
     coeffs = estimator.coef_
-    print(fit.score(pf,y))
-    print(estimator.coef_)
-    print(estimator.intercept_)
+#   print(fit.score(pf,y))
+#   print(estimator.coef_)
+#   print(estimator.intercept_)
 #   p = fit.predict(Xp)
     # return intercept as coeff[0]
     coeffs[0] = estimator.intercept_
@@ -96,8 +96,8 @@ def lasso(input_df, output, plot=False, normalize=False):
 
     # feature correlation
 def correlation(input_df, output, plot=False):
-    print(input_df.index)
-    print(output.index)
+#   print(input_df.index)
+#   print(output.index)
     coef = {}
     for column in input_df.columns:
         coef[column] = output.corr(input_df[column])
@@ -108,7 +108,7 @@ weather_year = '2018'
 gas_filename = '/home/malcolm/uclan/data/GasLDZOfftakeEnergy' + weather_year + '.csv'
 
 gas = readers.read_gas(gas_filename)
-print(gas)
+# print(gas)
 gas.index = pd.DatetimeIndex(gas.index).tz_localize('UTC')
 # TWh
 gas = gas * 1e-9
@@ -139,12 +139,12 @@ daily_weather17 = get_weather('2017')
 daily_weather19 = get_weather('2019')
 
 coeffs = correlation(daily_weather, gas, plot=True)
-print('Daily Feature correlation')
+print('Daily Feature correlation 2018')
 for col, value in sorted(coeffs.items(), key=lambda item: abs(item[1]), reverse=True ):
     print('{:15}         {:.3f}'.format(col,value))
 
 # lasso
-print('Daily Lasso')
+print('Daily Lasso 2018')
 coeffs = lasso(daily_weather, gas, plot=True, normalize=True)
 for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
     print('{:15}         {:.3f}'.format(col,value))
@@ -152,10 +152,10 @@ for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True 
 
 # regression on mean hdh
 hdd = daily_weather['hdh'] / 24.0
-# coeffs = regression(daily_weather['hdh'].values.reshape(-1,1), gas.values)
 coeffs = regression(hdd.values.reshape(-1,1), gas.values)
 c0 = coeffs[0]
 c1 = coeffs[1]
+print('2018 regression coeffs hdh')
 print(coeffs)
 
 # plot regression with hdd
@@ -182,18 +182,18 @@ plt.legend(loc='upper center')
 plt.show()
 
 
-print('HDH gives non heat gas {} heat gas {} total {}'.format(base.sum(), gas_hdh.sum(), gas.sum() ) )
+print('2018 HDH gives non heat gas {} heat gas {} total {}'.format(base.sum(), gas_hdh.sum(), gas.sum() ) )
 
 gas_hdh  = daily_weather ['hdh'] * c1 + c0
 
 # correlation after heat removed
 
 coeffs = correlation(daily_weather, base, plot=True)
-print('Daily Feature correlation base')
+print('2018 Daily Feature correlation base')
 print(coeffs)
 for col, value in sorted(coeffs.items(), key=lambda item: abs(item[1]), reverse=True ):
     print('{:15}         {:.3f}'.format(col,value))
-print('Daily Lasso after heat removed')
+print('2018 Daily Lasso after heat removed')
 coeffs = lasso(daily_weather, base, plot=True, normalize=True)
 for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True ):
     print('{:15}         {:.3f}'.format(col,value))
@@ -219,11 +219,11 @@ plt.legend(loc='upper center')
 plt.show()
 total_gas = gas.sum()
 total_heat = base_heating.sum()
-print('Total (hdh and wind) {} Heating {} Percent {}'.format(total_gas, total_heat, total_heat / total_gas ) )
+print('2018 Total (hdh and wind) {} Heating {} Percent {}'.format(total_gas, total_heat, total_heat / total_gas ) )
 
 gas_hdh_wind = base_heating + coeffs[0]
 
-# other years hdh and wind
+# other years hdh
 print('daily_weather17 {} gas17 {}'.format(len(daily_weather17), len(gas17)))
 coeffs = regression(daily_weather17[['hdh', 'wind']], gas17.values)
 gas17_hdh_wind = daily_weather17['hdh'] * coeffs[1] + daily_weather17['wind'] * coeffs[2] + coeffs[0]

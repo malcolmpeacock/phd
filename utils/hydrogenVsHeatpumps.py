@@ -169,6 +169,10 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
     monthly_temp_years={}
     monthly_sd_years={}
     yearly_wd={}
+    dec31_wind={}
+    dec31_pv={}
+    dec31_demand={}
+
     # for each weather year ...
     for year in years:
         print('Year {}'.format(year) )
@@ -274,6 +278,14 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         # normalise and add to the list
         demand_years.append( electric_ref / normalise_factor)
         hydrogen_years.append( hydrogen / normalise_factor )
+
+        # December 31st values
+        dec31_date = '{}-12-31'.format(year)
+        dec31_wind[year] = wind[dec31_date]
+        dec31_pv[year] = pv[dec31_date]
+        dec31_demand[year] = electric_ref[dec31_date] / normalise_factor
+        
+
     # concantonate the demand series
     all_demand = pd.concat(demand_years[year] for year in range(len(years)) )
     all_hydrogen = pd.concat(hydrogen_years[year] for year in range(len(years)) )
@@ -440,12 +452,17 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
     df['gw_wind'] = df['f_wind'] * normalise_factor / ( 24 * 1000.0 )
     df['gw_pv'] = df['f_pv'] * normalise_factor / ( 24 * 1000.0 )
 
+    
+
     # store yearly values
     yearly_data = { 'year'   : total_heat_demand_years.keys(),
                     'heat'   : total_heat_demand_years.values(),
                     'temp'   : mean_temp_years.values(),
                     'wd'     : yearly_wd.values(),
-                    'storage'     : yearly_diff }
+                    'storage'      : yearly_diff,
+                    'dec31_wind'   : dec31_wind.values(),
+                    'dec31_pv'     :    dec31_pv.values(),
+                    'dec31_demand' :    dec31_demand.values()  }
     yd = pd.DataFrame(yearly_data).set_index('year')
     return df, yd, all_demand, all_hydrogen
 
@@ -670,7 +687,7 @@ if args.adverse:
     # adjust the capacity factor inline with the assumed load factor of 0.116
     # from KF TODO - use Ninja CF ?
     pv = pv * ( 0.116 / pv.mean() )
-    print(pv)
+#   print(pv)
 
     print('Loading adverse Wind')
     wind_filename = '/home/malcolm/uclan/output/wind/adv{}.csv'.format(args.adverse)
@@ -700,7 +717,7 @@ if args.adverse:
     # adjust the capacity factor inline with the assumed load factor of 0.28
     # from KF TODO - use Ninja CF ?
     wind = wind * ( 0.28 / wind.mean() )
-    print(wind)
+#   print(wind)
 
     years = pd.Series(wind.index.year).unique()
     print(years)
@@ -735,7 +752,7 @@ else:
         # ( need to download more ninja to get up to 2020 )
         #last_weather_year = 2019
         years = range(args.start, last_weather_year+1)
-        print(years)
+#       print(years)
         # read ninja
         ninja_start = str(years[0]) + '-01-01 00:00:00'
         ninja_end = str(years[-1]) + '-12-31 23:00:00'

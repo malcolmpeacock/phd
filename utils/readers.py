@@ -263,7 +263,10 @@ def read_espeni(filename, year):
     # convert from half hourly to hourly
     hourly = espini.resample('H').sum() * 0.5
     hourly.index = pd.DatetimeIndex(pd.to_datetime(hourly.index.strftime("%Y-%m-%d %H") )).tz_localize('UTC')
-    return hourly.loc[year+'-01-01 00:00:00' : year + '-12-31 23:00:00']
+    if year==None:
+        return hourly
+    else:
+        return hourly.loc[year+'-01-01 00:00:00' : year + '-12-31 23:00:00']
 
 # DESINTEE saved as csv.
 

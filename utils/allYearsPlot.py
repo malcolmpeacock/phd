@@ -84,6 +84,19 @@ plt.xlabel('day', fontsize=15)
 plt.ylabel('Demand (TWh / day)', fontsize=15)
 plt.show()
 
+# scatter
+first = True
+for year in years:
+    s_size = 5
+    if first:
+        ax = plt.scatter(x=df[year].index, y=df[year], color='blue', s=s_size)
+    else:
+        ax = plt.scatter(x=df[year].index, y=df[year], color='blue', ax=ax, s=s_size)
+plt.title('Daily average and variation of electricity demand with 40 years weather')
+plt.xlabel('day', fontsize=15)
+plt.ylabel('Demand (TWh / day)', fontsize=15)
+plt.show()
+
 # monthly
 
 demand_monthly = electric_demand.resample('M').mean()

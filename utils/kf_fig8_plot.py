@@ -23,6 +23,7 @@ import bilinear2 as bil
 # process command line
 parser = argparse.ArgumentParser(description='Compare and plot scenarios')
 parser.add_argument('--last', action="store_true", dest="last", help='Only include configs which ended with store full', default=False)
+parser.add_argument('--newdays', action="store_true", dest="newdays", help='Use new set of storage days', default=False)
 parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1')
 parser.add_argument('--dir', action="store", dest="dir", help='Directory for my files', default='fixed_scaleKF')
 parser.add_argument('--electric', action="store", dest="electric", help='Electricity H=historic, S=snythetic', default='H')
@@ -30,6 +31,8 @@ parser.add_argument('--data', action="store", dest="data", help='Data to use K=K
 args = parser.parse_args()
 
 lines = [25, 30, 40, 60]
+if args.newdays:
+    lines = [4, 5, 6, 7]
 colours = ['red', 'yellow', 'green', 'blue']
 etas = [75, 85]
 styles = ['solid', 'dotted']

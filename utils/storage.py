@@ -251,3 +251,23 @@ def shiftdays(values, baseline_index, weather_index):
     
     return new_values
 
+# Compare to contour lines of equal storage based on wind and pv.
+def compare_lines(line1, line2):
+    line2_copy = line2.copy()
+    # put NaNs in then call interpolate
+    line2_copy['Pw'] = float("NaN")
+    pv_min = max(line1['Ps'].min(), line2['Ps'].min() )
+    pv_max = min(line1['Ps'].max(), line2['Ps'].max() )
+    merged = pd.concat([line1, line2_copy])
+    # sort by Ps
+    merged = merged.sort_values('Ps',ascending=True)
+    print(merged)
+    merged = merged.interpolate()
+    # get only the values in the original line 2
+    merged = pd.merge(merged, line2, how='inner', on=['Ps'])
+    # calculate mean values
+    wind_diff = (merged['Pw_x'] - merged['Pw_y']).mean()
+    ratio1  = (merged['Ps'] / merged['Pw_x']).mean()
+    ratio2  = (merged['Ps'] / merged['Pw_y']).mean()
+
+    return wind_diff, ratio1, ratio2

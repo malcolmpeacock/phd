@@ -28,8 +28,8 @@ def read_gas(filename):
     # gas = gas.resample('D').mean()
     gas = gas.resample('D').mean()
     # get smallest values to check for missing data
-    print('GAS: SMALLEST')
-    print(gas.nsmallest())
+#   print('GAS: SMALLEST')
+#   print(gas.nsmallest())
     # replace zeros with NaN
     gas = gas.replace(0.0, float("NaN"))
     # replace missing values (NaN) by interpolation
@@ -96,6 +96,9 @@ def scale_to(series, total):
 parser = argparse.ArgumentParser(description='Compare heat time series methods.')
 parser.add_argument('--gas', action="store", dest="gas", help='Method of gas heat demand a=all temp, n=no temp, c=compromise', default='c' )
 parser.add_argument('--year', action="store", dest="year", help='Year', default='2018' )
+parser.add_argument('--rolling', action="store", dest="rolling", help='Rolling average window', default=0, type=int)
+parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+
 args = parser.parse_args()
 gas_method = args.gas
 weather_year = args.year
@@ -150,8 +153,11 @@ gas = read_gas(gas_filename)
 
 # Convert gas energy from kWh to TWh
 gas_energy = gas * (10 ** -9)
+# Convert to heat energy
+gas_energy = gas_energy * 0.8
+#
 total_gas = gas_energy.sum()
-unknown_gas = total_gas - space_and_water_gas[reference_year]
+unknown_gas = total_gas - (space_and_water_gas[reference_year] * 0.8 )
 # avoid it going negative
 gas_energy_smallest = gas_energy.nsmallest(1)[0]
 non_heat_gas_per_day = min(gas_energy_smallest, unknown_gas/365.0)
@@ -191,25 +197,40 @@ print('Gas method {} heat energy total {}'.format(gas_method, gas_energy.sum() )
 # compute R2 and correlation
 
 stats.print_stats_header()
-stats.print_stats(space_and_waterR, gas_energy, 'BDEW', 2, True)
-stats.print_stats(space_and_waterW, gas_energy, 'Watson', 1, True)
-stats.print_stats(space_and_waterH, gas_energy, 'HDD 12.8', 1, True)
-stats.print_stats(space_and_waterS, gas_energy, 'HDD 15.5  ', 1, True)
+stats.print_stats(space_and_waterR, gas_energy, 'BDEW', 2, args.plot)
+stats.print_stats(space_and_waterW, gas_energy, 'Watson', 1, args.plot)
+stats.print_stats(space_and_waterH, gas_energy, 'HDD 12.8', 1, args.plot)
+stats.print_stats(space_and_waterS, gas_energy, 'HDD 15.5  ', 1, args.plot)
 
 # output plots
 
-gas_energy_comp.plot(label='Heat Demand Gas (compromise)', color='blue')
-gas_energy_const.plot(label='Heat Demand Gas (not temp)', color='blue', style='--')
-gas_energy_temp.plot(label='Heat Demand Gas (all temp)', color='blue', style='.')
+#gas_energy_comp.plot(label='Heat Demand Gas (compromise)', color='blue')
+#gas_energy_const.plot(label='Heat Demand Gas (not temp)', color='blue', style='--')
+#gas_energy_temp.plot(label='Heat Demand Gas (all temp)', color='blue', style='.')
 #gas_energy_temp.plot(label='Heat Demand Gas', color='blue')
-space_and_waterR.plot(label='Heat Demand BDEW', color='red')
-space_and_waterW.plot(label='Heat Demand Watson', color='green')
-space_and_waterH.plot(label='Heat Demand HDD 12.8', color='purple')
-space_and_waterS.plot(label='Heat Demand HDD 15.5', color='orange')
+if args.rolling == 0:
+    s_G = gas_energy_const
+    s_R = space_and_waterR
+    s_W = space_and_waterW
+    s_H = space_and_waterH
+    s_S = space_and_waterS
+else:
+    window = args.rolling
+    s_G = gas_energy_const.rolling(window, min_periods=1).mean()
+    s_R = space_and_waterR.rolling(window, min_periods=1).mean()
+    s_W = space_and_waterW.rolling(window, min_periods=1).mean()
+    s_H = space_and_waterH.rolling(window, min_periods=1).mean()
+    s_S = space_and_waterS.rolling(window, min_periods=1).mean()
+
+s_G.plot(label='Heat Demand Gas', color='blue')
+s_R.plot(label='Heat Demand BDEW', color='red')
+s_W.plot(label='Heat Demand Watson', color='green')
+s_H.plot(label='Heat Demand HDD 12.8', color='purple')
+s_S.plot(label='Heat Demand HDD 15.5', color='orange')
 plt.title('Comparison of Heat Demand Methods')
 plt.xlabel('Day of the year', fontsize=15)
 plt.ylabel('Heat Demand (TWh)', fontsize=15)
-plt.legend(loc='upper right', fontsize=15)
+plt.legend(loc='upper center', fontsize=15)
 plt.show()
 
 # monthly nRMSE
@@ -245,10 +266,10 @@ space_and_waterS.sort_values(ascending=False, inplace=True)
 
 # gas_energy.plot(label='Gas Energy', use_index=False, style='--', fontsize=18)
 # fontsize here only affects the numbers
-gas_energy_comp.plot(label='Heat Demand Gas (compromise)', use_index=False, color='blue')
-gas_energy_const.plot(label='Heat Demand Gas (not temp)', use_index=False, style='--', color='blue')
-gas_energy_temp.plot(label='Heat Demand Gas (all temp)', use_index=False, style='.', color='blue')
-#gas_energy_temp.plot(label='Heat Demand Gas', use_index=False, color='blue')
+#gas_energy_comp.plot(label='Heat Demand Gas (compromise)', use_index=False, color='blue')
+#gas_energy_const.plot(label='Heat Demand Gas (not temp)', use_index=False, style='--', color='blue')
+#gas_energy_temp.plot(label='Heat Demand Gas (all temp)', use_index=False, style='.', color='blue')
+gas_energy_const.plot(label='Heat Demand Gas', use_index=False, color='blue')
 space_and_waterR.plot(label='Heat Demand BDEW', use_index=False, color='red')
 space_and_waterW.plot(label='Heat Demand Watson', use_index=False, color='green')
 space_and_waterH.plot(label='Heat Demand HDD 12.8', use_index=False, color='purple')
