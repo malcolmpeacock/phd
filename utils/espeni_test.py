@@ -36,5 +36,9 @@ plt.ylabel('Electricity Demand ', fontsize=15)
 # plt.legend(loc='upper right')
 plt.show()
 
-output_filename = '/home/malcolm/uclan/output/timeseries/historic_demand.csv'
+output_filename = '/home/malcolm/uclan/output/timeseries/historic_demand_hourly.csv'
 espini.to_csv(output_filename)
+
+daily = espini.resample('D').sum()
+output_filename = '/home/malcolm/uclan/output/timeseries/historic_demand_daily.csv'
+daily.to_csv(output_filename)

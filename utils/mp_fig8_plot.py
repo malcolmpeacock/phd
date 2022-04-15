@@ -55,7 +55,8 @@ for eta in etas:
     print('Synthetic time series {} values'.format(len(mp)))
     for line in lines:
         points = storage.storage_line(mp,line, args.sline, 'f_wind', 'f_pv')
-        print('Line {} points {} '.format(line, len(points) ) )
+        print('Line {} points {} last {} to {} zero {} '.format(line, len(points), points['last'].min(), points['last'].max(), len(points[points['last']==0.0]) ) )
+#       print(points)
         x_var = 'Pw'
         y_var = 'Ps'
         if first:

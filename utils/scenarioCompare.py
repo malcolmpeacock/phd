@@ -18,6 +18,20 @@ import stats
 import readers
 import storage
 
+def get_viable(df, last, days):
+    if args.last == 'full':
+        pdf = df[df['last']==0.0]
+    else:
+        if args.last == 'p3':
+            if args.days>0:
+                last_val = args.days * 0.03
+            else:
+                last_val = 25 * 0.03
+            pdf = df[df['last']>-last_val]
+        else:
+            pdf = df
+    return pdf
+
 # scale to attempt to reproduce KF plot
 def scalekf(df):
     kf_p = 0.116
@@ -57,7 +71,7 @@ parser.add_argument('--scenario', action="store", dest="scenario", help='Scenari
 parser.add_argument('--days', action="store", dest="days", help='Days of storage line to plot', default=0.0, type=float)
 parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1')
 parser.add_argument('--adverse', action="store", dest="adverse", help='Adverse file mnemonic', default='5s1')
-parser.add_argument('--last', action="store_true", dest="last", help='Only include configs which ended with store full', default=False)
+parser.add_argument('--last', action="store", dest="last", help='Only include configs which ended with store: any, full, 2p=2% full ', default='3p')
 args = parser.parse_args()
 
 # scenario files
@@ -95,6 +109,11 @@ ninja75 = 'ninja75/'
 #            'PNS' : 'Synthetic Time Series From Weather + heat'
 #           }
 #scenarios = {'HNS' : {'file': 'HNS', 'dir' : hvh, 'title': 'Half heat pumps, half hydrogen'}, 'PNS' : {'file': 'PNS', 'dir' : hvh, 'title': 'All heat pumps'}, 'FNS' : {'file': 'FNS', 'dir' : hvh, 'title': 'FES 2019 Net Zero: heat pumps, hydrogen and hybrid heat pumps'} }
+if args.scenario == 'new':
+    scenarios = {'old' :
+       {'file': 'ENS', 'dir' : 'temp/', 'title': 'Existing heating 0.75 Old model'},
+                 'new' : 
+       {'file': 'ENS', 'dir' : 'new_model/', 'title': 'Existing heating 0.75 new model'}    }
 if args.scenario == 'halfhp':
     scenarios = {'allS75' :
        {'file': 'ENS', 'dir' : 'allS75/', 'title': 'Existing heating 0.75'},
@@ -251,10 +270,17 @@ for key, scenario in scenarios.items():
     else:
         gen_cap[key] = wind_at_1['gw_wind'].values[0]
 
-    if args.last:
+    if args.last == 'full':
         viable = df[df['last']==0.0]
     else:
-        viable = df
+        if args.last == 'p3':
+            if args.days>0:
+                last_val = args.days * 0.03
+            else:
+                last_val = 25 * 0.03
+            viable = df[df['last']>-last_val]
+        else:
+            viable = df
     zero = df[df['storage']==0.0]
 #   print(df[['f_pv', 'f_wind', 'storage']])
     dfs[key] = viable
@@ -273,7 +299,8 @@ if args.plot:
     for key, scenario in scenarios.items():
         label = scenario['title']
         df = dfs[key]
-        pdf = df[df['storage']<200]
+        pdf = get_viable(df, args.last, args.days)
+        pdf = pdf[pdf['storage']>0.0]
         scatterHeat(pdf, 'storage', 'Storage in days ', label, args.annotate)
 
 if args.plot:
@@ -354,7 +381,12 @@ for key, scenario in scenarios.items():
     days = 40.0
     if args.days>0.0:
         days = args.days
-    storage_40 = storage.storage_line(df, days, args.sline, wind_parm, pv_parm)
+    if scenario['dir'] == 'new_model/' : 
+        print('Copy contour for new model')
+        storage_40 = df[['f_pv','f_wind','last']]
+        storage_40.columns = ['Ps', 'Pw', 'last']
+    else:
+        storage_40 = storage.storage_line(df, days, args.sline, wind_parm, pv_parm)
     print(' {: <12} {}           {:.2f}'.format(key, len(storage_40), generation_capacity ) )
     if args.kf:
         scalekf(storage_40)
@@ -519,3 +551,29 @@ for key, scenario in scenarios.items():
 
 wind_diff, ratio1, ratio2 = storage.compare_lines(line1, line2)
 print('Difference in wind {:.2f} pv/wind {:.2f} {:.2f} '.format(wind_diff, ratio1, ratio2) )
+
+# scatter plot of storage and energy
+if args.plot:
+    for key, scenario in scenarios.items():
+        label = scenario['title']
+        df = dfs[key]
+        pdf = get_viable(df, args.last, args.days)
+        pdf['energy'] = (pdf['f_wind'] / 0.38) + ( pdf['f_pv'] / 0.1085 )
+        pdf['ratio'] = pdf['f_wind'] / pdf['f_pv']
+        pdf.plot.scatter(x='energy', y='storage', c='ratio', colormap='viridis')
+        plt.xlabel('Energy generated')
+        plt.ylabel('Storage days')
+        plt.title('Colour by ratio wind/pv {}  '.format(label))
+        plt.show()
+
+# scatter plot of storage and wind
+if args.plot:
+    for key, scenario in scenarios.items():
+        label = scenario['title']
+        df = dfs[key]
+        pdf = get_viable(df, args.last, args.days)
+        pdf.plot.scatter(x='f_wind', y='storage', c='f_pv', colormap='viridis')
+        plt.xlabel('Normalised Wind Capacity')
+        plt.ylabel('Storage days')
+        plt.title('{}  '.format(label))
+        plt.show()
