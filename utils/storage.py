@@ -101,6 +101,7 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
 #       print('storage_line for {} days '.format(storage_value) )
         x=[]
         y=[]
+        last=[]
         # for each wind value ...
         wind_values = df[wind_parm].unique()
 #   for i_wind in range(0,14):
@@ -114,17 +115,21 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
             if storage_value < df_xs['storage'].max() and storage_value > df_xs['storage'].min():
                 # sort them by storage
                 df_xs = df_xs.sort_values('storage',ascending=False)
-#               if storage_value==25:
-#                   print(df_xs[['f_pv', 'f_wind', 'storage']])
                 # interpolate a pv value for the storage
                 y_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs[pv_parm])
                 f_pv = y_interp(storage_value)
                 # store the points
                 x.append(f_wind)
                 y.append(f_pv.item())
+                # interpolate a 'last' value for the storage
+                l_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['last'])
+                f_last = l_interp(storage_value)
+
+                last.append(f_last.item())
 #               print('Point: f_wind {} f_pv {}'.format(f_wind, f_pv.item()) )
 
-        sline = { 'Pw' : x, 'Ps' :y }
+#       sline = { 'Pw' : x, 'Ps' :y }
+        sline = { 'Pw' : x, 'Ps' :y, 'last' :last }
         df = pd.DataFrame(data=sline)
         df = df.sort_values(['Ps', 'Pw'], ascending=[True, True])
 #   print('Line: Pw max {} min {} '.format(df['Pw'].max(), df['Pw'].min() ) )
@@ -261,8 +266,11 @@ def compare_lines(line1, line2):
     merged = pd.concat([line1, line2_copy])
     # sort by Ps
     merged = merged.sort_values('Ps',ascending=True)
-    print(merged)
+#   print(merged)
     merged = merged.interpolate()
+#   print(merged)
+    merged.dropna(subset=['Pw'], inplace=True)
+#   print(merged)
     # get only the values in the original line 2
     merged = pd.merge(merged, line2, how='inner', on=['Ps'])
     # calculate mean values
@@ -271,3 +279,107 @@ def compare_lines(line1, line2):
     ratio2  = (merged['Ps'] / merged['Pw_y']).mean()
 
     return wind_diff, ratio1, ratio2
+
+# new storage model which finds pv and wind combinations matching a set list
+# of storage values
+
+def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.0, hydrogen=None, method='kf'):
+    print('storage_grid new: demand max {} min {} mean {}'.format(demand.max(), demand.min(), demand.mean()) )
+    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [] }
+    # For hourly the storage will be in hours, so divide by 24 to convert to 
+    # days
+    if hourly:
+        store_factor = 1 / 24
+    else:
+        store_factor = 1
+
+    # For each contour ...
+    days = [30]
+    for store_size in days:
+        # For each percent of PV
+        for i_pv in range(0,grid):
+            f_pv = i_pv * step
+      
+            # try different amounts of wind 
+            wind_max = grid * step
+            wind_min = max( 1 - f_pv, 0.0 )
+            f_wind = wind_max
+            balanced, store_hist = storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, store_size)
+            if not balanced:
+                print(' No solution found for pv {} '.format(f_pv) )
+            else:
+                while abs(wind_max - wind_min) > 0.1:
+                    sys.stdout.write('\rCalculating f_pv {:.2f} f_wind {:.2f} '.format(f_pv, f_wind) )
+                    balanced, store_hist = storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, store_size)
+                    if balanced:
+                        wind_max = f_wind
+                    else:
+                        wind_min = f_wind
+                    f_wind = ( wind_max + wind_min ) / 2.0
+                    # add or subtract wind untill less than something
+
+                print(" ")
+                print('Got balance at f_wind {}'.format(f_wind) )
+                store_last = store_hist.iat[-1] * store_factor
+                store_remaining = store_size - store_last * -1.0
+
+                #  rate of charge or discharge in a period
+                charge=0.0
+                #  TODO discharge needs splitting into hydrogen for boilers and
+                #  hydrogen for electricity to estimate generation capacity
+                discharge=0.0
+                rate = store_hist.diff()
+                plus_rates = rate[rate>0]
+                if len(plus_rates)>0:
+                    charge = plus_rates.max()
+                minus_rates = rate[rate<0]
+                if len(minus_rates)>0:
+                    discharge = minus_rates.min() * -1.0
+                # store the results
+                results['f_pv'].append(f_pv)
+                results['f_wind'].append(f_wind)
+                results['storage'].append(store_size)
+                results['last'].append(store_last)
+                results['charge'].append(charge)
+                results['discharge'].append(discharge)
+                wind_energy = wind * f_wind
+                pv_energy = pv * f_pv
+                results['wind_energy'].append(wind_energy.sum() / demand.sum())
+                results['pv_energy'].append(pv_energy.sum() / demand.sum())
+
+    df = pd.DataFrame(data=results)
+    return df
+
+def storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, capacity):
+    # energy supply is calculated using the capacity factors
+    wind_energy = wind * f_wind
+    pv_energy = pv * f_pv
+    supply = wind_energy + pv_energy
+    net_demand = demand - supply - base
+    history = net_demand.copy()
+    store = capacity / 2.0
+    eta_charge = eta
+    eta_discharge = eta
+    count=0
+    for index, value in net_demand.items():
+        # Note: both subtract because value is negative in the 2nd one!
+        if value > 0.0:        # demand exceeds supply : take from store
+                               # discharge, so divide by eta - take more out
+            store = store - value / eta_discharge
+            if store<0:
+                balanced=False
+                return balanced, history
+        else:                  # supply exceeds demand : add to store
+                               # charge, so multiply by eta - put less in
+            store = store - value * eta_charge
+            if store>capacity:
+                store=capacity
+        # take hydrogen out of the store
+        if hydrogen is not None:
+            store = store - hydrogen.iat[count] / eta_discharge
+            if store<0:
+                balanced=False
+                return balanced, history
+        history.iat[count] = store
+        count += 1
+    return True, history
