@@ -293,8 +293,10 @@ def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, bas
     else:
         store_factor = 1
 
+    # threshold for minimum distance between pv values.
+    threshold = 0.01
     # For each contour ...
-    days = [30]
+    days = [3, 10, 25, 30]
     for store_size in days:
         # For each percent of PV
         for i_pv in range(0,grid):
@@ -303,13 +305,14 @@ def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, bas
             # try different amounts of wind 
             wind_max = grid * step
             wind_min = max( 1 - f_pv, 0.0 )
+#           wind_min = 0.0
             f_wind = wind_max
             balanced, store_hist = storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, store_size)
             if not balanced:
-                print(' No solution found for pv {} '.format(f_pv) )
+                print(' No solution found for {} days, pv {} '.format(store_size, f_pv) )
             else:
-                while abs(wind_max - wind_min) > 0.1:
-                    sys.stdout.write('\rCalculating f_pv {:.2f} f_wind {:.2f} '.format(f_pv, f_wind) )
+                while abs(wind_max - wind_min) > threshold:
+                    sys.stdout.write('\rCalculating {} days f_pv {:.2f} f_wind {:.2f} '.format(store_size, f_pv, f_wind) )
                     balanced, store_hist = storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, store_size)
                     if balanced:
                         wind_max = f_wind
@@ -357,6 +360,7 @@ def storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, capacit
     supply = wind_energy + pv_energy
     net_demand = demand - supply - base
     history = net_demand.copy()
+    # store starts half full
     store = capacity / 2.0
     eta_charge = eta
     eta_discharge = eta
@@ -366,12 +370,14 @@ def storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, capacit
         if value > 0.0:        # demand exceeds supply : take from store
                                # discharge, so divide by eta - take more out
             store = store - value / eta_discharge
+            # stop because we don't have enough storage
             if store<0:
                 balanced=False
                 return balanced, history
         else:                  # supply exceeds demand : add to store
                                # charge, so multiply by eta - put less in
             store = store - value * eta_charge
+            # don't overfill the store
             if store>capacity:
                 store=capacity
         # take hydrogen out of the store
@@ -382,4 +388,6 @@ def storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, capacit
                 return balanced, history
         history.iat[count] = store
         count += 1
-    return True, history
+    balanced = store>capacity/2
+#   balanced = True
+    return balanced, history

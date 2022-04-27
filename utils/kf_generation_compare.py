@@ -79,6 +79,7 @@ wcf4 = 0.37
 wcf5 = 0.49
 wcf6 = 0.39
 wind_cf = (wcf1 + wcf2 + wcf3 + wcf4 + wcf5 + wcf6) / 6
+wind_cf = 0.28
 
 print('Capacity Factor : wind {} pv {}'.format(wind_cf, pv_cf ) )
 ninja_wind_cf = ninja_wind.mean()

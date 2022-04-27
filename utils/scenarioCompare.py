@@ -71,7 +71,7 @@ parser.add_argument('--scenario', action="store", dest="scenario", help='Scenari
 parser.add_argument('--days', action="store", dest="days", help='Days of storage line to plot', default=0.0, type=float)
 parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1')
 parser.add_argument('--adverse', action="store", dest="adverse", help='Adverse file mnemonic', default='5s1')
-parser.add_argument('--last', action="store", dest="last", help='Only include configs which ended with store: any, full, 2p=2% full ', default='3p')
+parser.add_argument('--last', action="store", dest="last", help='Only include configs which ended with store: any, full, 3p=3% full ', default='3p')
 args = parser.parse_args()
 
 # scenario files
@@ -109,11 +109,23 @@ ninja75 = 'ninja75/'
 #            'PNS' : 'Synthetic Time Series From Weather + heat'
 #           }
 #scenarios = {'HNS' : {'file': 'HNS', 'dir' : hvh, 'title': 'Half heat pumps, half hydrogen'}, 'PNS' : {'file': 'PNS', 'dir' : hvh, 'title': 'All heat pumps'}, 'FNS' : {'file': 'FNS', 'dir' : hvh, 'title': 'FES 2019 Net Zero: heat pumps, hydrogen and hybrid heat pumps'} }
+if args.scenario == 'new3':
+    scenarios = {'old' :
+       {'file': 'ENS', 'dir' : 'temp/', 'title': 'Existing heating 0.75 Old model'},
+                 'half' : 
+       {'file': 'ENS', 'dir' : 'new_model/end_half/', 'title': 'Existing heating 0.75 New model - half'},
+                 'any' : 
+       {'file': 'ENS', 'dir' : 'new_model/end_any/', 'title': 'Existing heating 0.75 new model - any'}    }
+if args.scenario == 'newdecade':
+    scenarios = {'old' :
+       {'file': 'ENS', 'dir' : 'decade1/', 'title': 'Existing heating 0.75 old model 1980 - 1989'},
+                 'new' : 
+       {'file': 'ENS', 'dir' : 'new_model/decade1/', 'title': 'Existing heating 0.75 new model 1980 - 1989'}    }
 if args.scenario == 'new':
     scenarios = {'old' :
        {'file': 'ENS', 'dir' : 'temp/', 'title': 'Existing heating 0.75 Old model'},
                  'new' : 
-       {'file': 'ENS', 'dir' : 'new_model/', 'title': 'Existing heating 0.75 new model'}    }
+       {'file': 'ENS', 'dir' : 'new_model/end_half/', 'title': 'Existing heating 0.75 new model'}    }
 if args.scenario == 'halfhp':
     scenarios = {'allS75' :
        {'file': 'ENS', 'dir' : 'allS75/', 'title': 'Existing heating 0.75'},
@@ -129,15 +141,24 @@ if args.scenario == 'decades':
        {'file': 'ENS', 'dir' : 'decade1/', 'title': 'Existing heating 1980 - 1989'},
                  'decade4' : 
        {'file': 'ENS', 'dir' : 'decade4/', 'title': 'Existing heating 2010 - 2019'}    }
-if args.scenario == 'decadesn':
+if args.scenario == 'decades4':
     scenarios = {'decade1' :
-       {'file': 'NNS', 'dir' : 'decade1/', 'title': 'No heating 1980 - 1989'},
+       {'file': 'ENS', 'dir' : 'decade1/', 'title': 'Existing heating 1980 - 1989'},
                  'decade2' : 
-       {'file': 'NNS', 'dir' : 'decade2/', 'title': 'No heating 1990 - 1999'},
+       {'file': 'ENS', 'dir' : 'decade2/', 'title': 'Existing heating 1990 - 1999'},
                  'decade3' : 
-       {'file': 'NNS', 'dir' : 'decade3/', 'title': 'No heating 2000 - 2019'},
+       {'file': 'ENS', 'dir' : 'decade3/', 'title': 'Existing heating 2000 - 2019'},
                  'decade4' : 
-       {'file': 'NNS', 'dir' : 'decade4/', 'title': 'No heating 2010 - 2019'}    }
+       {'file': 'ENS', 'dir' : 'decade4/', 'title': 'Existing heating 2010 - 2019'}    }
+if args.scenario == 'decadesnew':
+    scenarios = {'decade1' :
+       {'file': 'ENS', 'dir' : 'new_model/decade1/', 'title': 'Existing heating 1980 - 1989'},
+                 'decade2' : 
+       {'file': 'ENS', 'dir' : 'new_model/decade2/', 'title': 'Existing heating 1990 - 1999'},
+                 'decade3' : 
+       {'file': 'ENS', 'dir' : 'new_model/decade3/', 'title': 'Existing heating 2000 - 2019'},
+                 'decade4' : 
+       {'file': 'ENS', 'dir' : 'new_model/decade4/', 'title': 'Existing heating 2010 - 2019'}    }
 if args.scenario == 'historic':
     scenarios = {'historic' :
        {'file': 'ENH', 'dir' : ninja85, 'title': 'Historic time series'},
@@ -381,12 +402,15 @@ for key, scenario in scenarios.items():
     days = 40.0
     if args.days>0.0:
         days = args.days
-    if scenario['dir'] == 'new_model/' : 
-        print('Copy contour for new model')
-        storage_40 = df[['f_pv','f_wind','last']]
+    if scenario['dir'][0:4] == 'new_' : 
+#       print('Copy contour for new model')
+        storage_40 = df[df['storage'] == days]
+        storage_40 = storage_40[['f_pv','f_wind','last']]
         storage_40.columns = ['Ps', 'Pw', 'last']
+        storage_40 = storage_40.sort_values(['Ps', 'Pw'], ascending=[True, True])
     else:
         storage_40 = storage.storage_line(df, days, args.sline, wind_parm, pv_parm)
+    # TODO output wind/pv ratio as well as generation capacity.
     print(' {: <12} {}           {:.2f}'.format(key, len(storage_40), generation_capacity ) )
     if args.kf:
         scalekf(storage_40)
