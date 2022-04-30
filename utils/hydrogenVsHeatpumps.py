@@ -447,15 +447,13 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
     else:
         print('Base load Zero')
         if args.storage == 'new':
-            df= storage.storage_grid_new(all_demand, wind, pv, eta, hourly, grid, step, 0.0, h_input, args.storage)
+            df, sample_hist = storage.storage_grid_new(all_demand, wind, pv, eta, hourly, grid, step, 0.0, h_input, args.constraints, args.wind, args.pv, args.threshold)
         else:
-            df= storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, 0.0, h_input, args.storage)
+            df, sample_hist = storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, 0.0, h_input, args.storage, args.wind, args.pv)
 
     # store actual capacity in GW
     df['gw_wind'] = df['f_wind'] * normalise_factor / ( 24 * 1000.0 )
     df['gw_pv'] = df['f_pv'] * normalise_factor / ( 24 * 1000.0 )
-
-    
 
     # store yearly values
     yearly_data = { 'year'   : total_heat_demand_years.keys(),
@@ -467,7 +465,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
                     'dec31_pv'     :    dec31_pv.values(),
                     'dec31_demand' :    dec31_demand.values()  }
     yd = pd.DataFrame(yearly_data).set_index('year')
-    return df, yd, all_demand, all_hydrogen
+    return df, yd, all_demand, all_hydrogen, sample_hist
 
 # main program
 
@@ -499,6 +497,7 @@ parser.add_argument('--genh', action="store_true", dest="genh", help='Assume hyd
 parser.add_argument('--normalise', action="store", dest="normalise", help='Method of normalise by: annual, peak, kf.', default='annual')
 parser.add_argument('--scale', action="store", dest="scale", help='How to scale : average (energy over the period), reference (year) or kf.', default="reference")
 parser.add_argument('--storage', action="store", dest="storage", help='Storage model kf , mp or new', default="kf")
+parser.add_argument('--constraints', action="store", dest="constraints", help='Constraints on new storage model: new or old', default="new")
 parser.add_argument('--eta', action="store", dest="eta", help='Round Trip Efficiency.', type=int, default=85)
 parser.add_argument('--grid', action="store", dest="grid", help='Number of pionts in grid.', type=int, default=60)
 parser.add_argument('--step', action="store", dest="step", help='Step size.', type=float, default=0.1)
@@ -507,6 +506,9 @@ parser.add_argument('--kf2', action="store_true", dest="kf2", help='Scale the ge
 parser.add_argument('--onshore', action="store_true", dest="onshore", help='Use only onshore wind', default=False)
 parser.add_argument('--kfgen', action="store_true", dest="kfgen", help='Use KF generation from matlab', default=False)
 parser.add_argument('--shift', action="store_true", dest="shift", help='Shift the days to match weather calender', default=False)
+parser.add_argument('--wind', action="store", dest="wind", help='Wind value of store history to output', type=float, default=2.0)
+parser.add_argument('--pv', action="store", dest="pv", help='Pv value of store history to output', type=float, default=3.0)
+parser.add_argument('--threshold', action="store", dest="threshold", help='Threshold for considering 2 wind values the same in new storage model', type=float, default=0.01)
 
 args = parser.parse_args()
 
@@ -858,7 +860,7 @@ else:
         wind = wind.resample('D').mean()
         pv = pv.resample('D').mean()
 
-df, yd, all_demand, all_hydrogen = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, ref_temperature, args.climate, args.historic, heat_that_is_electric, normalise_factor, args.base)
+df, yd, all_demand, all_hydrogen, sample_hist = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, ref_temperature, args.climate, args.historic, heat_that_is_electric, normalise_factor, args.base)
 print("Max storage {} Min Storage {}".format(df['storage'].max(), df['storage'].min()) )
 
 output_dir = "/home/malcolm/uclan/output/" + args.dir
@@ -876,6 +878,7 @@ yd.to_csv('{}/yearly{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, el
 df.to_csv('{}/shares{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
 all_demand.to_csv('{}/demand{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
 all_hydrogen.to_csv('{}/hydrogen{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
+sample_hist.to_csv('{}/store{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
 
 ## TODO wasserstein distance of heat demand to see if it changes over the
 ##      years.

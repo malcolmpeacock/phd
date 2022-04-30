@@ -60,6 +60,7 @@ def scatterHeat(df, variable, title, label, annotate=False):
 # process command line
 parser = argparse.ArgumentParser(description='Compare and plot scenarios')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--pstore', action="store_true", dest="pstore", help='Plot the sample store history ', default=False)
 parser.add_argument('--pfit', action="store_true", dest="pfit", help='Show 2d plots', default=False)
 parser.add_argument('--yearly', action="store_true", dest="yearly", help='Show Yearly plots', default=False)
 parser.add_argument('--energy', action="store_true", dest="energy", help='Plot energy instead of capacity', default=False)
@@ -109,11 +110,13 @@ ninja75 = 'ninja75/'
 #            'PNS' : 'Synthetic Time Series From Weather + heat'
 #           }
 #scenarios = {'HNS' : {'file': 'HNS', 'dir' : hvh, 'title': 'Half heat pumps, half hydrogen'}, 'PNS' : {'file': 'PNS', 'dir' : hvh, 'title': 'All heat pumps'}, 'FNS' : {'file': 'FNS', 'dir' : hvh, 'title': 'FES 2019 Net Zero: heat pumps, hydrogen and hybrid heat pumps'} }
-if args.scenario == 'new3':
+if args.scenario == 'new4':
     scenarios = {'old' :
        {'file': 'ENS', 'dir' : 'temp/', 'title': 'Existing heating 0.75 Old model'},
                  'half' : 
        {'file': 'ENS', 'dir' : 'new_model/end_half/', 'title': 'Existing heating 0.75 New model - half'},
+                 'old2' : 
+       {'file': 'ENS', 'dir' : 'new_model/old/', 'title': 'Existing heating 0.75 New model - old constraints'},
                  'any' : 
        {'file': 'ENS', 'dir' : 'new_model/end_any/', 'title': 'Existing heating 0.75 new model - any'}    }
 if args.scenario == 'newdecade':
@@ -126,6 +129,21 @@ if args.scenario == 'new':
        {'file': 'ENS', 'dir' : 'temp/', 'title': 'Existing heating 0.75 Old model'},
                  'new' : 
        {'file': 'ENS', 'dir' : 'new_model/end_half/', 'title': 'Existing heating 0.75 new model'}    }
+if args.scenario == 'newold':
+    scenarios = {'old' :
+       {'file': 'ENS', 'dir' : 'temp/', 'title': 'Existing heating 0.75 Old model'},
+                 'new' : 
+       {'file': 'ENS', 'dir' : 'new_model/old/', 'title': 'Existing heating 0.75 new model with old constraints'}    }
+if args.scenario == 'newfig8':
+    scenarios = {'old' :
+       {'file': 'NNH', 'dir' : 'old_fig8S75/', 'title': 'As per KF paper Old storage model'},
+                 'new' : 
+       {'file': 'NNH', 'dir' : 'new_fig8S75/', 'title': 'As per KF paper New storage model with old constraints'}    }
+if args.scenario == 'newallS85':
+    scenarios = {'old' :
+       {'file': 'ENS', 'dir' : 'allS85/', 'title': 'Ninja, synthetic 0.75 Old storage model'},
+                 'new' : 
+       {'file': 'ENS', 'dir' : 'new_allS85/', 'title': 'Ninja, synthetic 0.75 New storage model with old constraints'}    }
 if args.scenario == 'halfhp':
     scenarios = {'allS75' :
        {'file': 'ENS', 'dir' : 'allS75/', 'title': 'Existing heating 0.75'},
@@ -407,7 +425,8 @@ for key, scenario in scenarios.items():
         storage_40 = df[df['storage'] == days]
         storage_40 = storage_40[['f_pv','f_wind','last']]
         storage_40.columns = ['Ps', 'Pw', 'last']
-        storage_40 = storage_40.sort_values(['Ps', 'Pw'], ascending=[True, True])
+#       storage_40 = storage_40.sort_values(['Ps', 'Pw'], ascending=[True, True])
+        storage_40 = storage_40.sort_values(['Pw', 'Ps'], ascending=[True, True])
     else:
         storage_40 = storage.storage_line(df, days, args.sline, wind_parm, pv_parm)
     # TODO output wind/pv ratio as well as generation capacity.
@@ -516,9 +535,9 @@ if args.yearly:
         df = yearly_dfs[key]
         df['dec31_wind'].plot(label='December 3st wind'.format(label) )
         df['dec31_pv'].plot(label='December 3st pv'.format(label) )
-        df['dec31_demand'].plot(label='December 31st demand'.format(label) )
+#       df['dec31_demand'].plot(label='December 31st demand'.format(label) )
 
-    plt.title('December 31st Demand and generation')
+    plt.title('December 31st Generation')
     plt.xlabel('year', fontsize=15)
     plt.ylabel('Normalised Energy', fontsize=15)
     plt.legend(loc='upper left', fontsize=15)
@@ -601,3 +620,19 @@ if args.plot:
         plt.ylabel('Storage days')
         plt.title('{}  '.format(label))
         plt.show()
+
+# sample store history
+if args.pstore:
+    for key, scenario in scenarios.items():
+        label = scenario['title']
+        filename = scenario['file']
+        path = '{}/{}/store{}.csv'.format(output_dir, folder, filename)
+        store = pd.read_csv(path, header=0, index_col=0, squeeze=True)
+        store.index = pd.DatetimeIndex(pd.to_datetime(store.index).date)
+        store.plot(label='Store size: {}'.format(label) )
+
+    plt.xlabel('Time')
+    plt.ylabel('Storage days')
+    plt.title('Store history ')
+    plt.legend(loc='lower left', fontsize=15)
+    plt.show()
