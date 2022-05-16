@@ -5,16 +5,15 @@
 import sys
 import pandas as pd
 from datetime import datetime
-# import pytz
 import matplotlib.pyplot as plt
-# import statsmodels.api as sm
 import numpy as np
 import scipy.interpolate
+import calendar
 
 # custom code
 import stats
 import readers
-from misc import upsample_df
+#from misc import upsample_df
 
 # check that the store returns to zero at least once per year
 
@@ -218,9 +217,9 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
     return df, sample_hist
 
 # Shift days so that days of the week pattern is continued
-#   baseline    - original baseline demand.
-#   synthesised - modified baseline including heat and with index
-#                 from weather year.
+#   values         - original baseline demand.
+#   baseline_index - index of the baseline ie 2018
+#   weather_index  - index of the year to shift to
 
 def shiftdays(values, baseline_index, weather_index):
     # these days we don't want to shift so over write
@@ -269,12 +268,14 @@ def compare_lines(line1, line2):
     line2_copy = line2.copy()
     # put NaNs in then call interpolate
     line2_copy['Pw'] = float("NaN")
-    pv_min = max(line1['Ps'].min(), line2['Ps'].min() )
-    pv_max = min(line1['Ps'].max(), line2['Ps'].max() )
+#   pv_min = max(line1['Ps'].min(), line2['Ps'].min() )
+#   pv_max = min(line1['Ps'].max(), line2['Ps'].max() )
     merged = pd.concat([line1, line2_copy])
     # sort by Ps
     merged = merged.sort_values('Ps',ascending=True)
 #   print(merged)
+    # calculate the wind values for the pv values from line2 which are 
+    # by linear interpolation from the wind value in line1
     merged = merged.interpolate()
 #   print(merged)
     merged.dropna(subset=['Pw'], inplace=True)
@@ -372,13 +373,19 @@ def storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, capacit
 
     # settings
     if constraints == 'new':
-        # store starts half full and ends greater than half full
-        store_start = capacity / 2.0
-        store_end = capacity / 2.0
+        # store starts 70% full and ends greater than 70% full
+        store_start = capacity * 0.7
+        store_end = capacity * 0.7
     else:
-        # store starts full and ends 97% full
-        store_start = capacity
-        store_end = capacity * 0.97
+        if constraints == 'old':
+            # store starts full and ends 97% full
+            store_start = capacity
+            store_end = capacity * 0.97
+        else:
+            fraction = float(constraints)
+            store_start = capacity * fraction
+            store_end = capacity * fraction
+
 
     # energy supply is calculated using the capacity factors
     wind_energy = wind * f_wind
@@ -415,3 +422,153 @@ def storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, capacit
         count += 1
     balanced = store>store_end
     return balanced, history
+
+# Given the 2018 baseline, create a baseline for the given year accounting
+# for leap years and shifting weekly pattern if requested
+#
+# baseline   - pd.Series - baseline electricity demand
+# year       - 4 digit year 
+# year_index - index for the year
+# shift      - if the weekly pattern should be shifted 
+# hourly     - if the time series is hourly
+
+def ref_baseline(baseline, year, year_index, shift=False, hourly=True):
+
+    if calendar.isleap(year):
+        # leap year
+        # create a feb 29th by interpolating between feb 28th and Mar 1st
+        # find doy for feb 28th ( 31 days in jan )
+        ordinary_year = baseline.values
+        feb28 = 31 + 28
+        if hourly:
+            feb28 = baseline['2018-02-28'].values
+            mar1 = baseline['2018-03-01'].values
+            feb29 = np.add(feb28, mar1) * 0.5
+            year_values = np.concatenate([baseline['2018-01-01 00:00' : '2018-02-28 23:00'].values, feb29,  baseline['2018-03-01 00:00' : '2018-12-31 23:00'].values])
+        else:
+            feb29 = (ordinary_year[feb28-1] + ordinary_year[feb28]) * 0.5
+            feb29a = np.array([feb29])
+            year_values = np.concatenate([ordinary_year[0:feb28], feb29a, ordinary_year[feb28:] ] )
+
+    else:
+    # ordinary year
+        year_values = baseline.values
+
+    # Shift for days of the week here to match weather year
+    if shift:
+        year_values = shiftdays(year_values, baseline.index, year_index)
+
+    # Convert to a series
+    year_baseline = pd.Series(year_values, index=year_index)
+
+    return year_baseline
+
+# Given a years baseline, convert it into a 2018 baseline accounting
+# for leap years and shifting weekly pattern if requested
+#
+# baseline   - pd.Series - baseline electricity demand
+# year       - 4 digit year 
+# year_index - index for the year
+# shift      - if the weekly pattern should be shifted 
+# hourly     - if the time series is hourly
+
+def year_baseline(baseline, year, ref_index, shift=False, hourly=True):
+
+    if calendar.isleap(year):
+        # leap year
+        # remove feb 29th
+        # find doy for feb 28th ( 31 days in jan )
+        ordinary_year = baseline.values
+        feb28 = 31 + 28
+        if hourly:
+            year_values = np.concatenate([baseline['{}-01-01 00:00'.format(year) : '{}-02-28 23:00'.format(year)].values, baseline['{}-03-01 00:00'.format(year) : '{}-12-31 23:00'.format(year)].values])
+        else:
+            year_values = np.concatenate([ordinary_year[0:feb28], ordinary_year[feb28:] ] )
+
+    else:
+    # ordinary year
+        year_values = baseline.values
+
+    # Shift for days of the week here to match weather year
+    if shift:
+        year_values = shiftdays_match(year_values, ref_index, baseline.index)
+
+    # Convert to a series
+    year_baseline = pd.Series(year_values, index=ref_index)
+
+    return year_baseline
+
+def remove_feb29(series, year, hourly=True):
+
+    if calendar.isleap(year):
+        # leap year
+        # remove feb 29th
+        # find doy for feb 28th ( 31 days in jan )
+        ordinary_year = series.values
+        feb28 = 31 + 28
+        if hourly:
+            year_values = np.concatenate([series['{}-01-01 00:00'.format(year) : '{}-02-28 23:00'.format(year)].values, series['{}-03-01 00:00'.format(year) : '{}-12-31 23:00'.format(year)].values])
+        else:
+            year_values = np.concatenate([ordinary_year[0:feb28], ordinary_year[feb28:] ] )
+
+    else:
+    # ordinary year
+        year_values = series.values
+
+    return year_values
+
+# Shift days so that days of the week pattern is matched. 
+#   values         - original baseline demand.
+#   baseline_index - index of the baseline ie 2018
+#   weather_index  - index of the year to shift to
+
+def shiftdays_match(values, baseline_index, weather_index, hourly=True):
+    # these days we don't want to shift so over write
+    #   1 New years day  1st January
+    #  89 Good Friday   30th March
+    #  92 Easter Monday  2nd April
+    # 127 Bank holiday   7th May
+    # 148 Bank holiday  28th May
+    # 239 Bank holiday  27th August
+    # 359 Christmas     25th December
+    # 360 Boxing Day    26th December
+    special_days = [1, 89, 92, 127, 148, 239, 359, 360]
+    # before shifting need set the sepcial days to the nearest
+    # ordinary day  TODO day-1 index is 0! AND hourly !!
+    special_values = {}
+    for day in special_days:
+        special_values[day] = values[day]
+        new_day = day + 7
+        if day>358:
+            new_day = day - 7
+        values[day] = values[new_day]
+    # Jan 1st 2018 is a Monday
+    extra=[]
+    day_of_week_weather = weather_index[0].weekday()
+    shift = day_of_week_weather
+#   print('SHIFT MATCH {}'.format(shift))
+    if shift > 0:
+        day_copy = 7 - shift
+        while day_copy <7:
+            if hourly:
+                hour_start = day_copy*24
+                for i in range(24):
+                    extra.append(values[hour_start+i])
+            else:
+                extra.append(values[day_copy])
+#           print('Appending day {} '.format(day_copy))
+            day_copy +=1
+        extra_values = np.array(extra)
+#       print(extra)
+        new_values = np.concatenate([extra_values, values[:-len(extra_values)] ])
+    else:
+        new_values = values
+#       
+#   print('Original {} new {} extra {}'.format(len(values), len(new_values), len(extra) ) )
+
+    # put the special day values back
+    for day in special_days:
+        new_values[day] = special_values[day]
+    
+    return new_values
+

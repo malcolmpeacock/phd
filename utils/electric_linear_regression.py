@@ -68,15 +68,25 @@ def get_demand(year, espini):
         electric = demand_ref['ENGLAND_WALES_DEMAND'] * scotland_factor / 1000000.0
     return electric
 
-def get_heat_bdew(year):
-    # input assumptions for reference year ( true for both 2018 and 2017 )
-    heat_that_is_electric = 0.06     # my spreadsheet from DUKES
-    heat_that_is_heat_pumps = 0.01   # greenmatch.co.uk, renewableenergyhub.co.uk
-    # remove the existing heat using the heat demand method
-    demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef2018Weather{0:}I-Bbdew_resistive.csv'.format(year)
-    ref_resistive = readers.read_copheat(demand_filename, ['electricity', 'temperature'])
-    ref_resistive_heat = ref_resistive['electricity']
-    existing_heat = ref_resistive_heat * heat_that_is_electric * 1e-6
+def get_heat_bdew(year, heat):
+    if heat:
+        # input assumptions
+        electrical_heat = {'2018' : 40.6, '2017' : 40.6, '2018' : 40.6 }
+        # read heat demand.
+        demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef2018Weather{0:}I-Bbdew.csv'.format(year)
+        heat_demand = readers.read_copheat(demand_filename, ['heat', 'temperature'])
+        # convert to GWh ?
+        ref_resistive_heat = heat_demand['heat'] * 1e-6
+        existing_heat = ref_resistive_heat * electrical_heat[year] / ref_resistive_heat.sum()
+    else:
+        # input assumptions for reference year ( true for both 2018 and 2017 )
+        heat_that_is_electric = 0.06     # my spreadsheet from DUKES
+        heat_that_is_heat_pumps = 0.01   # greenmatch.co.uk, renewableenergyhub.co.uk
+        # read existing resistive heat.
+        demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef2018Weather{0:}I-Bbdew_resistive.csv'.format(year)
+        ref_resistive = readers.read_copheat(demand_filename, ['electricity', 'temperature'])
+        ref_resistive_heat = ref_resistive['electricity']
+        existing_heat = ref_resistive_heat * heat_that_is_electric * 1e-6
     return existing_heat
 
 def get_wdd_regression(demand, weather, model, hdh=False):
@@ -120,6 +130,7 @@ parser.add_argument('--year', action="store", dest="year", help='Training year',
 parser.add_argument('--test', action="store", dest="test", help='Test year', default='2017')
 parser.add_argument('--espini', action="store_true", dest="espini", help='Use the espini data', default=True)
 parser.add_argument('--plot', action="store_true", dest="plot", help='Includes plots', default=False)
+parser.add_argument('--heat', action="store_true", dest="heat", help='Use heat demand series not electricity', default=False)
 parser.add_argument('--frequency', action="store", dest="frequency", help='Frequency H=hourly, D=Daily, W=weekly', default='D')
 parser.add_argument('--model', action="store", dest="model", help='Model eg Bloomfield, cdhd, etc.', default='cdhd')
 parser.add_argument('--parm', action="store", dest="parm", help='Additional parameter to add, eg ghi', default=None)
@@ -153,8 +164,10 @@ electric_ref = get_demand(args.year, args.espini)
 electric_test = get_demand(args.test, args.espini)
 
 # heat demand
-heat_ref = get_heat_bdew(args.year)
-heat_test = get_heat_bdew(args.test)
+heat_ref = get_heat_bdew(args.year, args.heat)
+heat_test = get_heat_bdew(args.test, args.heat)
+
+print('Heat electric ref year {} test year {} '.format(heat_ref.sum(), heat_test.sum() ) )
 
 # Resamble to required frequency Hourly or Daily
 if args.frequency != 'H':

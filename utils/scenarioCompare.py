@@ -11,12 +11,22 @@ import statsmodels.api as sm
 import argparse
 import calendar
 import numpy as np
-from icecream import ic 
+from os.path import exists
 
 # custom code
 import stats
 import readers
 import storage
+
+def get_storage_line(df, storage_model, days, wind_parm='f_wind', pv_parm='f_pv'):
+    if storage_model == 'new':
+        storage_line = df[df['storage'] == days]
+        storage_line = storage_line[['f_pv','f_wind','last']]
+        storage_line.columns = ['Ps', 'Pw', 'last']
+        storage_line = storage_line.sort_values(['Pw', 'Ps'], ascending=[True, True])
+    else:
+        storage_line = storage.storage_line(df, days, args.sline, wind_parm, pv_parm)
+    return storage_line
 
 def get_viable(df, last, days):
     if args.last == 'full':
@@ -110,6 +120,27 @@ ninja75 = 'ninja75/'
 #            'PNS' : 'Synthetic Time Series From Weather + heat'
 #           }
 #scenarios = {'HNS' : {'file': 'HNS', 'dir' : hvh, 'title': 'Half heat pumps, half hydrogen'}, 'PNS' : {'file': 'PNS', 'dir' : hvh, 'title': 'All heat pumps'}, 'FNS' : {'file': 'FNS', 'dir' : hvh, 'title': 'FES 2019 Net Zero: heat pumps, hydrogen and hybrid heat pumps'} }
+if args.scenario == 'capacity':
+    scenarios = {'c1' :
+       {'file': 'ENS', 'dir' : 'capacity/c50/', 'title': 'Store starts at 50%'},
+                 'c2' : 
+       {'file': 'ENS', 'dir' : 'capacity/c60/', 'title': 'Store starts at 60%'} 
+    }
+if args.scenario == 'capacities':
+    scenarios = {'c30' :
+       {'file': 'ENS', 'dir' : 'capacity/c30/', 'title': 'Store starts at 30%'},
+                 'c40' : 
+       {'file': 'ENS', 'dir' : 'capacity/c40/', 'title': 'Store starts at 40%'},
+                 'c50' : 
+       {'file': 'ENS', 'dir' : 'capacity/c50/', 'title': 'Store starts at 50%'},
+                 'c60' : 
+       {'file': 'ENS', 'dir' : 'capacity/c60/', 'title': 'Store starts at 60%'},
+                 'c70' : 
+       {'file': 'ENS', 'dir' : 'capacity/c70/', 'title': 'Store starts at 70%'},
+                 'c80' : 
+       {'file': 'ENS', 'dir' : 'capacity/c80/', 'title': 'Store starts at 80%'},
+                 'c90' : 
+       {'file': 'ENS', 'dir' : 'capacity/c90/', 'title': 'Store starts at 90%'}    }
 if args.scenario == 'new4':
     scenarios = {'old' :
        {'file': 'ENS', 'dir' : 'temp/', 'title': 'Existing heating 0.75 Old model'},
@@ -143,6 +174,11 @@ if args.scenario == 'newallS85':
     scenarios = {'old' :
        {'file': 'ENS', 'dir' : 'allS85/', 'title': 'Ninja, synthetic 0.75 Old storage model'},
                  'new' : 
+       {'file': 'ENS', 'dir' : 'new_allS85/', 'title': 'Ninja, synthetic 0.75 New storage model with old constraints'}    }
+if args.scenario == 'halffull':
+    scenarios = {'half' :
+       {'file': 'ENS', 'dir' : 'new_allS85h/', 'title': 'Ninja, synthetic 0.75 New storage model half full'},
+                 'full' : 
        {'file': 'ENS', 'dir' : 'new_allS85/', 'title': 'Ninja, synthetic 0.75 New storage model with old constraints'}    }
 if args.scenario == 'halfhp':
     scenarios = {'allS75' :
@@ -204,17 +240,27 @@ if args.scenario == 'hp':
                  'FNS' :
        {'file': 'FNS', 'dir' : hp, 'title': '13% Hybrid Heat pumps'}
     }
+if args.scenario == 'hp2':
+    scenarios = {'GNS' :
+       {'file': 'GNS', 'dir' : hp, 'title': '41% Heat Pumps'},
+                 'ENS' :
+       {'file': 'ENS', 'dir' : hp, 'title': 'Existing heat'}
+    }
+if args.scenario == 'hp1':
+    scenarios = {'GNS' :
+       {'file': 'GNS', 'dir' : hp, 'title': '41% Heat Pumps'},
+    }
 #scenarios = {'NNS' :
 #   {'file': 'NNS', 'dir' : kf, 'title': 'No Added Electric Heating'},
 #             'PNS' :
 #   {'file': 'PNS', 'dir' : kfev, 'title': '100% heat pumps and evs'}
 #}
 # scenarios = {'NNS' : {'file': 'NNS', 'dir' : kf, 'title': 'No Added Electric Heating'} }
-if args.scenario == 'mlmp':
-    scenarios = {'MP' :
-      {'file': 'ENH', 'dir' : kfig8, 'title': 'MP method with historic electric'},
-                 'KF' :
-      {'file': 'CM', 'dir' : kfig8, 'title': 'KF matlab data'}
+if args.scenario == 'feshp':
+    scenarios = {'unchanged' :
+      {'file': 'ENS', 'dir' : 'fes_hp/unchanged', 'title': 'Existing heating 80% efficieny'},
+                 'hp' :
+      {'file': 'FNS', 'dir' : 'fes_hp/hp', 'title': 'FES HP (inc hybrid) 41% and 80% efficiency'}
     }
 if args.scenario == 'mpml':
     scenarios = {
@@ -263,6 +309,7 @@ output_dir = "/home/malcolm/uclan/output"
 # load the demands
 demands = {}
 capacities = {}
+settings = {}
 print('scenario     number of annual  capacity')
 print('             days      energy  to supply load')
 for key, scenario in scenarios.items():
@@ -280,6 +327,12 @@ for key, scenario in scenarios.items():
     capacity = demand.max() * 1000.0 / 24.0
     print('{: <12} {}  {:.2f}  {:.2f}'.format(key, ndays, annual_energy, capacity))
     capacities[key] = capacity
+    path = '{}/{}/settings{}.csv'.format(output_dir, folder, filename)
+    if exists(path):
+        setting = readers.read_settings(path)
+    else:
+        setting = {'storage' : 'kf' }
+    settings[key] = setting
 
 # Load the shares dfs
 
@@ -321,7 +374,6 @@ for key, scenario in scenarios.items():
         else:
             viable = df
     zero = df[df['storage']==0.0]
-#   print(df[['f_pv', 'f_wind', 'storage']])
     dfs[key] = viable
     store_max = viable['storage'].max()
     store_min = viable['storage'].min()
@@ -356,7 +408,6 @@ if args.pfit:
         df = dfs[key]
 
         pvwind3 = df[df['f_wind']==3.0]
-#       print(pvwind3)
         plt.scatter(pvwind3['f_pv'], pvwind3['storage'], s=12)
         plt.title('Variation of PV and storage for wind=3.0')
         plt.xlabel('PV fraction')
@@ -364,7 +415,6 @@ if args.pfit:
         plt.show()
 
         pvwind3 = df[(df['f_wind']==3.0) & (df['storage']<100) & (df['f_pv']>0.0)]
-#       print(pvwind3)
         plt.scatter(pvwind3['f_pv'], pvwind3['storage'], s=12)
         plt.title('Variation of PV and storage for wind=3.0')
         plt.xlabel('PV fraction')
@@ -420,15 +470,8 @@ for key, scenario in scenarios.items():
     days = 40.0
     if args.days>0.0:
         days = args.days
-    if scenario['dir'][0:4] == 'new_' : 
-#       print('Copy contour for new model')
-        storage_40 = df[df['storage'] == days]
-        storage_40 = storage_40[['f_pv','f_wind','last']]
-        storage_40.columns = ['Ps', 'Pw', 'last']
-#       storage_40 = storage_40.sort_values(['Ps', 'Pw'], ascending=[True, True])
-        storage_40 = storage_40.sort_values(['Pw', 'Ps'], ascending=[True, True])
-    else:
-        storage_40 = storage.storage_line(df, days, args.sline, wind_parm, pv_parm)
+    storage_model = settings[key]['storage']
+    storage_40 = get_storage_line(df, storage_model, days)
     # TODO output wind/pv ratio as well as generation capacity.
     print(' {: <12} {}           {:.2f}'.format(key, len(storage_40), generation_capacity ) )
     if args.kf:
@@ -444,19 +487,19 @@ for key, scenario in scenarios.items():
     if args.days==0.0:
 
         # calcuate constant storage line for 25 days and plot
-        storage_25 = storage.storage_line(df,25.0, args.sline, wind_parm, pv_parm)
+        storage_25 = get_storage_line(df, storage_model, 25.0)
         if args.kf:
             scalekf(storage_25)
         storage_25.plot(x='Pw',y='Ps',ax=ax,label='storage 25 days. {}'.format(label))
 
         # calcuate constant storage line for 60 days and plot
-        storage_60 = storage.storage_line(df,60.0, args.sline, wind_parm, pv_parm)
+        storage_60 = get_storage_line(df, storage_model, 60.0)
         if args.kf:
             scalekf(storage_60)
         storage_60.plot(x='Pw',y='Ps',ax=ax,label='storage 60 days. {}'.format(label))
 
         # calcuate constant storage line for 30 days and plot
-        storage_30 = storage.storage_line(df,30.0, args.sline, wind_parm, pv_parm)
+        storage_30 = get_storage_line(df, storage_model, 30.0)
         if args.kf:
             scalekf(storage_30)
         storage_30.plot(x='Pw',y='Ps',ax=ax,label='storage 30 days. {}'.format(label))
@@ -512,6 +555,33 @@ keys = scenarios.keys()
 
 yearly_dfs = {}
 if args.yearly:
+    # inter-annual variation of electricity demand
+    for key, scenario in scenarios.items():
+        demand = demands[key].copy()
+        label = scenario['title']
+        yearly_demand = demand.resample('Y').sum()
+        yearly_demand.index = yearly_demand.index.year
+        yearly_demand.plot(label='Annual Demand {}'.format(label) )
+        # winter months
+        monthly_demand = demand.resample('M').sum()
+        december = monthly_demand[monthly_demand.index.month==12]
+        december.index = december.index.year
+        january = monthly_demand[monthly_demand.index.month==1]
+        january.index = january.index.year
+        february = monthly_demand[monthly_demand.index.month==2]
+        february.index = february.index.year
+        winter = december + january + february
+#       winter.plot(label='Winter Demand {}'.format(label) )
+        print('Annual demand max {} min {} Winter demand max {} min {}'.format(yearly_demand.max(), yearly_demand.min(), winter.max(), winter.min() ) )
+
+    plt.title('Inter annual variation of electricity demand')
+    plt.xlabel('year', fontsize=15)
+    plt.ylabel('Annual Demand (TWh)', fontsize=15)
+#   plt.legend(loc='upper left', fontsize=15)
+    plt.legend(loc='center left', fontsize=15)
+    plt.show()
+    
+
     # storage
     for key, scenario in scenarios.items():
         folder = scenario['dir']
@@ -533,8 +603,8 @@ if args.yearly:
         folder = scenario['dir']
         label = scenario['title']
         df = yearly_dfs[key]
-        df['dec31_wind'].plot(label='December 3st wind'.format(label) )
-        df['dec31_pv'].plot(label='December 3st pv'.format(label) )
+        df['dec31_wind'].plot(label='December 31st wind'.format(label) )
+        df['dec31_pv'].plot(label='December 31st pv'.format(label) )
 #       df['dec31_demand'].plot(label='December 31st demand'.format(label) )
 
     plt.title('December 31st Generation')
@@ -626,6 +696,7 @@ if args.pstore:
     for key, scenario in scenarios.items():
         label = scenario['title']
         filename = scenario['file']
+        folder = scenario['dir']
         path = '{}/{}/store{}.csv'.format(output_dir, folder, filename)
         store = pd.read_csv(path, header=0, index_col=0, squeeze=True)
         store.index = pd.DatetimeIndex(pd.to_datetime(store.index).date)

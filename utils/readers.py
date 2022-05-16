@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 import pytz
+import csv
 # import matplotlib.pyplot as plt
 # import statsmodels.api as sm
 # import stats
@@ -276,3 +277,12 @@ def read_destinee(filename):
     # (the round stops us getting a 1 in the minutes )
 #   destinee.index = pd.DatetimeIndex(pd.to_datetime(ninja.index).round('H'))
     return destinee
+
+def read_settings(filename):
+    settings = {}
+    with open(filename, 'r') as file:
+        csv_reader = csv.reader(file, delimiter=',')
+        for row in csv_reader:
+            settings[row[0]] = row[1]
+
+    return settings

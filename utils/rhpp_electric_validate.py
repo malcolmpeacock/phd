@@ -99,6 +99,8 @@ def daily_cop(df, hp, sink_temp,source_name):
 parser = argparse.ArgumentParser(description='Validate electricity demand.')
 parser.add_argument('--scale', action="store", dest="scale", help='Amount to scale by to fix the bias', default=1.0, type=float )
 parser.add_argument('--cop', action="store_true", dest="cop", help='Do COP plots', default=False)
+parser.add_argument('--watson', action="store_true", dest="watson", help='Use Wastson ranges', default=False)
+parser.add_argument('--rolling', action="store", dest="rolling", help='Rolling average window', default=0, type=int)
 args = parser.parse_args()
 
 # read in the data
@@ -205,8 +207,16 @@ stats.print_stats(fixed_synthetic  * mean_factor, daily_real, 'Electric Fixed', 
 
 #print('COLUMNS')
 #print(dfd.columns)
-daily_synthetic.plot(label='Modelled Electricity Time Series', color='blue')
-daily_real.plot(label='Actual Measured Electricity Time Series', color='red')
+if args.rolling == 0:
+    ds = daily_synthetic
+    dr = daily_real
+else:
+    window = args.rolling
+    ds = daily_synthetic.rolling(window, min_periods=1).mean()
+    dr = daily_real.rolling(window, min_periods=1).mean()
+
+ds.plot(label='Modelled Electricity Time Series', color='blue')
+dr.plot(label='Actual Measured Electricity Time Series', color='red')
 #fixed_synthetic.plot(label='Fixed Electricity Time Series', color='green')
 plt.title('Comparison of predicted electricty demand and measured from heat pumps')
 plt.xlabel('Day of the year', fontsize=15)
@@ -236,7 +246,10 @@ for hour in range(0,24):
     # extract the hour
     hourly = df[df['hour'] == hour]
     # split into binds by temperature ranges and average
-    bins = pd.cut(hourly['temperature'], range(-15,40,5) )
+    if args.watson:
+        bins = pd.cut(hourly['temperature'], np.arange(-4.5,22.5,3) )
+    else:
+        bins = pd.cut(hourly['temperature'], range(-15,40,5) )
     means = hourly.groupby(bins).mean()
     # split according to UK distribution of GSHP and ASHP
     means['profile'] = means['heat_GSHP'] * 0.1 + means['heat_ASHP'] * 0.9
@@ -246,7 +259,10 @@ for hour in range(0,24):
     hours[str(hour)] = profile
 
 df = pd.DataFrame(data=hours)
-df.index = range(-15,35,5)
+if args.watson:
+    df.index = np.arange(-4.5,19.5,3)
+else:
+    df.index = range(-15,35,5)
 # print(df)
 # swap rows and columns
 df = df.transpose()
@@ -259,7 +275,11 @@ for column in df:
 
 # plot example
 
-example_profile = df[10]
+if args.watson:
+    print(df)
+    example_profile = df[10.5]
+else:
+    example_profile = df[10]
 example_profile.plot()
 plt.title('Hourly Profile')
 plt.xlabel('Hour of the day', fontsize=15)
@@ -268,7 +288,10 @@ plt.ylabel('Demand (kWh)', fontsize=15)
 plt.show()
 
 
-output_filename = "/home/malcolm/uclan/data/rhpp-heatpump/testing/hourly_factors.csv"
+if args.watson:
+    output_filename = "/home/malcolm/uclan/data/rhpp-heatpump/testing/hourly_factors_w.csv"
+else:
+    output_filename = "/home/malcolm/uclan/data/rhpp-heatpump/testing/hourly_factors.csv"
 df.to_csv(output_filename, float_format='%g');
 
 # sink tmperatures

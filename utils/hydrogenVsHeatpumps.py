@@ -21,6 +21,8 @@ import readers
 import storage
 import math
 
+start_time = datetime.now()
+
 # electric vehicle time series
 ev_annual_energy = 95.83  # annual ev energy TWh fes Net Zero 2050
 ev_annual_energy = 93.38  # percentage adjusted for 2018 with all ev
@@ -880,8 +882,17 @@ all_demand.to_csv('{}/demand{}{}{}.csv'.format(output_dir, scenarioChar, climate
 all_hydrogen.to_csv('{}/hydrogen{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
 sample_hist.to_csv('{}/store{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
 
-## TODO wasserstein distance of heat demand to see if it changes over the
-##      years.
-## and for wind speed and solar irradiance.
-
-
+# output settings
+settings = {
+    'start'     : args.start,
+    'end'       : args.end,
+    'reference' : args.reference,
+    'ev'        : args.ev,
+    'storage'   : args.storage,
+    'hist_pv'   : args.pv,
+    'hist_wind' : args.wind,
+    'eta'       : args.eta,
+    'run_time'  : math.floor(datetime.timestamp(datetime.now()) - datetime.timestamp(start_time))
+}
+settings_df = pd.DataFrame.from_dict(data=settings, orient='index')
+settings_df.to_csv('{}/settings{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar), header=False)

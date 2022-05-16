@@ -134,9 +134,13 @@ weather.index = pd.DatetimeIndex(weather.index).tz_localize('UTC')
 
 augment.augment(weather)
 daily_weather = weather.resample('D').mean()
+# heating degree days
+daily_weather['hdd'] = (14.8 - daily_weather['temp']).clip(0.0)
 # other years
 daily_weather17 = get_weather('2017')
+daily_weather17['hdd'] = (14.8 - daily_weather17['temp']).clip(0.0)
 daily_weather19 = get_weather('2019')
+daily_weather19['hdd'] = (14.8 - daily_weather19['temp']).clip(0.0)
 
 coeffs = correlation(daily_weather, gas, plot=True)
 print('Daily Feature correlation 2018')
@@ -151,7 +155,8 @@ for col, value in sorted(coeffs.items(), key=lambda item: item[1], reverse=True 
 
 
 # regression on mean hdh
-hdd = daily_weather['hdh'] / 24.0
+#hdd = daily_weather['hdh'] / 24.0
+hdd = daily_weather['hdd']
 coeffs = regression(hdd.values.reshape(-1,1), gas.values)
 c0 = coeffs[0]
 c1 = coeffs[1]
@@ -166,7 +171,7 @@ plt.plot(hdd, y, color='red')
 plt.title('Relationship between gas daily consumption and HDD')
 plt.xlabel('Heat Degree Days (degrees C)', fontsize=15)
 plt.ylabel('Gas Energy (Twh) per day', fontsize=15)
-plt.legend(loc='upper center')
+#plt.legend(loc='upper center')
 plt.show()
 # forecast of gas time series from hdh
 #gas_hdh  = daily_weather ['hdh'] * c1
