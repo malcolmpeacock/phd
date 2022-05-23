@@ -129,7 +129,7 @@ def hybrid_heat_pump(heat, efficiency, threshold):
 #   normalise_factor - factor to normalise by.
 #                      If doing daily is the max daily demand so that storage
 #                      is relative to peak daily demand energy.
-def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly, ref_temp, climate, historic, heat_that_is_electric, normalise_factor, base=False):
+def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly, ref_temp, climate, historic, heat_that_is_electric, normalise_factor, base, baseload, variable):
     total_demand = 0
 
     # create the synthetic years
@@ -449,9 +449,9 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
     else:
         print('Base load Zero')
         if args.storage == 'new':
-            df, sample_hist = storage.storage_grid_new(all_demand, wind, pv, eta, hourly, grid, step, 0.0, h_input, args.constraints, args.wind, args.pv, args.threshold)
+            df, sample_hist = storage.storage_grid_new(all_demand, wind, pv, eta, hourly, grid, step, baseload, h_input, args.constraints, args.wind, args.pv, args.days, args.threshold, variable, args.lows, args.debug)
         else:
-            df, sample_hist = storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, 0.0, h_input, args.storage, args.wind, args.pv)
+            df, sample_hist = storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, baseload, h_input, args.storage, args.wind, args.pv)
 
     # store actual capacity in GW
     df['gw_wind'] = df['f_wind'] * normalise_factor / ( 24 * 1000.0 )
@@ -489,11 +489,12 @@ parser.add_argument('--adverse', action="store", dest="adverse", help='Use speci
 parser.add_argument('--scenario', action="store", dest="scenario", help=str(scenarios), default='H' )
 parser.add_argument('--dir', action="store", dest="dir", help='Output directory', default='40years' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--debug', action="store_true", dest="debug", help='Output debug info', default=False)
 parser.add_argument('--cplot', action="store_true", dest="cplot", help='Show climate related plots', default=False)
 parser.add_argument('--historic', action="store_true", dest="historic", help='Use historic time series instead of synthetic', default=False)
 parser.add_argument('--hourly', action="store_true", dest="hourly", help='Use hourly time series', default=False)
 parser.add_argument('--climate', action="store_true", dest="climate", help='Use climate change adjusted time series', default=False)
-parser.add_argument('--base', action="store_true", dest="base", help='Use baseload shares', default=False)
+parser.add_argument('--base', action="store_true", dest="base", help='Use range of  baseload shares', default=False)
 parser.add_argument('--ev', action="store_true", dest="ev", help='Include Electric Vehicles', default=False)
 parser.add_argument('--genh', action="store_true", dest="genh", help='Assume hydrogen made from electricity and stored in the same store', default=False)
 parser.add_argument('--normalise', action="store", dest="normalise", help='Method of normalise by: annual, peak, kf.', default='annual')
@@ -502,6 +503,7 @@ parser.add_argument('--storage', action="store", dest="storage", help='Storage m
 parser.add_argument('--constraints', action="store", dest="constraints", help='Constraints on new storage model: new or old', default="new")
 parser.add_argument('--eta', action="store", dest="eta", help='Round Trip Efficiency.', type=int, default=85)
 parser.add_argument('--grid', action="store", dest="grid", help='Number of pionts in grid.', type=int, default=60)
+parser.add_argument('--baseload', action="store", dest="baseload", help='Base load capacity.', type=float, default=0.0)
 parser.add_argument('--step', action="store", dest="step", help='Step size.', type=float, default=0.1)
 parser.add_argument('--kf', action="store_true", dest="kf", help='Scale the generation data to KF Capacity factors', default=False)
 parser.add_argument('--kf2', action="store_true", dest="kf2", help='Scale the generation data to KF Capacity factors ', default=False)
@@ -510,7 +512,10 @@ parser.add_argument('--kfgen', action="store_true", dest="kfgen", help='Use KF g
 parser.add_argument('--shift', action="store_true", dest="shift", help='Shift the days to match weather calender', default=False)
 parser.add_argument('--wind', action="store", dest="wind", help='Wind value of store history to output', type=float, default=2.0)
 parser.add_argument('--pv', action="store", dest="pv", help='Pv value of store history to output', type=float, default=3.0)
+parser.add_argument('--days', action="store", dest="days", help='Example store size to find for store hist plotting', type=float, default=30)
 parser.add_argument('--threshold', action="store", dest="threshold", help='Threshold for considering 2 wind values the same in new storage model', type=float, default=0.01)
+parser.add_argument('--variable', action="store", dest="variable", help='Amount of variable generation, default-0.0', type=float, default=0.0)
+parser.add_argument('--lows', action="store_true", dest="lows", help='Use low values of day contour lines 0.2 to 25', default=False)
 
 args = parser.parse_args()
 
@@ -607,7 +612,7 @@ else:
         normalise_factor = daily_original_electric_with_heat.max()
     else:
         normalise_factor = 835616.0
-print('PEAK DEMAND {} Annual Demand {} Normalise Factor {}'.format(daily_original_electric_with_heat.max(), daily_original_electric_with_heat.mean(), normalise_factor))
+print('PEAK DEMAND {} Annual Demand {} Mean Daily Demand {} Normalise Factor {}'.format(daily_original_electric_with_heat.max(), daily_original_electric_with_heat.sum(), daily_original_electric_with_heat.mean(), normalise_factor))
 
 if not args.historic:
 
@@ -862,7 +867,7 @@ else:
         wind = wind.resample('D').mean()
         pv = pv.resample('D').mean()
 
-df, yd, all_demand, all_hydrogen, sample_hist = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, ref_temperature, args.climate, args.historic, heat_that_is_electric, normalise_factor, args.base)
+df, yd, all_demand, all_hydrogen, sample_hist = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, ref_temperature, args.climate, args.historic, heat_that_is_electric, normalise_factor, args.base, args.baseload, args.variable)
 print("Max storage {} Min Storage {}".format(df['storage'].max(), df['storage'].min()) )
 
 output_dir = "/home/malcolm/uclan/output/" + args.dir

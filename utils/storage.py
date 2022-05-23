@@ -292,11 +292,11 @@ def compare_lines(line1, line2):
 # new storage model which finds pv and wind combinations matching a set list
 # of storage values
 
-def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.0, hydrogen=None, constraints='new', hist_wind=1.0, hist_pv=1.0, hist_days=30, threshold=0.01):
+def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.0, hydrogen=None, constraints='new', hist_wind=1.0, hist_pv=1.0, hist_days=30, threshold=0.01, variable=0.0, lows=False, debug=False):
     print('storage_grid new: constraints {}  demand max {} min {} mean {}'.format(constraints, demand.max(), demand.min(), demand.mean()) )
 
     # try one example and get the store history
-    balanced, sample_hist = storage_balance(demand, wind, pv, eta, base, hydrogen, hist_pv, hist_wind, hist_days, constraints)
+    balanced, sample_hist, variable_total = storage_balance(demand, wind, pv, eta, base, hydrogen, hist_pv, hist_wind, hist_days, constraints, variable, debug)
     print('Sample store history wind {} pv {} days {} balance {}'.format(hist_wind,hist_pv,hist_days,balanced))
 
     results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [] }
@@ -311,7 +311,10 @@ def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, bas
 #   threshold = 0.01
     # For each contour ...
 #   days = [3, 10, 25, 30]
-    days = [3, 10, 25, 30, 40, 60]
+    if lows:
+        days = [0.01, 0.25, 0.5, 1, 3, 10]
+    else:
+        days = [3, 10, 25, 30, 40, 60]
     for store_size in days:
         # For each percent of PV
         for i_pv in range(0,grid):
@@ -322,14 +325,14 @@ def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, bas
 #           wind_min = max( 1 - f_pv, 0.0 )
             wind_min = 0.0
             f_wind = wind_max
-            balanced, store_hist = storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, store_size, constraints)
+            balanced, store_hist, variable_total = storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, store_size, constraints, variable)
             if not balanced:
                 print(' No solution found for {} days, pv {} '.format(store_size, f_pv) )
             else:
                 while abs(wind_max - wind_min) > threshold:
                     f_wind = ( wind_max + wind_min ) / 2.0
                     sys.stdout.write('\rCalculating {} days f_pv {:.2f} f_wind {:.2f} '.format(store_size, f_pv, f_wind) )
-                    balanced, store_hist = storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, store_size, constraints)
+                    balanced, store_hist, variable_total = storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, store_size, constraints, variable)
                     # wind_max is the always the last one that balanced
                     # wind_min is the always the last one that didn't
                     if balanced:
@@ -338,7 +341,7 @@ def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, bas
                         wind_min = f_wind
 
                 print(" ")
-                print('Got balance at f_wind {}'.format(wind_max) )
+                print('Got balance at f_wind {} variable {}'.format(wind_max, variable_total) )
                 store_last = store_hist.iat[-1] * store_factor
                 store_remaining = store_size - store_last * -1.0
 
@@ -369,7 +372,7 @@ def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, bas
     df = pd.DataFrame(data=results)
     return df, sample_hist
 
-def storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, capacity, constraints='new'):
+def storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, capacity, constraints='new', variable=0.0, debug=False):
 
     # settings
     if constraints == 'new':
@@ -396,8 +399,25 @@ def storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, capacit
     store = store_start
     eta_charge = eta
     eta_discharge = eta
+    variable_total = 0.0
     count=0
-    for index, value in net_demand.items():
+    if debug:
+        print('DEBUG f_wind {} f_pv {} base {} variable {} store_end {}'.format(f_wind, f_pv, base, variable, store_end))
+
+    for index, net_value in net_demand.items():
+        value = net_value
+        # variable capacity generation eg biomass, gas:
+        #  if demand exceeds supply add up to a maximum of 'variable'
+        if value > 0.0:
+            variable_supplied = variable
+            value -= variable
+            if value < 0.0: 
+                variable_supplied = variable + value
+                value = 0.0
+            variable_total += variable_supplied
+
+        if debug:
+            print('Count {} net_value {} variable_supplied {} store {}'.format(count, net_value, variable_supplied, store))
         # Note: both subtract because value is negative in the 2nd one!
         if value > 0.0:        # demand exceeds supply : take from store
                                # discharge, so divide by eta - take more out
@@ -405,7 +425,7 @@ def storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, capacit
             # stop because we don't have enough storage
             if store<0:
                 balanced=False
-                return balanced, history
+                return balanced, history, variable_total
         else:                  # supply exceeds demand : add to store
                                # charge, so multiply by eta - put less in
             store = store - value * eta_charge
@@ -417,11 +437,12 @@ def storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, capacit
             store = store - hydrogen.iat[count] / eta_discharge
             if store<0:
                 balanced=False
-                return balanced, history
+                return balanced, history, variable_total
         history.iat[count] = store
         count += 1
-    balanced = store>store_end
-    return balanced, history
+    # ensure store meets the end constraint within tolerence
+    balanced = store>=store_end - (store_end * 0.001)
+    return balanced, history, variable_total
 
 # Given the 2018 baseline, create a baseline for the given year accounting
 # for leap years and shifting weekly pattern if requested

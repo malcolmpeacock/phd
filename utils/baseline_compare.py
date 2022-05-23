@@ -39,22 +39,23 @@ def get_heat_bdew(year):
     electrical_heat = {'2018' : 40.9, '2017' : 40.2, '2016' : 42.7 }
     # read heat demand.
     demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{0:}Weather{0:}I-Bbdew.csv'.format(year)
-    heat_demand = readers.read_copheat(demand_filename, ['heat', 'temperature'])
+    heat_demand = readers.read_copheat(demand_filename, ['heat', 'electricity'])
     # convert to GWh ?
     ref_resistive_heat = heat_demand['heat'] * 1e-6
     existing_heat = ref_resistive_heat * electrical_heat[year] / ref_resistive_heat.sum()
-    return existing_heat
+    # 41% heat pumps
+    electric_heat = heat_demand['electricity'] * 1e-6 * 0.41
+    return existing_heat, electric_heat
 
 def get_baseline(year, espini, ref_index=pd.Series(dtype='float64')):
 
-#   print('Year {}'.format(year))
     # electricity demand
     electric_ref = get_demand(str(year), espini)
 #   print('DEMAND')
 #   print(electric_ref)
 
     # heat demand
-    heat_electric = get_heat_bdew(str(year))
+    heat_electric, electric_hp41 = get_heat_bdew(str(year))
 #   print('HEAT')
 #   print(heat_electric)
 
@@ -70,7 +71,8 @@ def get_baseline(year, espini, ref_index=pd.Series(dtype='float64')):
         electric_ref_values = storage.remove_feb29(electric_ref, year, True)
         electric_ref = pd.Series(data=electric_ref_values, index=ref_index)
 
-    return year_baseline, electric_ref
+    print('Year {} Annual Demand Historic {} with heat {}'.format(year, electric_ref.sum(), electric_ref.sum() + heat_electric.sum() ))
+    return year_baseline, electric_ref, electric_hp41
 
 # process command line
 parser = argparse.ArgumentParser(description='Compare baselines generated for difference years.')
@@ -85,14 +87,14 @@ baselines = {}
 historics = {}
 
 # get 2018 baseline
-ref_baseline, ref_electric = get_baseline(2018, args.espini)
+ref_baseline, ref_electric, ref_hp41 = get_baseline(2018, args.espini)
 #print('REF_BASELINE')
 #print(ref_baseline)
 
 stats.print_stats_header()
 for year in years:
 
-    year_baseline, year_electric = get_baseline(year, args.espini, ref_baseline.index)
+    year_baseline, year_electric, electric_hp41 = get_baseline(year, args.espini, ref_baseline.index)
     # compare each year to 2018
 #   print('REF_BASELINEa')
 #   print(ref_baseline)
@@ -134,20 +136,24 @@ if args.plot:
     # plot of all years 
     daily_baselines = {}
     daily_historics = {}
-    for year in years:
-        print('year {}'.format(year))
-        year_baseline, year_electric = get_baseline(year, args.espini)
-        daily_baselines[year] = year_baseline.resample('D').sum()
-        daily_historics[year] = year_electric.resample('D').sum()
+    daily_with41hp = {}
     daily_baselines[2018] = ref_baseline.resample('D').sum()
     daily_historics[2018] = ref_electric.resample('D').sum()
+    daily_with41hp[2018] = daily_historics[2018] + ref_hp41.resample('D').sum()
+    for year in years:
+        print('year {}'.format(year))
+        year_baseline, year_electric, electric_hp41 = get_baseline(year, args.espini)
+        daily_baselines[year] = year_baseline.resample('D').sum()
+        daily_historics[year] = year_electric.resample('D').sum()
+        daily_with41hp[year] = daily_historics[year] + electric_hp41.resample('D').sum()
     all_years = [2016, 2017, 2018]
     baseline = pd.concat([daily_baselines[year] for year in all_years])
-    print(baseline)
+    with41hp = pd.concat([daily_with41hp[year] for year in all_years])
     historic = pd.concat([daily_historics[year] for year in all_years])
-    baseline.plot(label='baseline', color='blue')
-    historic.plot(label='historic', color='green')
-    plt.title('Daily Baselines')
+#   baseline.plot(label='baseline', color='blue')
+    with41hp.plot(label='41% heat pumps', color='green')
+    historic.plot(label='historic', color='blue')
+    plt.title('Impact of 41% heat pumps using years own baseline')
     plt.xlabel('day of the year', fontsize=15)
     plt.ylabel('Demand (Twh)', fontsize=15)
     plt.legend(loc='upper center')

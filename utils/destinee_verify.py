@@ -19,7 +19,8 @@ from misc import upsample_df
 
 # main program
 
-# assumptions
+# assumptions - this is because DESTinEE assumes 50% heat pumps based
+#               on a yearly increase and its not easy to extract and change.
 percent_heat_pumps = 0.5
 
 # read 2010 historical electricity demand

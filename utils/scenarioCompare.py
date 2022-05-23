@@ -42,12 +42,6 @@ def get_viable(df, last, days):
             pdf = df
     return pdf
 
-# scale to attempt to reproduce KF plot
-def scalekf(df):
-    kf_p = 0.116
-    kf_w = 0.28
-    df['Ps'] = df['Ps'] * ( (1 - df['Pw'] * kf_w) / kf_p )
-
 #
 # Functions to convert to and from actual capacity based on demandNNH.csv
 def cf2gw(x):
@@ -76,7 +70,6 @@ parser.add_argument('--yearly', action="store_true", dest="yearly", help='Show Y
 parser.add_argument('--energy', action="store_true", dest="energy", help='Plot energy instead of capacity', default=False)
 parser.add_argument('--rate', action="store_true", dest="rate", help='Plot the charge and discharge rates', default=False)
 parser.add_argument('--min', action="store_true", dest="min", help='Plot the minimum generation line', default=False)
-parser.add_argument('--kf', action="store_true", dest="kf", help='Scale PV axis as per KF', default=False)
 parser.add_argument('--annotate', action="store_true", dest="annotate", help='Annotate the shares heat map', default=False)
 parser.add_argument('--scenario', action="store", dest="scenario", help='Scenarion to plot', default='adhoc')
 parser.add_argument('--days', action="store", dest="days", help='Days of storage line to plot', default=0.0, type=float)
@@ -120,12 +113,58 @@ ninja75 = 'ninja75/'
 #            'PNS' : 'Synthetic Time Series From Weather + heat'
 #           }
 #scenarios = {'HNS' : {'file': 'HNS', 'dir' : hvh, 'title': 'Half heat pumps, half hydrogen'}, 'PNS' : {'file': 'PNS', 'dir' : hvh, 'title': 'All heat pumps'}, 'FNS' : {'file': 'FNS', 'dir' : hvh, 'title': 'FES 2019 Net Zero: heat pumps, hydrogen and hybrid heat pumps'} }
+if args.scenario == 'ev':
+    scenarios = {'noev' :
+       {'file': 'ENS', 'dir' : 'ev40years/noev/', 'title': 'No Evs'},
+                 'ev' : 
+       {'file': 'ENS', 'dir' : 'ev40years/ev/', 'title': 'Evs '} 
+    }
 if args.scenario == 'capacity':
     scenarios = {'c1' :
        {'file': 'ENS', 'dir' : 'capacity/c50/', 'title': 'Store starts at 50%'},
                  'c2' : 
        {'file': 'ENS', 'dir' : 'capacity/c60/', 'title': 'Store starts at 60%'} 
     }
+if args.scenario == 'baseload':
+    scenarios = {'b00' :
+       {'file': 'FNS', 'dir' : 'baseload/b00/', 'title': 'Base load 0.0'},
+                 'b05' : 
+       {'file': 'FNS', 'dir' : 'baseload/b05/', 'title': 'Base load 0.05'},
+                 'b10' : 
+       {'file': 'FNS', 'dir' : 'baseload/b10/', 'title': 'Base load 0.10'},
+                 'b15' : 
+       {'file': 'FNS', 'dir' : 'baseload/b15/', 'title': 'Base load 0.15'},
+                 'b20' : 
+       {'file': 'FNS', 'dir' : 'baseload/b20/', 'title': 'Base load 0.20'},
+                 'b25' : 
+       {'file': 'FNS', 'dir' : 'baseload/b25/', 'title': 'Base load 0.25'} }
+if args.scenario == 'today':
+    scenarios = {'var12base020' :
+       {'file': 'ENS', 'dir' : 'today/var12base020/', 'title': 'Base 020 Variable generation 1.2'},
+                 'var11base020' : 
+       {'file': 'ENS', 'dir' : 'today/var11base020/', 'title': 'Base 020 Variable generation 1.1'},
+                 'var10base020' : 
+       {'file': 'ENS', 'dir' : 'today/var10base020/', 'title': 'Base 020 Variable generation 1.0'},
+                 'var09base020' : 
+       {'file': 'ENS', 'dir' : 'today/var09base020/', 'title': 'Base 020 Variable generation 0.9'},
+                 'var08base020' : 
+       {'file': 'ENS', 'dir' : 'today/var08base020/', 'title': 'Base 020 Variable generation 0.8'},
+                 'var07base020' : 
+       {'file': 'ENS', 'dir' : 'today/var07base020/', 'title': 'Base 020 Variable generation 0.7'} 
+    }
+if args.scenario == 'variable':
+    scenarios = {'b00' :
+       {'file': 'FNS', 'dir' : 'variable/b00/', 'title': 'Variable generation 0.0'},
+#                'b05' : 
+#      {'file': 'FNS', 'dir' : 'variable/b05/', 'title': 'Base load 0.05'},
+#                'b10' : 
+#      {'file': 'FNS', 'dir' : 'variable/b10/', 'title': 'Base load 0.10'},
+#                'b15' : 
+#      {'file': 'FNS', 'dir' : 'variable/b15/', 'title': 'Base load 0.15'},
+#                'b20' : 
+#      {'file': 'FNS', 'dir' : 'variable/b20/', 'title': 'Base load 0.20'},
+                 'b25' : 
+       {'file': 'FNS', 'dir' : 'variable/b25/', 'title': 'Variable generation 0.25'} }
 if args.scenario == 'capacities':
     scenarios = {'c30' :
        {'file': 'ENS', 'dir' : 'capacity/c30/', 'title': 'Store starts at 30%'},
@@ -234,17 +273,23 @@ if args.scenario == 'eheat':
                  'PNS' :
        {'file': 'PNS', 'dir' : kf, 'title': 'All heating is provided by heat pumps'}
     }
+if args.scenario == 'eheat2':
+    scenarios = {'ENS' :
+       {'file': 'ENS', 'dir' : kf, 'title': '2018 with existing heating electricity'},
+                 'GNS' :
+       {'file': 'GNS', 'dir' : kf, 'title': '41% heating is provided by heat pumps'}
+    }
 if args.scenario == 'hp':
     scenarios = {'GNS' :
-       {'file': 'GNS', 'dir' : hp, 'title': '41% Heat Pumps'},
+       {'file': 'GNS', 'dir' : hp, 'title': 'With 41% of heating supplied by Heat Pumps'},
                  'FNS' :
        {'file': 'FNS', 'dir' : hp, 'title': '13% Hybrid Heat pumps'}
     }
 if args.scenario == 'hp2':
     scenarios = {'GNS' :
-       {'file': 'GNS', 'dir' : hp, 'title': '41% Heat Pumps'},
+       {'file': 'GNS', 'dir' : hp, 'title': 'With 41% heating supplied by heat pumps'},
                  'ENS' :
-       {'file': 'ENS', 'dir' : hp, 'title': 'Existing heat'}
+       {'file': 'ENS', 'dir' : hp, 'title': 'With heating electricity at 2018 levels'}
     }
 if args.scenario == 'hp1':
     scenarios = {'GNS' :
@@ -451,6 +496,9 @@ if args.rate:
 # Plot constant storage lines
 
 pws = {}
+day_list = [0.5, 1, 3, 10, 25, 30, 40, 60]
+if args.days>0.0:
+    day_list = [ args.days ]
 first = True
 print('Scenario   Points in contour  Generation capacity')
 for key, scenario in scenarios.items():
@@ -467,57 +515,30 @@ for key, scenario in scenarios.items():
         pv_parm = 'pv_energy'
     # calculate constant storage line for 40 days
     # or the value specified
-    days = 40.0
-    if args.days>0.0:
-        days = args.days
     storage_model = settings[key]['storage']
-    storage_40 = get_storage_line(df, storage_model, days)
-    # TODO output wind/pv ratio as well as generation capacity.
-    print(' {: <12} {}           {:.2f}'.format(key, len(storage_40), generation_capacity ) )
-    if args.kf:
-        scalekf(storage_40)
-    # save axis for the first one, and plot
-    if first:
-        ax = storage_40.plot(x='Pw',y='Ps',label='storage {} days. {}'.format(days, label))
-        line1 = storage_40
-    else:
-        storage_40.plot(x='Pw',y='Ps',ax=ax,label='storage {} days. {}'.format(days, label))
-        line2 = storage_40
+    for days in day_list:
+        storage_line = get_storage_line(df, storage_model, days)
+        if len(storage_line) == 0:
+            print('Skipping line {: <12} {} '.format(key, len(storage_line) ))
+            continue
 
-    if args.days==0.0:
+        # save axis for the first one, and plot
+        if first:
+            ax = storage_line.plot(x='Pw',y='Ps',label='storage {} days. {}'.format(days, label))
+            line1 = storage_line
+            label1 = label
+        else:
+            storage_line.plot(x='Pw',y='Ps',ax=ax,label='storage {} days. {}'.format(days, label))
+            line2 = storage_line
+            label2 = label
 
-        # calcuate constant storage line for 25 days and plot
-        storage_25 = get_storage_line(df, storage_model, 25.0)
-        if args.kf:
-            scalekf(storage_25)
-        storage_25.plot(x='Pw',y='Ps',ax=ax,label='storage 25 days. {}'.format(label))
-
-        # calcuate constant storage line for 60 days and plot
-        storage_60 = get_storage_line(df, storage_model, 60.0)
-        if args.kf:
-            scalekf(storage_60)
-        storage_60.plot(x='Pw',y='Ps',ax=ax,label='storage 60 days. {}'.format(label))
-
-        # calcuate constant storage line for 30 days and plot
-        storage_30 = get_storage_line(df, storage_model, 30.0)
-        if args.kf:
-            scalekf(storage_30)
-        storage_30.plot(x='Pw',y='Ps',ax=ax,label='storage 30 days. {}'.format(label))
     # TODO if we are on the 2nd or greater scenario then compare the amount
     # of storage, pv and wind with the previous scenario
-    if not first:
-        storage_diff = df['storage'] - last_df['storage']
-        print('Mean storage difference between {} {} and {} {} is {}'.format(key, df['storage'].mean(), last_key, last_df['storage'].mean(), storage_diff.mean() ) )
-    last_df = df
-    last_key = key
-    first = False
-
-    # store the pv and wind for the storage
-#   pws[key] = { 30 : {'wind': storage_30['Pw'].mean(), 'pv': storage_30['Ps'].mean() }, 
-#                60 : {'wind': storage_60['Pw'].mean(), 'pv': storage_60['Ps'].mean() }, 
-#                25 : {'wind': storage_25['Pw'].mean(), 'pv': storage_25['Ps'].mean() }, 
-#                40 : {'wind': storage_60['Pw'].mean(), 'pv': storage_40['Ps'].mean() }
-#   }
+            storage_diff = df['storage'] - last_df['storage']
+            print('Mean storage difference between {} {} and {} {} is {}'.format(key, df['storage'].mean(), last_key, last_df['storage'].mean(), storage_diff.mean() ) )
+        last_df = df
+        last_key = key
+        first = False
 
 plt.title('Constant storage lines for different scenarios')
 if args.energy:
@@ -574,7 +595,7 @@ if args.yearly:
 #       winter.plot(label='Winter Demand {}'.format(label) )
         print('Annual demand max {} min {} Winter demand max {} min {}'.format(yearly_demand.max(), yearly_demand.min(), winter.max(), winter.min() ) )
 
-    plt.title('Inter annual variation of electricity demand')
+    plt.title('Interannual variation of electricity demand')
     plt.xlabel('year', fontsize=15)
     plt.ylabel('Annual Demand (TWh)', fontsize=15)
 #   plt.legend(loc='upper left', fontsize=15)
@@ -663,6 +684,7 @@ for key, scenario in scenarios.items():
     print('{: <12}  {}    {:.2f} '.format(key, len(last_viable), total_storage[key] ) )
 
 wind_diff, ratio1, ratio2 = storage.compare_lines(line1, line2)
+print('Scenario {} to {}          {}      {} '.format(label2, label1, label1, label2) )
 print('Difference in wind {:.2f} pv/wind {:.2f} {:.2f} '.format(wind_diff, ratio1, ratio2) )
 
 # scatter plot of storage and energy
