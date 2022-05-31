@@ -24,47 +24,62 @@ parser = argparse.ArgumentParser(description='Plot all years of modified demand'
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--median', action="store_true", dest="median", help='{plot median year instead of average', default=False)
 parser.add_argument('--shift', action="store_true", dest="shift", help='Shift the days to match weekly pattern', default=False)
+parser.add_argument('--bogdan', action="store_true", dest="bogdan", help='Do each year in a different colour', default=False)
+parser.add_argument('--existing', action="store_true", dest="existing", help='Add existing heat to scatter plotr', default=False)
 args = parser.parse_args()
 
 output_dir = "/home/malcolm/uclan/output"
 
 # load the demands
 demands = {}
+existings = {}
 folder = 'heatpaper'
+
+# load demand with heatpumps
 filename = 'GNS'
 path = '{}/{}/demand{}.csv'.format(output_dir, folder, filename)
 electric_demand = pd.read_csv(path, header=0, index_col=0, squeeze=True)
 electric_demand.index = pd.DatetimeIndex(pd.to_datetime(electric_demand.index).date)
-#print(demand)
 normalise_factor = 728400.086232
 demand = electric_demand * normalise_factor
+# load existing heat
+filename = 'ENS'
+path = '{}/{}/demand{}.csv'.format(output_dir, folder, filename)
+electric_existing = pd.read_csv(path, header=0, index_col=0, squeeze=True)
+electric_existing.index = pd.DatetimeIndex(pd.to_datetime(electric_existing.index).date)
+print(electric_existing)
+existing = electric_existing * normalise_factor
 
 reference_year = demand[str(2018) + '-01-01' : str(2018) + '-12-31']
-print(reference_year)
+#print(reference_year)
 years = pd.Series(demand.index.year).unique()
 feb28 = 31 + 28
 # for each weather year ...
 for year in years:
     demand_year = demand[str(year) + '-01-01' : str(year) + '-12-31']
-    print('Year {}'.format(year) )
+    existing_year = existing[str(year) + '-01-01' : str(year) + '-12-31']
+    #print('Year {}'.format(year) )
     if len(demand_year)==366:
-        print('Leap year')
         values = np.delete(demand_year.values, feb28)
+        evalues = np.delete(existing_year.values, feb28)
     else:
-        print('Normal year')
         values = demand_year.values
-    demands[year] = values
+        evalues = existing_year.values
+    demands[year] = values * 1e-6
+    existings[year] = evalues* 1e-6
 
-df = pd.DataFrame(data=demands, index=reference_year.index)
-print(df)
+#new_index = reference_year.index
+new_index = pd.Index(reference_year.index.dayofyear)
+print(new_index)
+df = pd.DataFrame(data=demands, index=new_index)
+#print(df)
+edf = pd.DataFrame(data=existings, index=new_index)
+#print(edf)
 
 # median year
 yearly = electric_demand.resample('Y').mean()
 yearly.sort_values(ascending=False, inplace=True)
-print('YEARLY')
-print(yearly)
 mean_year = yearly.index[19].year
-print(mean_year)
 
 for year in years:
 
@@ -72,37 +87,53 @@ for year in years:
 
 if args.median:
     extra_line = df[mean_year]
-    print(extra_line)
 else:
     extra_line = df.mean(axis=1)
-    print(extra_line)
 
 extra_line.plot(color='red')
 
-plt.title('Daily average and variation of electricity demand with 40 years weather')
-plt.xlabel('day', fontsize=15)
+plt.title('Daily variation of electricity demand with 40 years weather')
+plt.xlabel('Day of the year', fontsize=15)
 plt.ylabel('Demand (TWh / day)', fontsize=15)
 plt.show()
 
 # scatter
-first = True
+s_size = 5
 for year in years:
-    s_size = 5
-    if first:
-        ax = plt.scatter(x=df[year].index, y=df[year], color='blue', s=s_size)
-    else:
-        ax = plt.scatter(x=df[year].index, y=df[year], color='blue', ax=ax, s=s_size)
-plt.title('Daily average and variation of electricity demand with 40 years weather')
-plt.xlabel('day', fontsize=15)
+    ax1 = plt.scatter(x=df[year].index, y=df[year], color='green', s=s_size)
+    if args.existing:
+#       plt.scatter(x=edf[year].index, y=edf[year], color='blue', s=s_size)
+        ax2 = plt.scatter(x=edf[year].index, y=edf[year], edgecolors='blue', s=7, facecolors='none')
+        plt.legend( (ax1, ax2), ('41% Electric Heat Pumps', 'Existing Heating'), loc='upper center', fontsize=15)
+
+#TODO legend manually as can't do for each plot
+#if args.existing:
+#    plt.legend(loc='upper right', fontsize=15)
+plt.title('Daily variation of electricity demand with 40 years weather')
+plt.xlabel('Day of the year', fontsize=15)
 plt.ylabel('Demand (TWh / day)', fontsize=15)
 plt.show()
+
+# as 2 plots
+plt.subplot(2, 1, 1)
+for year in years:
+    ax = plt.scatter(x=df[year].index, y=df[year], color='green', s=s_size)
+    plt.ylim(0.4, 1.5)
+plt.title('Daily variation of electricity demand with 40 years weather')
+plt.ylabel('Demand (TWh / day)', fontsize=12)
+plt.subplot(2, 1, 2)
+for year in years:
+    plt.scatter(x=edf[year].index, y=edf[year], color='blue', s=s_size)
+    plt.ylim(0.4, 1.5)
+plt.xlabel('Day of the year', fontsize=12)
+plt.ylabel('Demand (TWh / day)', fontsize=12)
+plt.show()
+
 
 # monthly
 
 demand_monthly = electric_demand.resample('M').mean()
-print(demand_monthly)
 group = demand_monthly.groupby(by=[demand_monthly.index.month]).sum()
-print(group)
 
 # read historical electricity demand for reference year
 
@@ -114,7 +145,6 @@ daily_electric_ref = electric_ref.resample('D').sum()
 
 #electric_ref_monthly = electric_ref.resample('M').mean()
 electric_ref_group = daily_electric_ref.groupby(by=[daily_electric_ref.index.month]).sum()
-print(electric_ref_group)
 
 print('Month  Historic  New    Percent   ')
 print('       Total     Total  Increase  ')

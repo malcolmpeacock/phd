@@ -162,6 +162,7 @@ augment.augment(weather_ref)
 # electricity demand
 electric_ref = get_demand(args.year, args.espini)
 electric_test = get_demand(args.test, args.espini)
+print('Electric ref year {} peak demand {} annual demand {} '.format(args.year, electric_ref.max(), electric_ref.sum() ) )
 
 # heat demand
 heat_ref = get_heat_bdew(args.year, args.heat)

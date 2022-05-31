@@ -292,7 +292,7 @@ def compare_lines(line1, line2):
 # new storage model which finds pv and wind combinations matching a set list
 # of storage values
 
-def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.0, hydrogen=None, constraints='new', hist_wind=1.0, hist_pv=1.0, hist_days=30, threshold=0.01, variable=0.0, lows=False, debug=False):
+def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.0, hydrogen=None, constraints='new', hist_wind=1.0, hist_pv=1.0, hist_days=30, threshold=0.01, variable=0.0, contours='med', debug=False):
     print('storage_grid new: constraints {}  demand max {} min {} mean {}'.format(constraints, demand.max(), demand.min(), demand.mean()) )
 
     # try one example and get the store history
@@ -311,10 +311,13 @@ def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, bas
 #   threshold = 0.01
     # For each contour ...
 #   days = [3, 10, 25, 30]
-    if lows:
+    if contours == 'low':
         days = [0.01, 0.25, 0.5, 1, 3, 10]
     else:
-        days = [3, 10, 25, 30, 40, 60]
+        if contours == 'med':
+            days = [3, 10, 25, 30, 40, 60]
+        else:
+            days = [40, 60, 100]
     for store_size in days:
         # For each percent of PV
         for i_pv in range(0,grid):
@@ -462,10 +465,12 @@ def ref_baseline(baseline, year, year_index, shift=False, hourly=True):
         ordinary_year = baseline.values
         feb28 = 31 + 28
         if hourly:
-            feb28 = baseline['2018-02-28'].values
-            mar1 = baseline['2018-03-01'].values
+            print(baseline)
+            feb28 = baseline['2018-02-28 00:00:00+00:00' : '2018-02-28 23:00:00+00:00'].values
+            mar1 = baseline['2018-03-01 00:00:00+00:00' : '2018-03-01 23:00:00+00:00'].values
             feb29 = np.add(feb28, mar1) * 0.5
-            year_values = np.concatenate([baseline['2018-01-01 00:00' : '2018-02-28 23:00'].values, feb29,  baseline['2018-03-01 00:00' : '2018-12-31 23:00'].values])
+            year_values = np.concatenate([baseline['2018-01-01 00:00:00+00:00' : '2018-02-28 23:00:00+00:00'].values, feb29,  baseline['2018-03-01 00:00:00+00:00' : '2018-12-31 23:00:00+00:00'].values])
+            print(year_values)
         else:
             feb29 = (ordinary_year[feb28-1] + ordinary_year[feb28]) * 0.5
             feb29a = np.array([feb29])

@@ -227,7 +227,8 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
 
         heat_added = 0.0
         hydrogen = demand['electricity'] * 0.0
-        hydrogen_efficiency = 0.85  # hydrogen boiler efficiency
+        # From 0.85 hydrogen to heat and 0.95 hydrogen transmission.
+        hydrogen_efficiency = 0.80  # hydrogen boiler efficiency
 
         heat_pump_share = 0.0
         if scenario == 'H':
@@ -427,13 +428,11 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         plt.show()
         
 
-    # 
+    # energy from hydrogen
     if args.genh:
         h_input = all_hydrogen
     else:
         h_input = None
-    # calculate storage at grid of Pv and Wind capacities for
-    # hydrogen efficiency TODO need a reference
     grid=args.grid    # number of points (60)
     step=args.step    # step size (0.1)
     if base:
@@ -449,7 +448,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
     else:
         print('Base load Zero')
         if args.storage == 'new':
-            df, sample_hist = storage.storage_grid_new(all_demand, wind, pv, eta, hourly, grid, step, baseload, h_input, args.constraints, args.wind, args.pv, args.days, args.threshold, variable, args.lows, args.debug)
+            df, sample_hist = storage.storage_grid_new(all_demand, wind, pv, eta, hourly, grid, step, baseload, h_input, args.constraints, args.wind, args.pv, args.days, args.threshold, variable, args.contours, args.debug)
         else:
             df, sample_hist = storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, baseload, h_input, args.storage, args.wind, args.pv)
 
@@ -509,13 +508,14 @@ parser.add_argument('--kf', action="store_true", dest="kf", help='Scale the gene
 parser.add_argument('--kf2', action="store_true", dest="kf2", help='Scale the generation data to KF Capacity factors ', default=False)
 parser.add_argument('--onshore', action="store_true", dest="onshore", help='Use only onshore wind', default=False)
 parser.add_argument('--kfgen', action="store_true", dest="kfgen", help='Use KF generation from matlab', default=False)
+parser.add_argument('--espini', action="store_true", dest="espini", help='Use Electricity demand from espini', default=False)
 parser.add_argument('--shift', action="store_true", dest="shift", help='Shift the days to match weather calender', default=False)
 parser.add_argument('--wind', action="store", dest="wind", help='Wind value of store history to output', type=float, default=2.0)
 parser.add_argument('--pv', action="store", dest="pv", help='Pv value of store history to output', type=float, default=3.0)
 parser.add_argument('--days', action="store", dest="days", help='Example store size to find for store hist plotting', type=float, default=30)
 parser.add_argument('--threshold', action="store", dest="threshold", help='Threshold for considering 2 wind values the same in new storage model', type=float, default=0.01)
 parser.add_argument('--variable', action="store", dest="variable", help='Amount of variable generation, default-0.0', type=float, default=0.0)
-parser.add_argument('--lows', action="store_true", dest="lows", help='Use low values of day contour lines 0.2 to 25', default=False)
+parser.add_argument('--contours', action="store", dest="contours", help='Set of values to use for contour lines', default='med')
 
 args = parser.parse_args()
 
@@ -540,11 +540,16 @@ heat_that_is_heat_pumps = 0.01   # greenmatch.co.uk, renewableenergyhub.co.uk
 scotland_factor = 1.1    # ( Fragaki et. al )
 
 # read historical electricity demand for reference year
-# TODO - could we include the actual Scottish demand here?
+# NOTE: espini includes actual Scottish demand.
 
-demand_filename = '/home/malcolm/uclan/data/ElectricityDemandData_' + args.reference + '.csv'
-demand_ref = readers.read_electric_hourly(demand_filename)
-electric_ref = demand_ref['ENGLAND_WALES_DEMAND'] * scotland_factor
+if args.espini:
+    demand_filename = '/home/malcolm/uclan/data/electricity/espeni.csv'
+    demand_ref = readers.read_espeni(demand_filename, args.reference)
+    electric_ref = demand_ref
+else:
+    demand_filename = '/home/malcolm/uclan/data/ElectricityDemandData_' + args.reference + '.csv'
+    demand_ref = readers.read_electric_hourly(demand_filename)
+    electric_ref = demand_ref['ENGLAND_WALES_DEMAND'] * scotland_factor
 
 # read reference year electric heat series based on purely resistive heating
 # so that it can be removed from the reference year series. 
@@ -673,9 +678,7 @@ if args.adverse:
     pv_adv = pd.read_csv(pv_filename, header=0, parse_dates=[0], index_col=0 )
 
     annual_pv = {}
-#   TODO there seems to be a problem with the c location for pv? Fixed ?!
     locations =  ['a', 'c', 'e', 'u']
-#   locations =  ['a', 'e', 'u']
     for location in locations:
         annual_pv[location] = pv_adv['power_' + location].sum()
         print(location, annual_pv[location])

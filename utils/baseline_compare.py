@@ -133,7 +133,7 @@ if args.plot:
     plt.legend(loc='upper center')
     plt.show()
 
-    # plot of all years 
+    # plot of all years  - own baselines
     daily_baselines = {}
     daily_historics = {}
     daily_with41hp = {}
@@ -150,9 +150,9 @@ if args.plot:
     baseline = pd.concat([daily_baselines[year] for year in all_years])
     with41hp = pd.concat([daily_with41hp[year] for year in all_years])
     historic = pd.concat([daily_historics[year] for year in all_years])
-#   baseline.plot(label='baseline', color='blue')
-    with41hp.plot(label='41% heat pumps', color='green')
-    historic.plot(label='historic', color='blue')
+    baseline.plot(label='baseline', color='blue')
+#   with41hp.plot(label='41% heat pumps', color='green')
+    historic.plot(label='historic', color='green')
     plt.title('Impact of 41% heat pumps using years own baseline')
     plt.xlabel('day of the year', fontsize=15)
     plt.ylabel('Demand (Twh)', fontsize=15)
