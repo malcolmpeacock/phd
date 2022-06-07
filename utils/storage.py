@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.interpolate
 import calendar
+import math
 
 # custom code
 import stats
@@ -144,6 +145,8 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
     sample_hist = storage(net, eta, hydrogen)
     # turn into positive values
     sample_hist = sample_hist - sample_hist.min()
+    # get durations for sample store history
+    sample_durations = storage_duration(sample_hist)
 
     results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [] }
     # For hourly the storage will be in hours, so divide by 24 to convert to 
@@ -214,7 +217,7 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
                 results['pv_energy'].append(pv_energy.sum() / demand.sum())
 
     df = pd.DataFrame(data=results)
-    return df, sample_hist
+    return df, sample_hist, sample_durations
 
 # Shift days so that days of the week pattern is continued
 #   values         - original baseline demand.
@@ -298,6 +301,8 @@ def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, bas
     # try one example and get the store history
     balanced, sample_hist, variable_total = storage_balance(demand, wind, pv, eta, base, hydrogen, hist_pv, hist_wind, hist_days, constraints, variable, debug)
     print('Sample store history wind {} pv {} days {} balance {}'.format(hist_wind,hist_pv,hist_days,balanced))
+    # get durations for sample store history
+    sample_durations = storage_duration(sample_hist)
 
     results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [] }
     # For hourly the storage will be in hours, so divide by 24 to convert to 
@@ -373,7 +378,7 @@ def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, bas
                 results['pv_energy'].append(pv_energy.sum() / demand.sum())
 
     df = pd.DataFrame(data=results)
-    return df, sample_hist
+    return df, sample_hist, sample_durations
 
 def storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, capacity, constraints='new', variable=0.0, debug=False):
 
@@ -598,3 +603,31 @@ def shiftdays_match(values, baseline_index, weather_index, hourly=True):
     
     return new_values
 
+def s_bucket(s, increment):
+    b = math.floor(s / increment )
+    return b
+
+def storage_duration(store_hist):
+    increment=0.5       # bucket size
+    durations=[]        # time that store is above this size
+    starts=[]           # time that store last reached above this size
+    nb=0
+    b_size=0
+    maxs = store_hist.max()
+    # initialise durations for each bucket to zero
+    while b_size<maxs:
+        d = len(store_hist[(store_hist>b_size) & (store_hist<=b_size+increment)])
+        durations.append(d)
+        nb+=1
+        b_size += increment
+    nb+=1
+    durations.append(0)
+
+    d_series = pd.Series(durations, name='duration', index=np.arange(0.0,nb*increment,increment))
+    d_series.index.name = 'size'
+#   print(d_series)
+#   d_series = d_series.diff()
+#   d_series = d_series.iloc[1:]
+#   d_series = d_series * -1.0
+    print(d_series)
+    return d_series

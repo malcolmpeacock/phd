@@ -448,9 +448,9 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
     else:
         print('Base load Zero')
         if args.storage == 'new':
-            df, sample_hist = storage.storage_grid_new(all_demand, wind, pv, eta, hourly, grid, step, baseload, h_input, args.constraints, args.wind, args.pv, args.days, args.threshold, variable, args.contours, args.debug)
+            df, sample_hist, sample_durations = storage.storage_grid_new(all_demand, wind, pv, eta, hourly, grid, step, baseload, h_input, args.constraints, args.wind, args.pv, args.days, args.threshold, variable, args.contours, args.debug)
         else:
-            df, sample_hist = storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, baseload, h_input, args.storage, args.wind, args.pv)
+            df, sample_hist, sample_durations = storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, baseload, h_input, args.storage, args.wind, args.pv)
 
     # store actual capacity in GW
     df['gw_wind'] = df['f_wind'] * normalise_factor / ( 24 * 1000.0 )
@@ -466,7 +466,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
                     'dec31_pv'     :    dec31_pv.values(),
                     'dec31_demand' :    dec31_demand.values()  }
     yd = pd.DataFrame(yearly_data).set_index('year')
-    return df, yd, all_demand, all_hydrogen, sample_hist
+    return df, yd, all_demand, all_hydrogen, sample_hist, sample_durations
 
 # main program
 
@@ -870,7 +870,7 @@ else:
         wind = wind.resample('D').mean()
         pv = pv.resample('D').mean()
 
-df, yd, all_demand, all_hydrogen, sample_hist = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, ref_temperature, args.climate, args.historic, heat_that_is_electric, normalise_factor, args.base, args.baseload, args.variable)
+df, yd, all_demand, all_hydrogen, sample_hist, sample_durations = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, ref_temperature, args.climate, args.historic, heat_that_is_electric, normalise_factor, args.base, args.baseload, args.variable)
 print("Max storage {} Min Storage {}".format(df['storage'].max(), df['storage'].min()) )
 
 output_dir = "/home/malcolm/uclan/output/" + args.dir
@@ -889,6 +889,7 @@ df.to_csv('{}/shares{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, el
 all_demand.to_csv('{}/demand{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
 all_hydrogen.to_csv('{}/hydrogen{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
 sample_hist.to_csv('{}/store{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
+sample_durations.to_csv('{}/duration{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
 
 # output settings
 settings = {

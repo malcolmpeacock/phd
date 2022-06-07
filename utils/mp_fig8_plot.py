@@ -18,6 +18,17 @@ import readers
 import storage
 import bilinear2 as bil
 
+def get_storage_line(df, storage_model, days, wind_parm='f_wind', pv_parm='f_pv'):
+    if storage_model == 'new':
+        storage_line = df[df['storage'] == days]
+        storage_line = storage_line[['f_pv','f_wind','last']]
+        storage_line.columns = ['Ps', 'Pw', 'last']
+        storage_line = storage_line.sort_values(['Pw', 'Ps'], ascending=[True, True])
+    else:
+        storage_line = storage.storage_line(df, days, args.sline, wind_parm, pv_parm)
+    return storage_line
+
+
 # main program
 
 # process command line
@@ -27,6 +38,7 @@ parser.add_argument('--historic', action="store_true", dest="historic", help='Hi
 parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1')
 parser.add_argument('--dir', action="store", dest="dir", help='Directory for my files', default='allS')
 parser.add_argument('--scenario', action="store", dest="scenario", help='Scenario E=existing, N=no heat', default='N')
+parser.add_argument('--model', action="store", dest="model", help='Storage Model', default='old')
 parser.add_argument('--last', action="store_true", dest="last", help='Only include configs which ended with store full', default=False)
 args = parser.parse_args()
 
@@ -54,7 +66,8 @@ for eta in etas:
 
     print('Synthetic time series {} values'.format(len(mp)))
     for line in lines:
-        points = storage.storage_line(mp,line, args.sline, 'f_wind', 'f_pv')
+#       points = storage.storage_line(mp,line, args.sline, 'f_wind', 'f_pv')
+        points = get_storage_line(mp, args.model, line, 'f_wind', 'f_pv')
         print('Line {} points {} last {} to {} zero {} '.format(line, len(points), points['last'].min(), points['last'].max(), len(points[points['last']==0.0]) ) )
 #       print(points)
         x_var = 'Pw'
