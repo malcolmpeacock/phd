@@ -102,6 +102,8 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
         x=[]
         y=[]
         last=[]
+        wind_energy=[]
+        pv_energy=[]
         # for each wind value ...
         wind_values = df[wind_parm].unique()
 #   for i_wind in range(0,14):
@@ -124,12 +126,19 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
                 # interpolate a 'last' value for the storage
                 l_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['last'])
                 f_last = l_interp(storage_value)
-
                 last.append(f_last.item())
 #               print('Point: f_wind {} f_pv {}'.format(f_wind, f_pv.item()) )
+                # get energy values
+                l_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['wind_energy'])
+                f_last = l_interp(storage_value)
+                wind_energy.append(f_last.item())
+                l_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['pv_energy'])
+                f_last = l_interp(storage_value)
+                pv_energy.append(f_last.item())
+
 
 #       sline = { 'Pw' : x, 'Ps' :y }
-        sline = { 'Pw' : x, 'Ps' :y, 'last' :last }
+        sline = { 'Pw' : x, 'Ps' :y, 'last' :last, 'wind_energy': wind_energy, 'pv_energy' : pv_energy }
         df = pd.DataFrame(data=sline)
         df = df.sort_values(['Ps', 'Pw'], ascending=[True, True])
 #   print('Line: Pw max {} min {} '.format(df['Pw'].max(), df['Pw'].min() ) )
@@ -174,21 +183,20 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
             #  ( only difference is that mp can overfill )
             if method == 'kf':
                 store_hist = storage(net, eta, hydrogen)
-            else:
-                store_hist = storage_mp(net, eta, hydrogen)
-
-            #  store starts off zero and gets more nagative
-            #  hence amount of storage needed is minimum value it had.
-            if method == 'kf':
                 store_size = store_hist.min()
-            #  store starts off zero and gets more nagative
-            #  but can overfill so its the sum of max and min.
             else:
-                store_size = store_hist.min() - store_hist.max()
-            storage_days = store_size * store_factor * -1.0
+                if method == 'mp':
+                    store_hist = storage_mp(net, eta, hydrogen)
+                    store_size = store_hist.min() - store_hist.max()
+                else:
+                    store_size, store_hist = storage_all(demand, wind, pv, base, eta, hydrogen, f_wind, f_pv)
+
                 
-            # for mp model not viable unless more energy at the end.
-            if method == 'kf' or store_hist.iat[-1] > 0:
+            # kf  model is always viable.
+            # mp  model not viable unless more energy at the end.
+            # all model returns None if didn't find valid balance
+            if method == 'kf' or (method == 'mp' and store_hist.iat[-1] > 0) or (method == 'all' and store_size):
+                storage_days = store_size * store_factor * -1.0
                 # store last is the same in both cases its just that for
                 # mp model it didn't start off full
                 store_last = store_hist.iat[-1] * store_factor
@@ -216,6 +224,7 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
                 results['wind_energy'].append(wind_energy.sum() / demand.sum())
                 results['pv_energy'].append(pv_energy.sum() / demand.sum())
 
+    print(" ")
     df = pd.DataFrame(data=results)
     return df, sample_hist, sample_durations
 
@@ -265,6 +274,15 @@ def shiftdays(values, baseline_index, weather_index):
         new_values[day] = special_values[day]
     
     return new_values
+
+# get the minimum energy point in a storage line
+def min_energy_point(storage_line):
+    min_energy = storage_line['energy'].min()
+    min_points = storage_line[storage_line['energy']==min_energy]
+    ep_wind = min_points['Pw'].mean()
+    ep_pv = min_points['Ps'].mean()
+    np = len(min_points)
+    return ep_wind, ep_pv, np, min_energy
 
 # Compare to contour lines of equal storage based on wind and pv.
 def compare_lines(line1, line2):
@@ -631,3 +649,32 @@ def storage_duration(store_hist):
 #   d_series = d_series * -1.0
     print(d_series)
     return d_series
+
+# new storage model to modify the storage until it balances
+def storage_all(demand, wind, pv, base, eta, hydrogen, f_wind, f_pv):
+    constraints = 'new'
+    threshold=0.01
+    # try different amounts of storage 
+    store_max = 60
+    store_min = 0.0
+    store_size = store_max
+    balanced, store_hist, variable_total = storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, store_size, constraints)
+    if not balanced:
+        print(' No solution found for {} wind, pv {} '.format(f_wind, f_pv) )
+        store_size = None
+    else:
+        while abs(store_max - store_min) > threshold:
+            store_size = ( store_max + store_min ) / 2.0
+            sys.stdout.write('\rCalculating f_pv {:.2f} f_wind {:.2f} days {:.2f} '.format(f_pv, f_wind, store_size) )
+            balanced, store_hist, variable_total = storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, store_size, constraints)
+            # store_max is the always the last one that balanced
+            # store_min is the always the last one that didn't
+            if balanced:
+                store_max = store_size
+            else:
+                store_min = store_size
+
+        print(" ")
+        print('Got balance at days {:.2f}'.format(store_max) )
+        store_size = store_size * -1.0
+    return store_size, store_hist

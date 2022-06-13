@@ -21,11 +21,12 @@ import storage
 def get_storage_line(df, storage_model, days, wind_parm='f_wind', pv_parm='f_pv'):
     if storage_model == 'new':
         storage_line = df[df['storage'] == days]
-        storage_line = storage_line[['f_pv','f_wind','last']]
+        storage_line = storage_line[['f_pv','f_wind','last','wind_energy','pv_energy']]
         storage_line.columns = ['Ps', 'Pw', 'last']
         storage_line = storage_line.sort_values(['Pw', 'Ps'], ascending=[True, True])
     else:
         storage_line = storage.storage_line(df, days, args.sline, wind_parm, pv_parm)
+    storage_line['energy'] = storage_line['wind_energy'] + storage_line['pv_energy']
     return storage_line
 
 def get_viable(df, last, days):
@@ -65,6 +66,7 @@ def scatterHeat(df, variable, title, label, annotate=False):
 parser = argparse.ArgumentParser(description='Compare and plot scenarios')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--pstore', action="store_true", dest="pstore", help='Plot the sample store history ', default=False)
+parser.add_argument('--pdemand', action="store_true", dest="pdemand", help='Plot the demand ', default=False)
 parser.add_argument('--pfit', action="store_true", dest="pfit", help='Show 2d plots', default=False)
 parser.add_argument('--yearly', action="store_true", dest="yearly", help='Show Yearly plots', default=False)
 parser.add_argument('--energy', action="store_true", dest="energy", help='Plot energy instead of capacity', default=False)
@@ -75,7 +77,8 @@ parser.add_argument('--scenario', action="store", dest="scenario", help='Scenari
 parser.add_argument('--days', action="store", dest="days", help='Days of storage line to plot', default=0.0, type=float)
 parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1')
 parser.add_argument('--adverse', action="store", dest="adverse", help='Adverse file mnemonic', default='5s1')
-parser.add_argument('--last', action="store", dest="last", help='Only include configs which ended with store: any, full, 3p=3% full ', default='3p')
+parser.add_argument('--last', action="store", dest="last", help='Only include configs which ended with store: any, full, p3=3% full ', default='p3')
+parser.add_argument('--variable', action="store", dest="variable", help='Variable to plot from scenario', default=None)
 args = parser.parse_args()
 
 # scenario files
@@ -113,11 +116,41 @@ ninja75 = 'ninja75/'
 #            'PNS' : 'Synthetic Time Series From Weather + heat'
 #           }
 #scenarios = {'HNS' : {'file': 'HNS', 'dir' : hvh, 'title': 'Half heat pumps, half hydrogen'}, 'PNS' : {'file': 'PNS', 'dir' : hvh, 'title': 'All heat pumps'}, 'FNS' : {'file': 'FNS', 'dir' : hvh, 'title': 'FES 2019 Net Zero: heat pumps, hydrogen and hybrid heat pumps'} }
+if args.scenario == 'historic':
+    scenarios = {'historic' :
+       {'file': 'ENH', 'dir' : 'demand/', 'title': 'Scaled Historic Time Series'},
+                 'synthetic' : 
+       {'file': 'ENS', 'dir' : 'demand/', 'title': 'Synthetic Time Series using 2018 Baseline'} 
+    }
 if args.scenario == 'ev':
     scenarios = {'noev' :
        {'file': 'ENS', 'dir' : 'ev40years/noev/', 'title': 'No Evs'},
                  'ev' : 
        {'file': 'ENS', 'dir' : 'ev40years/ev/', 'title': 'Evs '} 
+    }
+if args.scenario == 'hydrogen30':
+    scenarios = {'50' :
+       {'file': 'ENS', 'dir' : 'hydrogen/hbase04/', 'title': 'Base load 0.4 efficiency 50%'},
+                 '30' : 
+       {'file': 'ENS', 'dir' : 'hydrogen/hbase04eta30/', 'title': 'Base load 0.4 efficiency 30%'} 
+    }
+if args.scenario == 'hydrogenfes':
+    scenarios = {'he' :
+       {'file': 'ENS', 'dir' : 'hydrogen/hbase04/', 'title': 'Base load 0.4 existing heating'},
+                 'hfes' : 
+       {'file': 'FNS', 'dir' : 'hydrogen/hbase04/', 'title': 'Base load 0.4 electrified heat FES Net Zero'} 
+    }
+if args.scenario == 'hydrogenev':
+    scenarios = {'he' :
+       {'file': 'ENS', 'dir' : 'hydrogen/hbase04/', 'title': 'Base load 0.4 existing heating'},
+                 'hev' : 
+       {'file': 'ENS', 'dir' : 'hydrogen/hbase04ev/', 'title': 'Base load 0.4 electric vehicles'} 
+    }
+if args.scenario == 'hydrogenClimate':
+    scenarios = {'he' :
+       {'file': 'FNS', 'dir' : 'hydrogen/hbase04/', 'title': 'Base load 0.4 electirified heating FES Net Zero'},
+                 'hec' : 
+       {'file': 'FCS', 'dir' : 'hydrogen/hbase04/', 'title': 'Base load 0.4 electrified heating FES Net Zero. Climate Change Correction'} 
     }
 if args.scenario == 'capacity':
     scenarios = {'c1' :
@@ -125,19 +158,54 @@ if args.scenario == 'capacity':
                  'c2' : 
        {'file': 'ENS', 'dir' : 'capacity/c60/', 'title': 'Store starts at 60%'} 
     }
+if args.scenario == 'all_model':
+    scenarios = {'old' :
+       {'file': 'FNS', 'dir' : 'all_model/old/', 'title': 'New contours model'},
+                 'new' : 
+       {'file': 'FNS', 'dir' : 'all_model/new/', 'title': 'New all grid model'}
+    }
+if args.scenario == 'baseload_all':
+    scenarios = {'0.0' :
+       {'file': 'FNS', 'dir' : 'baseload_all/b00/', 'title': 'Base load 0.0'},
+                 '0.05' : 
+       {'file': 'FNS', 'dir' : 'baseload_all/b05/', 'title': 'Base load 0.05'},
+                 '0.1' : 
+       {'file': 'FNS', 'dir' : 'baseload_all/b10/', 'title': 'Base load 0.10'},
+                 '0.15' : 
+       {'file': 'FNS', 'dir' : 'baseload_all/b15/', 'title': 'Base load 0.15'},
+                 '0.2' : 
+       {'file': 'FNS', 'dir' : 'baseload_all/b15/', 'title': 'Base load 0.20'},
+                 '0.25' : 
+       {'file': 'FNS', 'dir' : 'baseload_all/b20/', 'title': 'Base load 0.25'}
+    }
 if args.scenario == 'baseload':
-    scenarios = {'b00' :
+    scenarios = {'00' :
        {'file': 'FNS', 'dir' : 'baseload/b00/', 'title': 'Base load 0.0'},
-                 'b05' : 
+                 '05' : 
        {'file': 'FNS', 'dir' : 'baseload/b05/', 'title': 'Base load 0.05'},
-                 'b10' : 
+                 '10' : 
        {'file': 'FNS', 'dir' : 'baseload/b10/', 'title': 'Base load 0.10'},
-                 'b15' : 
+                 '15' : 
        {'file': 'FNS', 'dir' : 'baseload/b15/', 'title': 'Base load 0.15'},
-                 'b20' : 
+                 '20' : 
        {'file': 'FNS', 'dir' : 'baseload/b20/', 'title': 'Base load 0.20'},
-                 'b25' : 
+                 '25' : 
        {'file': 'FNS', 'dir' : 'baseload/b25/', 'title': 'Base load 0.25'} }
+if args.scenario == 'hydrogen':
+    scenarios = {'b00' :
+       {'file': 'ENS', 'dir' : 'hydrogen/hbase00/', 'title': 'Hydrogen 50% Base load 0.0'},
+                 'b10' : 
+       {'file': 'ENS', 'dir' : 'hydrogen/hbase01/', 'title': 'Hydrogen 50% Base load 0.10'},
+                 'b20' : 
+       {'file': 'ENS', 'dir' : 'hydrogen/hbase02/', 'title': 'Hydrogen 50% Base load 0.20'},
+                 'b30' : 
+       {'file': 'ENS', 'dir' : 'hydrogen/hbase03/', 'title': 'Hydrogen 50% Base load 0.30'},
+                 'b40' : 
+       {'file': 'ENS', 'dir' : 'hydrogen/hbase04/', 'title': 'Hydrogen 50% Base load 0.40'},
+                 'b50' : 
+       {'file': 'ENS', 'dir' : 'hydrogen/hbase05/', 'title': 'Hydrogen 50% Base load 0.50'},
+                 'b60' : 
+       {'file': 'ENS', 'dir' : 'hydrogen/hbase06/', 'title': 'Hydrogen 50% Base load 0.60'} }
 if args.scenario == 'today':
     scenarios = {'var12base020' :
        {'file': 'ENS', 'dir' : 'today/var12base020/', 'title': 'Base 020 Variable generation 1.2'},
@@ -151,6 +219,18 @@ if args.scenario == 'today':
        {'file': 'ENS', 'dir' : 'today/var08base020/', 'title': 'Base 020 Variable generation 0.8'},
                  'var07base020' : 
        {'file': 'ENS', 'dir' : 'today/var07base020/', 'title': 'Base 020 Variable generation 0.7'} 
+    }
+if args.scenario == 'basetoday':
+    scenarios = {'var00base020' :
+       {'file': 'ENS', 'dir' : 'today/var00base020/', 'title': 'Base 020 Variable generation 0.0'},
+                 'var00base030' : 
+       {'file': 'ENS', 'dir' : 'today/var00base030/', 'title': 'Base 030 Variable generation 0.0'},
+                 'var00base040' : 
+       {'file': 'ENS', 'dir' : 'today/var00base040/', 'title': 'Base 040 Variable generation 0.0'},
+                 'var00base050' : 
+       {'file': 'ENS', 'dir' : 'today/var00base050/', 'title': 'Base 050 Variable generation 0.0'},
+                 'var00base060' : 
+       {'file': 'ENS', 'dir' : 'today/var00base060/', 'title': 'Base 060 Variable generation 0.0'} 
     }
 if args.scenario == 'variable':
     scenarios = {'b00' :
@@ -206,14 +286,14 @@ if args.scenario == 'newold':
        {'file': 'ENS', 'dir' : 'new_model/old/', 'title': 'Existing heating 0.75 new model with old constraints'}    }
 if args.scenario == 'newfig8':
     scenarios = {'old' :
-       {'file': 'NNH', 'dir' : 'old_fig8S75/', 'title': 'As per KF paper Old storage model'},
+       {'file': 'NNH', 'dir' : 'old_fig8S75/', 'title': 'As per Fragaki et. al. Old storage model'},
                  'new' : 
-       {'file': 'NNH', 'dir' : 'new_fig8S75/', 'title': 'As per KF paper New storage model with old constraints'}    }
+       {'file': 'NNH', 'dir' : 'new_fig8S75/', 'title': 'As per Fragaki et. al. New storage model with old constraints'}    }
 if args.scenario == 'newallS85':
     scenarios = {'old' :
-       {'file': 'ENS', 'dir' : 'allS85/', 'title': 'Ninja, synthetic 0.75 Old storage model'},
+       {'file': 'ENS', 'dir' : 'allS85/', 'title': 'Ninja, synthetic 0.85 Old storage model'},
                  'new' : 
-       {'file': 'ENS', 'dir' : 'new_allS85/', 'title': 'Ninja, synthetic 0.75 New storage model with old constraints'}    }
+       {'file': 'ENS', 'dir' : 'new_allS85/', 'title': 'Ninja, synthetic 0.85 New storage model with old constraints'}    }
 if args.scenario == 'halffull':
     scenarios = {'half' :
        {'file': 'ENS', 'dir' : 'new_allS85h/', 'title': 'Ninja, synthetic 0.75 New storage model half full'},
@@ -259,25 +339,25 @@ if args.scenario == 'historic':
        {'file': 'ENS', 'dir' : ninja85, 'title': 'Synthetic time series'}    }
 if args.scenario == 'generation':
     scenarios = {'kf' :
-       {'file': 'ENS', 'dir' : kfgen, 'title': 'Generation from KF Paper'},
+       {'file': 'ENS', 'dir' : kfgen, 'title': 'Generation from Fragaki et. al. '},
                  'ninja' : 
-       {'file': 'ENS', 'dir' : ninja85, 'title': 'Generation from Ninja'}    }
+       {'file': 'ENS', 'dir' : ninja85, 'title': 'Generation from Renewables Ninja'}    }
 if args.scenario == 'models':
     scenarios = {'HNSh' :
        {'file': 'PNS', 'dir' : sm, 'title': 'All heat pumps, mp storage model'},
                  'HNSy' : 
        {'file': 'PNS', 'dir' : y40, 'title': 'All heat pumps, kf storage model'}    }
 if args.scenario == 'eheat':
-    scenarios = {'NNS' :
-       {'file': 'NNS', 'dir' : kf, 'title': '2018 with electricity for heating removed'},
-                 'PNS' :
-       {'file': 'PNS', 'dir' : kf, 'title': 'All heating is provided by heat pumps'}
+    scenarios = {'PNS' :
+       {'file': 'PNS', 'dir' : kf, 'title': 'All heating is provided by heat pumps'},
+                 'NNS' :
+       {'file': 'NNS', 'dir' : kf, 'title': '2018 with electricity for heating removed'}
     }
 if args.scenario == 'eheat2':
-    scenarios = {'ENS' :
-       {'file': 'ENS', 'dir' : kf, 'title': '2018 with existing heating electricity'},
-                 'GNS' :
-       {'file': 'GNS', 'dir' : kf, 'title': '41% heating is provided by heat pumps'}
+    scenarios = {'BBB' :
+       {'file': 'GNS', 'dir' : kf, 'title': '41% heating is provided by heat pumps'},
+                 'AAA' :
+       {'file': 'ENS', 'dir' : kf, 'title': '2018 with existing heating electricity'}
     }
 if args.scenario == 'hp':
     scenarios = {'GNS' :
@@ -501,6 +581,8 @@ if args.days>0.0:
     day_list = [ args.days ]
 first = True
 print('Scenario   Points in contour  Generation capacity')
+markers = ['o', 'v', '+', '<', 'x', 'D']
+scount=0
 for key, scenario in scenarios.items():
     df = dfs[key].copy()
     filename = scenario['file']
@@ -522,23 +604,32 @@ for key, scenario in scenarios.items():
             print('Skipping line {: <12} {} '.format(key, len(storage_line) ))
             continue
 
+        # print the minimum energy point in the contour
+        ep_wind, ep_pv, ep_n, ep_en = storage.min_energy_point(storage_line)
+        print('MINIMUM energy point {} for days {} is at wind {:.2f} pv {:.2f} points {} energy {:.2f}'.format(label, days, ep_wind, ep_pv, ep_n, ep_en) )
         # save axis for the first one, and plot
         if first:
-            ax = storage_line.plot(x='Pw',y='Ps',label='storage {} days. {}'.format(days, label))
+            ax = storage_line.plot(x='Pw',y='Ps',label='storage {} days. {}'.format(days, label), marker=markers[scount])
             line1 = storage_line
             label1 = label
         else:
-            storage_line.plot(x='Pw',y='Ps',ax=ax,label='storage {} days. {}'.format(days, label))
+            storage_line.plot(x='Pw',y='Ps',ax=ax,label='storage {} days. {}'.format(days, label), marker=markers[scount])
             line2 = storage_line
             label2 = label
+            # If we are on the 2nd or greater scenario then compare the amount
+            # of storage, pv and wind with the previous scenario
+            wind_diff, ratio1, ratio2 = storage.compare_lines(line1, line2)
+            print('Scenario {} to {}          {}      {} '.format(label2, label1, label1, label2) )
+            print('Difference in wind {:.2f} pv/wind {:.2f} {:.2f} '.format(wind_diff, ratio1, ratio2) )
+            line1 = line2
+            label1 = label2
 
-    # TODO if we are on the 2nd or greater scenario then compare the amount
-    # of storage, pv and wind with the previous scenario
             storage_diff = df['storage'] - last_df['storage']
             print('Mean storage difference between {} {} and {} {} is {}'.format(key, df['storage'].mean(), last_key, last_df['storage'].mean(), storage_diff.mean() ) )
         last_df = df
         last_key = key
         first = False
+    scount+=1
 
 plt.title('Constant storage lines for different scenarios')
 if args.energy:
@@ -576,13 +667,21 @@ keys = scenarios.keys()
 
 yearly_dfs = {}
 if args.yearly:
+    markers=['^', 'o']
+    axs=[]
+    labels=[]
     # inter-annual variation of electricity demand
+    count=0
     for key, scenario in scenarios.items():
         demand = demands[key].copy()
         label = scenario['title']
         yearly_demand = demand.resample('Y').sum()
         yearly_demand.index = yearly_demand.index.year
-        yearly_demand.plot(label='Annual Demand {}'.format(label) )
+        yearly_demand.plot(linestyle='dotted', label='Annual Demand {}'.format(label), marker=markers[count])
+#       ax = plt.scatter(yearly_demand.index, yearly_demand, s=12, marker=markers[count])
+        count+=1
+        axs.append(ax)
+        labels.append(label)
         # winter months
         monthly_demand = demand.resample('M').sum()
         december = monthly_demand[monthly_demand.index.month==12]
@@ -600,6 +699,7 @@ if args.yearly:
     plt.ylabel('Annual Demand (TWh)', fontsize=15)
 #   plt.legend(loc='upper left', fontsize=15)
     plt.legend(loc='center left', fontsize=15)
+#   plt.legend(tuple(axs), tuple(labels), loc='center left', fontsize=15)
     plt.show()
     
 
@@ -634,39 +734,40 @@ if args.yearly:
     plt.legend(loc='upper left', fontsize=15)
     plt.show()
 
-# plot the electricity demand
 
-for key, scenario in scenarios.items():
-    label = scenario['title']
-    demand = demands[key]
+if args.pdemand:
+    # plot the electricity demand
+    for key, scenario in scenarios.items():
+        label = scenario['title']
+        demand = demands[key]
 #   print(demand)
 
-    demand.plot(label='Electricity Demand {}'.format(label) )
+        demand.plot(label='Electricity Demand {}'.format(label) )
 
-plt.title('Daily Electricity demand')
-plt.xlabel('year', fontsize=15)
-plt.ylabel('Demand (MWh)', fontsize=15)
-plt.legend(loc='upper left', fontsize=15)
-plt.show()
+    plt.title('Daily Electricity demand')
+    plt.xlabel('year', fontsize=15)
+    plt.ylabel('Demand (MWh)', fontsize=15)
+    plt.legend(loc='upper left', fontsize=15)
+    plt.show()
 
 # plot the hydrogen demand
 
-for key, scenario in scenarios.items():
-    folder = scenario['dir']
-    label = scenario['title']
-    filename = scenario['file']
-    path = '{}/{}/hydrogen{}.csv'.format(output_dir, folder, filename)
-    demand = pd.read_csv(path, header=0, index_col=0, squeeze=True)
-    demand.index = pd.DatetimeIndex(pd.to_datetime(demand.index).date)
+    for key, scenario in scenarios.items():
+        folder = scenario['dir']
+        label = scenario['title']
+        filename = scenario['file']
+        path = '{}/{}/hydrogen{}.csv'.format(output_dir, folder, filename)
+        demand = pd.read_csv(path, header=0, index_col=0, squeeze=True)
+        demand.index = pd.DatetimeIndex(pd.to_datetime(demand.index).date)
 #   print(demand)
 
-    demand.plot(label='Hydrogen Demand {}'.format(label) )
+        demand.plot(label='Hydrogen Demand {}'.format(label) )
 
-plt.title('Daily Hydrogen demand')
-plt.xlabel('year', fontsize=15)
-plt.ylabel('Demand (MWh)', fontsize=15)
-plt.legend(loc='upper left', fontsize=15)
-plt.show()
+    plt.title('Daily Hydrogen demand')
+    plt.xlabel('year', fontsize=15)
+    plt.ylabel('Demand (MWh)', fontsize=15)
+    plt.legend(loc='upper left', fontsize=15)
+    plt.show()
 
 # compare the shares files
 
@@ -713,8 +814,9 @@ if args.plot:
         plt.title('{}  '.format(label))
         plt.show()
 
-# sample store history
 if args.pstore:
+    durations = {}
+    # sample store history
     for key, scenario in scenarios.items():
         label = scenario['title']
         filename = scenario['file']
@@ -723,9 +825,63 @@ if args.pstore:
         store = pd.read_csv(path, header=0, index_col=0, squeeze=True)
         store.index = pd.DatetimeIndex(pd.to_datetime(store.index).date)
         store.plot(label='Store size: {}'.format(label) )
+        durations[key] = storage.storage_duration(store)
 
     plt.xlabel('Time')
     plt.ylabel('Storage days')
     plt.title('Store history ')
     plt.legend(loc='lower left', fontsize=15)
+    plt.show()
+
+    # storage duration
+    for key, scenario in scenarios.items():
+        label = scenario['title']
+        filename = scenario['file']
+        folder = scenario['dir']
+        path = '{}/{}/duration{}.csv'.format(output_dir, folder, filename)
+#       store = pd.read_csv(path, header=0, index_col=0, squeeze=True)
+#       store.index = pd.DatetimeIndex(pd.to_datetime(store.index).date)
+        store = durations[key]
+        store.plot(label='Store duration: {}'.format(label) )
+
+    plt.xlabel('Storage capacity in days')
+    plt.ylabel('Time in days the store contained more than this')
+    plt.title('Store duration ')
+    plt.legend(loc='upper left', fontsize=15)
+    plt.show()
+
+if args.variable:
+    # For PV=2, get the winds out of the contours
+    # TODO need to get for a particular wind and pv what its 
+    #      storage is for the different base loads.
+    print('Plotting {} against storage'.format(args.variable))
+    lines=[]
+    for p_wind in np.arange(3.0, 4.0, 0.5):
+        for p_pv in np.arange(1.0, 5.0, 1.0):
+            values=[]
+            stores=[]
+            for key, scenario in scenarios.items():
+                value = float(key)
+                df = dfs[key]
+                point = df[(df['f_wind']==p_wind) & (df['f_pv']==p_pv)]
+                s_value = point['storage']
+                if len(s_value)==0:
+                    print('No value for wind {} pv {}'.format(p_wind, p_pv))
+#                   print(df)
+#                   quit()
+                else:
+                    stores.append(s_value.iloc[0])
+                    values.append(value)
+            data = { 'storage' : stores, 'values' :values }
+            line = pd.DataFrame(data=data)
+            label = 'Wind {} PV {} '.format(p_wind, p_pv)
+#           print('Wind {} PV {} '.format(p_wind, p_pv))
+#           print(line)
+            lines.append(line)
+            plt.plot(line['values'], line['storage'],label=label )
+
+    plt.xlabel('Base load capacity in days')
+    plt.ylabel('Days of storage')
+    plt.title('Base load vs Storage')
+    plt.legend(loc='upper right', fontsize=12)
     plt.show()

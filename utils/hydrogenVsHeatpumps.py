@@ -898,9 +898,12 @@ settings = {
     'reference' : args.reference,
     'ev'        : args.ev,
     'storage'   : args.storage,
+    'variable'  : args.variable,
+    'baseload'  : args.baseload,
     'hist_pv'   : args.pv,
     'hist_wind' : args.wind,
     'eta'       : args.eta,
+    'espini'    : args.espini,
     'run_time'  : math.floor(datetime.timestamp(datetime.now()) - datetime.timestamp(start_time))
 }
 settings_df = pd.DataFrame.from_dict(data=settings, orient='index')
