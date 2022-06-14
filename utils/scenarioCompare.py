@@ -20,9 +20,8 @@ import storage
 
 def get_storage_line(df, storage_model, days, wind_parm='f_wind', pv_parm='f_pv'):
     if storage_model == 'new':
-        storage_line = df[df['storage'] == days]
-        storage_line = storage_line[['f_pv','f_wind','last','wind_energy','pv_energy']]
-        storage_line.columns = ['Ps', 'Pw', 'last']
+        storage_line = df[df['storage'] == days].copy()
+        storage_line.rename(columns={'f_pv': 'Ps', 'f_wind': 'Pw'}, inplace=True)
         storage_line = storage_line.sort_values(['Pw', 'Ps'], ascending=[True, True])
     else:
         storage_line = storage.storage_line(df, days, args.sline, wind_parm, pv_parm)
@@ -486,6 +485,12 @@ for key, scenario in scenarios.items():
         gen_cap[key] = 30
     else:
         gen_cap[key] = wind_at_1['gw_wind'].values[0]
+  
+    # calculate cost
+    storage.configuration_cost(df)
+    # print the minimum cost point of the scenario
+    min_energy = storage.min_point(df, 'cost', 'f_wind', 'f_pv')
+    print('MINIMUM cost point {} is at wind {:.2f} pv {:.2f} points {} cost {:.2f} discharge {:.2f} cost {:.2f}'.format(label, min_energy['wind'], min_energy['pv'], min_energy['np'], min_energy['min'], min_energy['discharge'], min_energy['cost']) )
 
     if args.last == 'full':
         viable = df[df['last']==0.0]
@@ -604,9 +609,18 @@ for key, scenario in scenarios.items():
             print('Skipping line {: <12} {} '.format(key, len(storage_line) ))
             continue
 
+        # print the line details
+        print('LINE {} {}'.format(days, label))
+        print('MIN wind {} pv {} MAX wind {} pv {}'.format(storage_line.head(1)['Pw'].values[0], storage_line.head(1)['Ps'].values[0], storage_line.tail(1)['Pw'].values[0], storage_line.tail(1)['Ps'].values[0]) )
         # print the minimum energy point in the contour
-        ep_wind, ep_pv, ep_n, ep_en = storage.min_energy_point(storage_line)
-        print('MINIMUM energy point {} for days {} is at wind {:.2f} pv {:.2f} points {} energy {:.2f}'.format(label, days, ep_wind, ep_pv, ep_n, ep_en) )
+        min_energy = storage.min_point(storage_line)
+        print('MINIMUM energy point is at wind {:.2f} pv {:.2f} points {} energy {:.2f} discharge {:.2f} cost {:.2f}'.format(min_energy['wind'], min_energy['pv'], min_energy['np'], min_energy['min'], min_energy['discharge'], min_energy['cost']) )
+        # print the minimum discharge point in the contour
+        min_energy = storage.min_point(storage_line, 'discharge')
+        print('MINIMUM discharge point is at wind {:.2f} pv {:.2f} points {} energy {:.2f} discharge {:.2f} cost {:.2f}'.format(min_energy['wind'], min_energy['pv'], min_energy['np'], min_energy['min'], min_energy['discharge'], min_energy['cost']) )
+        # print the minimum cost point in the contour
+        min_energy = storage.min_point(storage_line, 'cost')
+        print('MINIMUM cost point is at wind {:.2f} pv {:.2f} points {} cost {:.2f} discharge {:.2f} cost {:.2f}'.format(min_energy['wind'], min_energy['pv'], min_energy['np'], min_energy['min'], min_energy['discharge'], min_energy['cost']) )
         # save axis for the first one, and plot
         if first:
             ax = storage_line.plot(x='Pw',y='Ps',label='storage {} days. {}'.format(days, label), marker=markers[scount])

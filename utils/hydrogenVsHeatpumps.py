@@ -451,6 +451,8 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
             df, sample_hist, sample_durations = storage.storage_grid_new(all_demand, wind, pv, eta, hourly, grid, step, baseload, h_input, args.constraints, args.wind, args.pv, args.days, args.threshold, variable, args.contours, args.debug)
         else:
             df, sample_hist, sample_durations = storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, baseload, h_input, args.storage, args.wind, args.pv)
+        df['base'] = df['storage'] * 0.0 + baseload
+        df['variable'] = df['storage'] * 0.0 + variable
 
     # store actual capacity in GW
     df['gw_wind'] = df['f_wind'] * normalise_factor / ( 24 * 1000.0 )
@@ -498,7 +500,7 @@ parser.add_argument('--ev', action="store_true", dest="ev", help='Include Electr
 parser.add_argument('--genh', action="store_true", dest="genh", help='Assume hydrogen made from electricity and stored in the same store', default=False)
 parser.add_argument('--normalise', action="store", dest="normalise", help='Method of normalise by: annual, peak, kf.', default='annual')
 parser.add_argument('--scale', action="store", dest="scale", help='How to scale : average (energy over the period), reference (year) or kf.', default="reference")
-parser.add_argument('--storage', action="store", dest="storage", help='Storage model kf , mp or new', default="kf")
+parser.add_argument('--storage', action="store", dest="storage", help='Storage model kf , mp, new or all', default="kf")
 parser.add_argument('--constraints', action="store", dest="constraints", help='Constraints on new storage model: new or old', default="new")
 parser.add_argument('--eta', action="store", dest="eta", help='Round Trip Efficiency.', type=int, default=85)
 parser.add_argument('--grid', action="store", dest="grid", help='Number of pionts in grid.', type=int, default=60)

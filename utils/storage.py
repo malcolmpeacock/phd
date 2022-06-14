@@ -104,6 +104,9 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
         last=[]
         wind_energy=[]
         pv_energy=[]
+        storage=[]
+        discharge=[]
+        baseload=[]
         # for each wind value ...
         wind_values = df[wind_parm].unique()
 #   for i_wind in range(0,14):
@@ -123,6 +126,7 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
                 # store the points
                 x.append(f_wind)
                 y.append(f_pv.item())
+                storage.append(storage_value)
                 # interpolate a 'last' value for the storage
                 l_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['last'])
                 f_last = l_interp(storage_value)
@@ -136,9 +140,16 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
                 f_last = l_interp(storage_value)
                 pv_energy.append(f_last.item())
 
+                # get discharge value.
+                l_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['discharge'])
+                f_last = l_interp(storage_value)
+                discharge.append(f_last.item())
+                # get baseload value.
+                l_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['baseload'])
+                f_last = l_interp(storage_value)
+                baseload.append(f_last.item())
 
-#       sline = { 'Pw' : x, 'Ps' :y }
-        sline = { 'Pw' : x, 'Ps' :y, 'last' :last, 'wind_energy': wind_energy, 'pv_energy' : pv_energy }
+        sline = { 'Pw' : x, 'Ps' :y, 'last' :last, 'wind_energy': wind_energy, 'pv_energy' : pv_energy, 'storage' : storage, 'discharge': discharge, 'base': baseload }
         df = pd.DataFrame(data=sline)
         df = df.sort_values(['Ps', 'Pw'], ascending=[True, True])
 #   print('Line: Pw max {} min {} '.format(df['Pw'].max(), df['Pw'].min() ) )
@@ -157,7 +168,7 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
     # get durations for sample store history
     sample_durations = storage_duration(sample_hist)
 
-    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [] }
+    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge_rate' : [], 'discharge_rate' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [] }
     # For hourly the storage will be in hours, so divide by 24 to convert to 
     # days
     if hourly:
@@ -203,22 +214,28 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
                 store_remaining = storage_days - store_last * -1.0
 
                 #  rate of charge or discharge in a period
+                charge_rate=0.0
                 charge=0.0
                 #  TODO discharge needs splitting into hydrogen for boilers and
                 #  hydrogen for electricity to estimate generation capacity
+                discharge_rate=0.0
                 discharge=0.0
                 rate = store_hist.diff()
                 plus_rates = rate[rate>0]
                 if len(plus_rates)>0:
-                    charge = plus_rates.max()
+                    charge_rate = plus_rates.max()
+                    charge = plus_rates.sum()
                 minus_rates = rate[rate<0]
                 if len(minus_rates)>0:
-                    discharge = minus_rates.min() * -1.0
+                    discharge_rate = minus_rates.min() * -1.0
+                    discharge = minus_rates.sum() * -1.0
                 # store the results
                 results['f_pv'].append(f_pv)
                 results['f_wind'].append(f_wind)
                 results['storage'].append(storage_days)
                 results['last'].append(store_last)
+                results['charge_rate'].append(charge_rate)
+                results['discharge_rate'].append(discharge_rate)
                 results['charge'].append(charge)
                 results['discharge'].append(discharge)
                 results['wind_energy'].append(wind_energy.sum() / demand.sum())
@@ -275,14 +292,43 @@ def shiftdays(values, baseline_index, weather_index):
     
     return new_values
 
+# Calculate configuration cost assuming
+#   dispatchable (gas)  85
+#   wind                50   (mean of offshore 57 and onshore 46)
+#   solar               44
+#   base (nuclear)     123
+#   storage (hydrogen) 100
+# config base, wind, pv, variable, storage
+
+def configuration_cost(config):
+    # Day of energy in MWh
+    one_day = 818386
+    # Cost per MWh
+    cost_variable = 85
+    cost_wind = 50
+    cost_solar = 44
+    cost_base = 123
+    cost_storage = 100
+    #  normalise to the 2018 day of generation
+    cost = (config['f_wind'] * cost_wind) + (config['f_pv'] * cost_solar) + (config['storage'] * cost_storage) + (config['base'] * cost_base) + (config['variable'] * cost_variable)
+
+    config['cost'] = cost * one_day * 1e-6
+
 # get the minimum energy point in a storage line
-def min_energy_point(storage_line):
-    min_energy = storage_line['energy'].min()
-    min_points = storage_line[storage_line['energy']==min_energy]
-    ep_wind = min_points['Pw'].mean()
-    ep_pv = min_points['Ps'].mean()
-    np = len(min_points)
-    return ep_wind, ep_pv, np, min_energy
+def min_point(storage_line, variable='energy', wind_var='Pw', pv_var='Ps'):
+#   configuration_cost(storage_line)
+    min_value = storage_line[variable].min()
+    min_points = storage_line[storage_line[variable]==min_value]
+    values = {
+      'days'       : min_points['storage'].mean(),
+      'wind'       : min_points[wind_var].mean(),
+      'pv'         : min_points[pv_var].mean(),
+      'np'         : len(min_points),
+      'min'        : min_value,
+      'discharge'  : min_points['discharge'].mean(),
+      'cost'       : min_points['cost'].mean()
+    }
+    return values
 
 # Compare to contour lines of equal storage based on wind and pv.
 def compare_lines(line1, line2):
@@ -322,7 +368,7 @@ def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, bas
     # get durations for sample store history
     sample_durations = storage_duration(sample_hist)
 
-    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [] }
+    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge_rate' : [], 'discharge_rate' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [] }
     # For hourly the storage will be in hours, so divide by 24 to convert to 
     # days
     if hourly:
@@ -373,21 +419,27 @@ def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, bas
 
                 #  rate of charge or discharge in a period
                 charge=0.0
+                charge_rate=0.0
                 #  TODO discharge needs splitting into hydrogen for boilers and
                 #  hydrogen for electricity to estimate generation capacity
                 discharge=0.0
+                discharge_rate=0.0
                 rate = store_hist.diff()
                 plus_rates = rate[rate>0]
                 if len(plus_rates)>0:
-                    charge = plus_rates.max()
+                    charge_rate = plus_rates.max()
+                    charge = plus_rates.sum()
                 minus_rates = rate[rate<0]
                 if len(minus_rates)>0:
-                    discharge = minus_rates.min() * -1.0
+                    discharge_rate = minus_rates.min() * -1.0
+                    discharge = minus_rates.sum() * -1.0
                 # store the results
                 results['f_pv'].append(f_pv)
                 results['f_wind'].append(wind_max)
                 results['storage'].append(store_size)
                 results['last'].append(store_last)
+                results['charge_rate'].append(charge_rate)
+                results['discharge_rate'].append(discharge_rate)
                 results['charge'].append(charge)
                 results['discharge'].append(discharge)
                 wind_energy = wind * wind_max
