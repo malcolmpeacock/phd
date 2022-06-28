@@ -58,7 +58,7 @@ def r2(y_true, y_pred):
     sst  = np.square( y_true - y_true.mean() ).sum()
     return 1 - sse/sst
 
-def print_stats(heat, gas, method, nvars=1, plot=False, xl='Heat Demand (from the method)', yl='Heat Demand (from gas)'):
+def print_stats(heat, gas, method, nvars=1, plot=False, xl='Heat Demand (from the method)', yl='Heat Demand (from gas)', predr2=True):
     # Root Mean Square Error (RMSE)
     rmse = ( ( heat - gas ) **2 ).mean() ** .5
     average = heat.mean()
@@ -102,7 +102,10 @@ def print_stats(heat, gas, method, nvars=1, plot=False, xl='Heat Demand (from th
     k = nvars
     adjusted_rsquared = 1 - ( (1-rsquared)*(n-1) / ( n - k - 1) )
     # predicted R squared
-    pr2 = predicted_r2(gas.to_numpy(), fit.to_numpy(), model.exog)
+    if predr2:
+        pr2 = predicted_r2(gas.to_numpy(), fit.to_numpy(), model.exog)
+    else:
+        pr2 = 0
     # max
     peak = heat.max() / gas.max()
     # storage metric

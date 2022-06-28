@@ -107,6 +107,7 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
         storage=[]
         discharge=[]
         baseload=[]
+        cost=[]
         # for each wind value ...
         wind_values = df[wind_parm].unique()
 #   for i_wind in range(0,14):
@@ -145,11 +146,15 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
                 f_last = l_interp(storage_value)
                 discharge.append(f_last.item())
                 # get baseload value.
-                l_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['baseload'])
+                l_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['base'])
                 f_last = l_interp(storage_value)
                 baseload.append(f_last.item())
+                # get cost value.
+                l_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['cost'])
+                f_last = l_interp(storage_value)
+                cost.append(f_last.item())
 
-        sline = { 'Pw' : x, 'Ps' :y, 'last' :last, 'wind_energy': wind_energy, 'pv_energy' : pv_energy, 'storage' : storage, 'discharge': discharge, 'base': baseload }
+        sline = { 'Pw' : x, 'Ps' :y, 'last' :last, 'wind_energy': wind_energy, 'pv_energy' : pv_energy, 'storage' : storage, 'discharge': discharge, 'base': baseload, 'cost': cost }
         df = pd.DataFrame(data=sline)
         df = df.sort_values(['Ps', 'Pw'], ascending=[True, True])
 #   print('Line: Pw max {} min {} '.format(df['Pw'].max(), df['Pw'].min() ) )
@@ -324,7 +329,8 @@ def min_point(storage_line, variable='energy', wind_var='Pw', pv_var='Ps'):
       'wind'       : min_points[wind_var].mean(),
       'pv'         : min_points[pv_var].mean(),
       'np'         : len(min_points),
-      'min'        : min_value,
+      'energy'     : min_points['energy'].mean(),
+      'fraction'   : min_points['fraction'].mean(),
       'discharge'  : min_points['discharge'].mean(),
       'cost'       : min_points['cost'].mean()
     }
@@ -355,6 +361,31 @@ def compare_lines(line1, line2):
     ratio2  = (merged['Ps'] / merged['Pw_y']).mean()
 
     return wind_diff, ratio1, ratio2
+
+def get_point(df, wind_val, pv_val, wind_var, pv_var):
+    if df[wind_var].min() > wind_val or df[wind_var].max() < wind_val or df[pv_var].min() > pv_val or df[pv_var].max() < pv_val:
+        print("WARNING: can't interpolat to {} {} , {} {}".format(wind_var, wind_val, pv_var. pv_val))
+
+    new_row = df.head(1).copy()
+    new_row_ind = new_row.index[0]
+    for col in new_row.columns:
+        new_row.loc[new_row_ind, col] = float("Nan")
+        
+    new_row.loc[new_row_ind, wind_var] = wind_val
+    new_row.loc[new_row_ind, pv_var] = pv_val
+    df = df.append(new_row, ignore_index = True)
+#   print(df)
+    df = df.sort_values([pv_var, wind_var], ascending=[True, True])
+    # fill in the NaNs by interpolation
+    df = df.interpolate()
+    # get the point
+    winds = df[df[wind_var]==wind_val]
+    pvs = winds[winds[pv_var]==pv_val]
+    pvs = pvs.rename(columns={pv_var: 'pv', wind_var: 'wind', 'storage': 'days'})
+    pvs['np'] = 1
+    row = pvs.to_dict('records')
+#   print(row[0])
+    return row[0]
 
 # new storage model which finds pv and wind combinations matching a set list
 # of storage values
@@ -387,7 +418,9 @@ def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, bas
             days = [3, 10, 25, 30, 40, 60]
         else:
             days = [40, 60, 100]
-    for store_size in days:
+    for store_days in days:
+        # converts to hourly if needed.
+        store_size = storage_days / store_factor
         # For each percent of PV
         for i_pv in range(0,grid):
             f_pv = i_pv * step
@@ -436,7 +469,7 @@ def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, bas
                 # store the results
                 results['f_pv'].append(f_pv)
                 results['f_wind'].append(wind_max)
-                results['storage'].append(store_size)
+                results['storage'].append(store_size * store_factor)
                 results['last'].append(store_last)
                 results['charge_rate'].append(charge_rate)
                 results['discharge_rate'].append(discharge_rate)

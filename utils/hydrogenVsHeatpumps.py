@@ -4,6 +4,7 @@
 
 # library stuff
 import sys
+import os
 import pandas as pd
 from datetime import datetime
 import pytz
@@ -508,7 +509,7 @@ parser.add_argument('--baseload', action="store", dest="baseload", help='Base lo
 parser.add_argument('--step', action="store", dest="step", help='Step size.', type=float, default=0.1)
 parser.add_argument('--kf', action="store_true", dest="kf", help='Scale the generation data to KF Capacity factors', default=False)
 parser.add_argument('--kf2', action="store_true", dest="kf2", help='Scale the generation data to KF Capacity factors ', default=False)
-parser.add_argument('--onshore', action="store_true", dest="onshore", help='Use only onshore wind', default=False)
+parser.add_argument('--shore', action="store", dest="shore", default="all", help='on=Use only onshore wind off=only offshore, all=all' )
 parser.add_argument('--kfgen', action="store_true", dest="kfgen", help='Use KF generation from matlab', default=False)
 parser.add_argument('--espini', action="store_true", dest="espini", help='Use Electricity demand from espini', default=False)
 parser.add_argument('--shift', action="store_true", dest="shift", help='Shift the days to match weather calender', default=False)
@@ -523,6 +524,13 @@ args = parser.parse_args()
 
 if args.shift and args.reference != '2018':
     print('Error Can not have shift if reference year not 2018')
+    quit()
+
+output_dir = "/home/malcolm/uclan/output/" + args.dir
+if not os.path.isdir(output_dir):
+    print('Error output dir {} does not exist'.format(output_dir))
+    quit()
+    
 
 last_weather_year = args.end
 hourly = args.hourly
@@ -620,6 +628,8 @@ else:
     else:
         normalise_factor = 835616.0
 print('PEAK DEMAND {} Annual Demand {} Mean Daily Demand {} Normalise Factor {}'.format(daily_original_electric_with_heat.max(), daily_original_electric_with_heat.sum(), daily_original_electric_with_heat.mean(), normalise_factor))
+if args.hourly:
+    normalise_factor = normalise_factor / 24.0
 
 if not args.historic:
 
@@ -789,10 +799,13 @@ else:
 
         print('Extracting Wind ...')
         ninja_wind = ninja_wind[ninja_start : ninja_end]
-        if args.onshore:
+        if args.shore == 'on':
             wind = ninja_wind['onshore']
         else:
-            wind = ninja_wind['national']
+            if args.shore == 'off':
+                wind = ninja_wind['offshore']
+            else:
+                wind = ninja_wind['national']
 
     if args.kf:
         pcf = 0.1156
@@ -875,7 +888,6 @@ else:
 df, yd, all_demand, all_hydrogen, sample_hist, sample_durations = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, ref_temperature, args.climate, args.historic, heat_that_is_electric, normalise_factor, args.base, args.baseload, args.variable)
 print("Max storage {} Min Storage {}".format(df['storage'].max(), df['storage'].min()) )
 
-output_dir = "/home/malcolm/uclan/output/" + args.dir
 electricChar = 'S'
 if args.historic:
     electricChar = 'H'
@@ -906,6 +918,7 @@ settings = {
     'hist_wind' : args.wind,
     'eta'       : args.eta,
     'espini'    : args.espini,
+    'hourly'    : args.hourly,
     'run_time'  : math.floor(datetime.timestamp(datetime.now()) - datetime.timestamp(start_time))
 }
 settings_df = pd.DataFrame.from_dict(data=settings, orient='index')

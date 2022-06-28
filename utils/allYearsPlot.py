@@ -47,7 +47,7 @@ filename = 'ENS'
 path = '{}/{}/demand{}.csv'.format(output_dir, folder, filename)
 electric_existing = pd.read_csv(path, header=0, index_col=0, squeeze=True)
 electric_existing.index = pd.DatetimeIndex(pd.to_datetime(electric_existing.index).date)
-print(electric_existing)
+#print(electric_existing)
 existing = electric_existing * normalise_factor
 
 reference_year = demand[str(2018) + '-01-01' : str(2018) + '-12-31']
@@ -70,7 +70,7 @@ for year in years:
 
 #new_index = reference_year.index
 new_index = pd.Index(reference_year.index.dayofyear)
-print(new_index)
+#print(new_index)
 df = pd.DataFrame(data=demands, index=new_index)
 #print(df)
 edf = pd.DataFrame(data=existings, index=new_index)
@@ -98,12 +98,12 @@ plt.ylabel('Demand (TWh / day)', fontsize=15)
 plt.show()
 
 # scatter
-s_size = 5
+s_size = 9
 for year in years:
-    ax1 = plt.scatter(x=df[year].index, y=df[year], color='green', s=s_size)
+    ax1 = plt.scatter(x=df[year].index, y=df[year], color='green', s=s_size, marker='+', linewidths=1)
     if args.existing:
 #       plt.scatter(x=edf[year].index, y=edf[year], color='blue', s=s_size)
-        ax2 = plt.scatter(x=edf[year].index, y=edf[year], edgecolors='blue', s=7, facecolors='none')
+        ax2 = plt.scatter(x=edf[year].index, y=edf[year], edgecolors='blue', s=9, facecolors='none', marker='^')
         plt.legend( (ax1, ax2), ('41% Electric Heat Pumps', 'Existing Heating'), loc='upper center', fontsize=15)
 
 #TODO legend manually as can't do for each plot

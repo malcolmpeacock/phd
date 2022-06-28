@@ -41,13 +41,13 @@ ninja_pv = ninja_pv.resample('D').mean()
 
 print('Extracting Wind ...')
 ninja_wind = wind_hourly[ninja_start : ninja_end]
-ninja_wind = ninja_wind['onshore']
-ninja_wind = ninja_wind.resample('D').mean()
+ninja_onshore = ninja_wind['onshore']
+ninja_onshore = ninja_onshore.resample('D').mean()
 
-print(ninja_wind)
+print(ninja_onshore)
 print(ninja_pv)
 
-kf_wind.index = ninja_wind.index
+kf_wind.index = ninja_onshore.index
 kf_pv.index = ninja_pv.index
 # total energy to supply the load ( MWh )
 #total_energy = 305000000.0   # Kwh per year?
@@ -82,7 +82,7 @@ wind_cf = (wcf1 + wcf2 + wcf3 + wcf4 + wcf5 + wcf6) / 6
 wind_cf = 0.28
 
 print('Capacity Factor : wind {} pv {}'.format(wind_cf, pv_cf ) )
-ninja_wind_cf = ninja_wind.mean()
+ninja_wind_cf = ninja_onshore.mean()
 ninja_pv_cf = ninja_pv.mean()
 print('Ninja Capacity Factor : wind {} pv {}'.format(ninja_wind_cf, ninja_pv_cf ) )
 
@@ -98,7 +98,7 @@ print('Capacity Factor after change : wind {} pv {} energy/day {}'.format(kf_win
 
 stats.print_stats_header()
 stats.print_stats(kf_pv, ninja_pv,     'PV   Compared to Ninja')
-stats.print_stats(kf_wind, ninja_wind, 'Wind Compared to Ninja')
+stats.print_stats(kf_wind, ninja_onshore, 'Wind Compared to Ninja')
 
 print('            Ninja      KF')
 print('PV   max    {:.2f}    {:.2f} '.format(ninja_pv.max(), kf_pv.max() ) )
@@ -107,11 +107,11 @@ print('PV   mean   {:.2f}    {:.2f} '.format(ninja_pv.mean(), kf_pv.mean() ) )
 print('PV   std    {:.2f}    {:.2f} '.format(ninja_pv.std(), kf_pv.std() ) )
 print('PV   var    {:.2f}    {:.2f} '.format(ninja_pv.var(), kf_pv.var() ) )
 print('            Ninja      KF')
-print('WIND max    {:.2f}    {:.2f} '.format(ninja_wind.max(), kf_wind.max() ) )
-print('WIND min    {:.2f}    {:.2f} '.format(ninja_wind.min(), kf_wind.min() ) )
+print('WIND max    {:.2f}    {:.2f} '.format(ninja_onshore.max(), kf_wind.max() ) )
+print('WIND min    {:.2f}    {:.2f} '.format(ninja_onshore.min(), kf_wind.min() ) )
 print('WIND mean   {:.2f}    {:.2f} '.format(ninja_pv.mean(), kf_pv.mean() ) )
-print('WIND std    {:.2f}    {:.2f} '.format(ninja_wind.std(), kf_wind.std() ) )
-print('WIND var    {:.2f}    {:.2f} '.format(ninja_wind.var(), kf_wind.var() ) )
+print('WIND std    {:.2f}    {:.2f} '.format(ninja_onshore.std(), kf_wind.std() ) )
+print('WIND var    {:.2f}    {:.2f} '.format(ninja_onshore.var(), kf_wind.var() ) )
 
 
 kf_pv.plot(color='blue', label='PV Generation from Fragaki et. al')
@@ -123,7 +123,7 @@ plt.legend(loc='upper right')
 plt.show()
 
 kf_wind.plot(color='blue', label='Wind Generation from Fragaki et. al ')
-ninja_wind.plot(color='red', label='Wind Generation from ninja')
+ninja_onshore.plot(color='red', label='Wind Generation from ninja')
 plt.title('Comparison of daily UK Wind genreation')
 plt.xlabel('Time', fontsize=15)
 plt.ylabel('Energy', fontsize=15)
@@ -146,7 +146,19 @@ ax = kf_wind.plot.hist(bins=20, label='kf')
 plt.title('Wind distribution')
 plt.xlabel('Capacity Factor', fontsize=15)
 
-ninja_wind.plot.hist(bins=20, ax=ax, label='ninja' )
+ninja_onshore.plot.hist(bins=20, ax=ax, label='ninja' )
 plt.xlabel('Capacity Factor', fontsize=15)
 plt.legend(loc='upper right')
 plt.show()
+
+# Onshore vs Offshore hourly
+
+ninja_offshore = ninja_wind['offshore']
+ninja_onshore = ninja_wind['onshore']
+ninja_offshore_daily = ninja_offshore.resample('D').mean()
+ninja_onshore_daily = ninja_onshore.resample('D').mean()
+
+stats.print_stats_header('Ninja Wind          ')
+stats.print_stats(ninja_offshore, ninja_onshore, 'offshore to onshore hourly', predr2=False)
+stats.print_stats(ninja_offshore_daily, ninja_onshore_daily, 'offshore to onshore daily')
+
