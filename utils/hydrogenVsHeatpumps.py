@@ -919,6 +919,9 @@ settings = {
     'eta'       : args.eta,
     'espini'    : args.espini,
     'hourly'    : args.hourly,
+    'normalise' : normalise_factor,
+    'max_storage' : df['storage'].max(),
+    'min_storage' : df['storage'].min(),
     'run_time'  : math.floor(datetime.timestamp(datetime.now()) - datetime.timestamp(start_time))
 }
 settings_df = pd.DataFrame.from_dict(data=settings, orient='index')

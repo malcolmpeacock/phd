@@ -87,75 +87,51 @@ def storage_mp(net_demand, eta=0.75, hydrogen=None):
 
 # constant storage line
 
-def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_parm='f_pv'):
+def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_parm='f_pv', variable='storage'):
     # just take data points with storage values in a range
     if method=='threshold':
         threshold = storage_value * 0.05
-        s_df = df[(df['storage'] < storage_value + threshold) & (df['storage'] > storage_value - threshold)]
+        s_df = df[(df[variable] < storage_value + threshold) & (df[variable] > storage_value - threshold)]
         if len(s_df.index)<2:
-            print('WARNING: storage line {} days had only {} points'.format(storage_value, len(s_df.index) ) )
+            print('WARNING: {} line {} days had only {} points'.format(variable, storage_value, len(s_df.index) ) )
         sline = { 'Pw' : s_df[wind_parm].values, 'Ps' :s_df[pv_parm].values }
         df = pd.DataFrame(data=sline)
     # linearly interpolate along wind and then pv
     else:
 #       print('storage_line for {} days '.format(storage_value) )
-        x=[]
-        y=[]
-        last=[]
-        wind_energy=[]
-        pv_energy=[]
-        storage=[]
-        discharge=[]
-        baseload=[]
-        cost=[]
+        variables = [wind_parm, pv_parm, 'last', 'wind_energy', 'pv_energy', 'storage', 'discharge', 'base', 'cost']
+        if variable not in variables:
+            variables.append(variable)
+        value_lists={}
+        for var in variables:
+            value_lists[var] = []
+
         # for each wind value ...
         wind_values = df[wind_parm].unique()
-#   for i_wind in range(0,14):
-#       f_wind = i_wind * 0.5
         for f_wind in wind_values:
 #       print('Fwind {} '.format(f_wind) )
         # extract those values with a wind=xs
             is_xs = df[wind_parm] == f_wind
             df_xs = df[is_xs]
         # check storage in range
-            if storage_value < df_xs['storage'].max() and storage_value > df_xs['storage'].min():
+            if storage_value < df_xs[variable].max() and storage_value > df_xs[variable].min():
+                # add the wind and storage values
+                value_lists[wind_parm].append(f_wind)
+                value_lists[variable].append(storage_value)
+
                 # sort them by storage
-                df_xs = df_xs.sort_values('storage',ascending=False)
-                # interpolate a pv value for the storage
-                y_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs[pv_parm])
-                f_pv = y_interp(storage_value)
-                # store the points
-                x.append(f_wind)
-                y.append(f_pv.item())
-                storage.append(storage_value)
-                # interpolate a 'last' value for the storage
-                l_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['last'])
-                f_last = l_interp(storage_value)
-                last.append(f_last.item())
-#               print('Point: f_wind {} f_pv {}'.format(f_wind, f_pv.item()) )
-                # get energy values
-                l_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['wind_energy'])
-                f_last = l_interp(storage_value)
-                wind_energy.append(f_last.item())
-                l_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['pv_energy'])
-                f_last = l_interp(storage_value)
-                pv_energy.append(f_last.item())
+                df_xs = df_xs.sort_values(variable,ascending=False)
 
-                # get discharge value.
-                l_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['discharge'])
-                f_last = l_interp(storage_value)
-                discharge.append(f_last.item())
-                # get baseload value.
-                l_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['base'])
-                f_last = l_interp(storage_value)
-                baseload.append(f_last.item())
-                # get cost value.
-                l_interp = scipy.interpolate.interp1d(df_xs['storage'], df_xs['cost'])
-                f_last = l_interp(storage_value)
-                cost.append(f_last.item())
+                for var in variables:
+                    if var not in [wind_parm, variable]:
+                        # interpolate a value for the storage
+                        y_interp = scipy.interpolate.interp1d(df_xs[variable], df_xs[var])
+                        var_value = y_interp(storage_value)
+                        value_lists[var].append(var_value.item())
 
-        sline = { 'Pw' : x, 'Ps' :y, 'last' :last, 'wind_energy': wind_energy, 'pv_energy' : pv_energy, 'storage' : storage, 'discharge': discharge, 'base': baseload, 'cost': cost }
-        df = pd.DataFrame(data=sline)
+        value_lists['Pw'] = value_lists.pop(wind_parm)
+        value_lists['Ps'] = value_lists.pop(pv_parm)
+        df = pd.DataFrame(data=value_lists)
         df = df.sort_values(['Ps', 'Pw'], ascending=[True, True])
 #   print('Line: Pw max {} min {} '.format(df['Pw'].max(), df['Pw'].min() ) )
 #   print(df)
@@ -318,6 +294,43 @@ def configuration_cost(config):
     cost = (config['f_wind'] * cost_wind) + (config['f_pv'] * cost_solar) + (config['storage'] * cost_storage) + (config['base'] * cost_base) + (config['variable'] * cost_variable)
 
     config['cost'] = cost * one_day * 1e-6
+
+# Calculate generation cost assuming
+#   Technology          Fixed    Variable
+#   dispatchable (gas)  553600   21.28
+#   wind                1673364   4    (mean of offshore and onshore)
+#   solar                737520   0
+#   base (nuclear)      2471600   4.4
+#   storage (hydrogen)  4758400  20320
+#   storage (ps)         950400  53120
+# config base, wind, pv, variable, storage
+# TODO need actual dispatchable generation energy to calculate cost.
+
+def generation_cost(config,hydrogen=True):
+    # Day of energy in MWh
+    one_day = 818386
+    # Cost per kW capacity
+    cost_variable = 692
+    cost_wind = 50
+    cost_solar =2029
+    cost_base = 3089.5
+    cost_storage = 5948
+    # Cost per kWh energy generated
+    gen_wind = 0.005
+    gen_solar = 0.0
+    gen_base = 0.0055
+    gen_variable = 0.0266
+    gen_storage = 25.4
+    if not hydrogen:
+        cost_storage = 1188
+        gen_storage = 66.4
+    #  fixed costs based on capacity
+    fixed_cost = (config['f_wind'] * cost_wind) + (config['f_pv'] * cost_solar) + (config['storage'] * cost_storage) + (config['base'] * cost_base) + (config['variable'] * cost_variable)
+    #  variable costs assuming base load is on for 40 years.
+    variable_cost = (config['wind_energy'] * gen_wind) + ( config['discharge'] * gen_storage ) + ( config['base'] * gen_base * 40 * 365 )
+    #  normalise to the 2018 day of generation
+    config['cost'] = ( fixed_cost + variable_cost ) * one_day * 1e-9
+
 
 # get the minimum energy point in a storage line
 def min_point(storage_line, variable='energy', wind_var='Pw', pv_var='Ps'):
