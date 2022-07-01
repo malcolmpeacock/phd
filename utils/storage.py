@@ -149,7 +149,7 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
     # get durations for sample store history
     sample_durations = storage_duration(sample_hist)
 
-    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge_rate' : [], 'discharge_rate' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [] }
+    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge_rate' : [], 'discharge_rate' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [], 'variable_energy' : [] }
     # For hourly the storage will be in hours, so divide by 24 to convert to 
     # days
     if hourly:
@@ -171,6 +171,7 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
             supply = wind_energy + pv_energy
             net = demand - supply - base
 
+            variable_total = 0
             #  calculate how much storage we need.
             #  ( only difference is that mp can overfill )
             if method == 'kf':
@@ -181,7 +182,7 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
                     store_hist = storage_mp(net, eta, hydrogen)
                     store_size = store_hist.min() - store_hist.max()
                 else:
-                    store_size, store_hist = storage_all(demand, wind, pv, base, eta, hydrogen, f_wind, f_pv)
+                    store_size, store_hist, variable_total = storage_all(demand, wind, pv, base, eta, hydrogen, f_wind, f_pv)
 
                 
             # kf  model is always viable.
@@ -221,6 +222,7 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
                 results['discharge'].append(discharge)
                 results['wind_energy'].append(wind_energy.sum() / demand.sum())
                 results['pv_energy'].append(pv_energy.sum() / demand.sum())
+                results['variable_energy'].append(variable_total)
 
     print(" ")
     df = pd.DataFrame(data=results)
@@ -296,41 +298,54 @@ def configuration_cost(config):
     config['cost'] = cost * one_day * 1e-6
 
 # Calculate generation cost assuming
-#   Technology          Fixed    Variable
-#   dispatchable (gas)  553600   21.28
-#   wind                1673364   4    (mean of offshore and onshore)
-#   solar                737520   0
-#   base (nuclear)      2471600   4.4
-#   storage (hydrogen)  4758400  20320
-#   storage (ps)         950400  53120
-# config base, wind, pv, variable, storage
-# TODO need actual dispatchable generation energy to calculate cost.
 
-def generation_cost(config,hydrogen=True):
+def generation_cost(config,hydrogen=True,n_years=1):
+    # number of days
+    number_of_days = n_years * 365.25
+    # exchange rate euro to £
+    eu2p = 0.87
     # Day of energy in MWh
     one_day = 818386
-    # Cost per kW capacity
+    # Fix Cost per kW capacity in £
     cost_variable = 692
-    cost_wind = 50
-    cost_solar =2029
+    cost_wind = ( 2638.7 + 1544.71 ) / 2
+    cost_solar = 921.9
     cost_base = 3089.5
-    cost_storage = 5948
-    # Cost per kWh energy generated
+    # Variarble Cost per kWh energy generated in £
     gen_wind = 0.005
     gen_solar = 0.0
     gen_base = 0.0055
     gen_variable = 0.0266
-    gen_storage = 25.4
-    if not hydrogen:
-        cost_storage = 1188
-        gen_storage = 66.4
-    #  fixed costs based on capacity
-    fixed_cost = (config['f_wind'] * cost_wind) + (config['f_pv'] * cost_solar) + (config['storage'] * cost_storage) + (config['base'] * cost_base) + (config['variable'] * cost_variable)
-    #  variable costs assuming base load is on for 40 years.
-    variable_cost = (config['wind_energy'] * gen_wind) + ( config['discharge'] * gen_storage ) + ( config['base'] * gen_base * 40 * 365 )
-    #  normalise to the 2018 day of generation
-    config['cost'] = ( fixed_cost + variable_cost ) * one_day * 1e-9
 
+    # storage cost
+    cost_storage = 0.1 * eu2p
+    # Pumped storage
+    if not hydrogen:
+        cost_storage = 0.3 * eu2p
+
+    storage_kwh = config['storage'] * one_day * 1e3 * number_of_days
+    storage_cost = storage_kwh * cost_storage
+
+    #  fixed generation costs based on capacity
+    wind_kw = config['f_wind'] * one_day * 1e3 / 24
+    pv_kw = config['f_pv'] * one_day * 1e3 / 24
+    base_kw = config['base'] * one_day * 1e3 / 24
+    variable_kw = config['variable'] * one_day * 1e3 / 24
+    fixed_cost = (wind_kw * cost_wind + pv_kw * cost_solar + base_kw * cost_base + variable_kw * cost_variable) * n_years
+
+    #  variable generation costs. 
+    #  base load is assumed always on so we just use the capacity
+    pv_kwh = config['pv_energy'] * one_day * 1e3 * number_of_days
+    wind_kwh = config['wind_energy'] * one_day * 1e3 * number_of_days
+    base_kwh = config['base'] * one_day * 1e3 * number_of_days
+    variable_kwh = config['variable'] * one_day * 1e3 * number_of_days
+    variable_cost = (wind_kwh * gen_wind) + (base_kwh * gen_base) + ( variable_kwh * gen_variable )
+    # overall cost in £
+    cost_value = fixed_cost + variable_cost + storage_cost
+    # total energy in kwh
+    total_energy = wind_kwh + base_kwh + variable_kwh + pv_kwh
+    # £ per kwh
+    config['cost'] = cost_value / total_energy
 
 # get the minimum energy point in a storage line
 def min_point(storage_line, variable='energy', wind_var='Pw', pv_var='Ps'):
@@ -775,4 +790,4 @@ def storage_all(demand, wind, pv, base, eta, hydrogen, f_wind, f_pv):
         print(" ")
         print('Got balance at days {:.2f}'.format(store_max) )
         store_size = store_size * -1.0
-    return store_size, store_hist
+    return store_size, store_hist, variable_total

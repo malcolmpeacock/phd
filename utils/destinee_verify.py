@@ -115,7 +115,7 @@ daily_destinee_electric_heat35 = destinee_electric_heat35.resample('D').sum()
 
 # daily  plot of historic and electric
 daily_heat.plot(label='BDEW')
-daily_destinee_electric_heat.plot(label='DESSTINEE')
+daily_destinee_electric_heat.plot(label='DESSTINEE 2.5')
 #daily_destinee_electric_heat3.plot(label='DESSTINEE 2.9')
 daily_destinee_electric_heat35.plot(label='DESSTINEE 3.5')
 plt.title('Daily UK Electric Heat 2010 BDEW and DESSTINEE')

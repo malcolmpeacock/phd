@@ -126,7 +126,7 @@ for year in years:
 ref_41hp = pd.concat([ref_news[year] for year in years])
 
 # figure (6) but 3 years with the 2018 base line ( only include 41% )
-ref_41hp.rolling(5, min_periods=1).mean().plot(label='Electricity demand including 41% heating from heat pumps', color='green')
+ref_41hp.rolling(5, min_periods=1).mean().plot(label='Electricity demand including 41% heating provided by heat pumps', color='green')
 historic.rolling(5, min_periods=1).mean().plot(label='Historic electricity demand time series', color='blue')
 #plt.title('Impact of heat pumps on 2018 daily electricity demand (3 years 2018 baseline)')
 plt.xlabel('day of the year', fontsize=15)

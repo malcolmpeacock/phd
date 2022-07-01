@@ -94,7 +94,7 @@ extra_line.plot(color='red')
 
 plt.title('Daily variation of electricity demand with 40 years weather')
 plt.xlabel('Day of the year', fontsize=15)
-plt.ylabel('Demand (TWh / day)', fontsize=15)
+plt.ylabel('Electricity Demand (TWh / day)', fontsize=15)
 plt.show()
 
 # scatter
@@ -111,7 +111,7 @@ for year in years:
 #    plt.legend(loc='upper right', fontsize=15)
 plt.title('Daily variation of electricity demand with 40 years weather')
 plt.xlabel('Day of the year', fontsize=15)
-plt.ylabel('Demand (TWh / day)', fontsize=15)
+plt.ylabel('Electricity Demand (TWh / day)', fontsize=15)
 plt.show()
 
 # as 2 plots

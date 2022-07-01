@@ -509,6 +509,8 @@ parser.add_argument('--baseload', action="store", dest="baseload", help='Base lo
 parser.add_argument('--step', action="store", dest="step", help='Step size.', type=float, default=0.1)
 parser.add_argument('--kf', action="store_true", dest="kf", help='Scale the generation data to KF Capacity factors', default=False)
 parser.add_argument('--kf2', action="store_true", dest="kf2", help='Scale the generation data to KF Capacity factors ', default=False)
+parser.add_argument('--cfpv', action="store", dest="cfpv", help='PV capacity factor to scale to, default is to leave unchanged', type=float, default=0)
+parser.add_argument('--cfwind', action="store", dest="cfwind", help='Wind capacity factor to scale to, default is to leave unchanged', type=float, default=0)
 parser.add_argument('--shore', action="store", dest="shore", default="all", help='on=Use only onshore wind off=only offshore, all=all' )
 parser.add_argument('--kfgen', action="store_true", dest="kfgen", help='Use KF generation from matlab', default=False)
 parser.add_argument('--espini', action="store_true", dest="espini", help='Use Electricity demand from espini', default=False)
@@ -823,6 +825,12 @@ else:
         print('Converting to KF capacity factors from wind {} pv {} to wind {} pv {} ...'.format(wind_mean, pv_mean, wcf, pcf))
         pv = pv * pcf / pv_mean
         wind = wind * wcf / wind_mean
+    if args.cfpv > 0:
+        print('Converting to PV capacity factors from {} to {} ...'.format(pv.mean(), args.cfpv))
+        pv = pv * args.cfpv / pv.mean()
+    if args.cfwind > 0:
+        print('Converting to Wind capacity factors from {} to {} ...'.format(wind.mean(), args.cfwind))
+        wind = wind * args.cfwind / wind.mean()
 
 print('Generation PV: Number of value {} mean CF {} ,  Wind: number of values {} meaqn CF {} '.format(len(pv), pv.mean(), len(wind), wind.mean() ) )
 
@@ -917,6 +925,8 @@ settings = {
     'hist_pv'   : args.pv,
     'hist_wind' : args.wind,
     'eta'       : args.eta,
+    'cfpv'      : args.cfpv,
+    'cfwind'    : args.cfwind,
     'espini'    : args.espini,
     'hourly'    : args.hourly,
     'normalise' : normalise_factor,

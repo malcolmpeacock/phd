@@ -178,8 +178,8 @@ plt.show()
 gas_hdh  = hdd * c1
 base = gas - gas_hdh
 # plot regression with hdh
-gas.plot(color='blue', label='Daily gas demand 2018')
-base.plot(color='green', label='Gas demand with heating removed')
+gas.plot(color='blue', label='Daily total gas demand 2018')
+base.plot(color='green', label='Daily Gas demand with heating removed')
 plt.title('Daily gas demand 2018 base using HDD')
 plt.xlabel('day', fontsize=15)
 plt.ylabel('Gas Demand (Twh) per day', fontsize=15)

@@ -98,14 +98,17 @@ parser.add_argument('--pstore', action="store_true", dest="pstore", help='Plot t
 parser.add_argument('--pdemand', action="store_true", dest="pdemand", help='Plot the demand ', default=False)
 parser.add_argument('--pfit', action="store_true", dest="pfit", help='Show 2d plots', default=False)
 parser.add_argument('--yearly', action="store_true", dest="yearly", help='Show Yearly plots', default=False)
-parser.add_argument('--energy', action="store_true", dest="energy", help='Plot energy instead of capacity', default=False)
+#parser.add_argument('--energy', action="store_true", dest="energy", help='Plot energy instead of capacity', default=False)
 parser.add_argument('--rate', action="store_true", dest="rate", help='Plot the charge and discharge rates', default=False)
+parser.add_argument('--ps', action="store_true", dest="ps", help='Storage is pumped storage, default is hydrogen.', default=False)
 parser.add_argument('--min', action="store_true", dest="min", help='Plot the minimum generation line', default=False)
 parser.add_argument('--annotate', action="store_true", dest="annotate", help='Annotate the shares heat map', default=False)
 parser.add_argument('--scenario', action="store", dest="scenario", help='Scenarion to plot', default='adhoc')
 parser.add_argument('--days', action="store", dest="days", help='Days of storage line to plot', default='0.5, 1, 3, 10, 25, 30, 40, 60' )
 parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1')
 parser.add_argument('--svariable', action="store", dest="svariable", help='Variable to contour, default is storage', default='storage')
+parser.add_argument('--sx', action="store", dest="sx", help='Variable to plot on the X axis, default is Pw', default='Pw')
+parser.add_argument('--sy', action="store", dest="sy", help='Variable to plot on the Y axis, default is Ps', default='Ps')
 parser.add_argument('--adverse', action="store", dest="adverse", help='Adverse file mnemonic', default='5s1')
 parser.add_argument('--last', action="store", dest="last", help='Only include configs which ended with store: any, full, p3=3 percent full ', default='p3')
 parser.add_argument('--excess', action="store", dest="excess", help='Excess value to find minimum storage against', type=float, default=0.5)
@@ -396,20 +399,27 @@ if args.scenario == 'generation':
                  'kf' : 
        {'file': 'ENH', 'dir' : 'kfgen/', 'title': 'Generation from Fragaki et. al. '} }
 if args.scenario == 'shore':
+    scenario_title = 'Onshore vs Offshore'
     scenarios = {'kf' :
        {'file': 'ENH', 'dir' : 'ninjaOffshore/', 'title': 'Ninja (offshore)'},
                  'ninja' : 
        {'file': 'ENH', 'dir' : 'ninjaOnshore/', 'title': 'Ninja (onshore)'}    }
+if args.scenario == 'kfig8':
+    scenario_title = 'Generation and demand from Fragaki et. al.'
+    scenarios = {'S75' :
+       {'file': 'NNH', 'dir' : 'kfig8S75/', 'title': 'Efficiency 75%'},
+                 'S85' : 
+       {'file': 'NNH', 'dir' : 'kfig8S85/', 'title': 'Efficiency 85%'}    }
 if args.scenario == 'models':
     scenarios = {'HNSh' :
        {'file': 'PNS', 'dir' : sm, 'title': 'All heat pumps, mp storage model'},
                  'HNSy' : 
        {'file': 'PNS', 'dir' : y40, 'title': 'All heat pumps, kf storage model'}    }
 if args.scenario == 'eheat':
-    scenarios = {'PNS' :
+    scenarios = {'NNS' :
+       {'file': 'NNS', 'dir' : kf, 'title': '2018 with heating electricity removed'},
+                 'PNS' :
        {'file': 'PNS', 'dir' : kf, 'title': 'All heating is provided by heat pumps'},
-                 'NNS' :
-       {'file': 'NNS', 'dir' : kf, 'title': '2018 with electricity for heating removed'}
     }
 if args.scenario == 'eheat2':
     scenarios = {'BBB' :
@@ -471,8 +481,6 @@ if args.scenario == 'fixeds':
     scenarios = {'NNS' : {'file': 'ENS', 'dir' : fixeds, 'title': 'Synthetic Electric Series'} }
 if args.scenario == 'fixed':
     scenarios = {'NNS' : {'file': 'ENS', 'dir' : fixed, 'title': 'Synthetic Electric Series'} }
-if args.scenario == 'kfig8':
-    scenarios = {'NNH' : {'file': 'NNH', 'dir' : kfig8, 'title': 'Historic Electric Series'} }
 if args.scenario == 'kfig6':
     scenarios = {'NNH' : {'file': 'NNH', 'dir' : kfig6, 'title': 'Historic Electric Series'} }
 if args.scenario == 'adv':
@@ -522,7 +530,7 @@ for key, scenario in scenarios.items():
     if exists(path):
         setting = readers.read_settings(path)
     else:
-        setting = {'storage' : 'kf' }
+        setting = {'storage' : 'kf', 'baseload' : '0.0', 'start' : 1980, 'end': 2019 }
     settings[key] = setting
 
 # Load the shares dfs
@@ -538,14 +546,11 @@ for key, scenario in scenarios.items():
     filename = scenario['file']
     path = '{}/{}/shares{}.csv'.format(output_dir, folder, filename)
     df = pd.read_csv(path, header=0, index_col=0)
+    for col in ['base', 'variable', 'wind_energy', 'pv_energy']:
+        if col not in df.columns:
+            print('Warning {} missing, setting to zero'.format(col))
+            df[col] = 0.0
 #   print(df)
-
-    # should not need this since don't overfill ?
-#   storage_values = df['storage'].values
-#   for i in range(storage_values.size):
-#       if storage_values[i] < 0.0:
-#           storage_values[i] = 0.0;
-#   df['storage'] = storage_values
 
     wind_at_1 = df[df['f_wind']==1.0]
     if len(wind_at_1.index) == 0 or 'gw_wind' not in wind_at_1.columns:
@@ -555,7 +560,8 @@ for key, scenario in scenarios.items():
   
     # calculate cost and energy
 #   storage.configuration_cost(df)
-    storage.generation_cost(df)
+    n_years = int(settings[key]['end']) - int(settings[key]['start']) + 1
+    storage.generation_cost(df, not args.ps, n_years )
     df['energy'] = df['wind_energy'] + df['pv_energy']
     df['fraction'] = df['wind_energy'] / df['energy']
 
@@ -680,6 +686,9 @@ axis_labels = {
     'Pw': 'Wind ( energy in proportion to nomarlised demand)',
     'energy' : 'Energy generated ( normalised to demand )',
     'fraction' : 'Wind energy fraction',
+    'wind_energy' : 'Wind energy ( normalised to demand )',
+    'pv_energy' : 'PV energy ( normalised to demand )',
+    'cost' : 'cost ( £/Kwh )',
 }
 
 # Plot constant storage lines
@@ -699,9 +708,6 @@ for key, scenario in scenarios.items():
 #   testx = wind2gw(2)
     wind_parm = 'f_wind'
     pv_parm = 'f_pv'
-    if args.energy:
-        wind_parm = 'wind_energy'
-        pv_parm = 'pv_energy'
     # calculate constant storage line for 40 days
     # or the value specified
     storage_model = settings[key]['storage']
@@ -726,11 +732,11 @@ for key, scenario in scenarios.items():
         print_min(min_energy, '{:.1f} days storag'.format(days), label, max_sl)
         # save axis for the first one, and plot
         if first:
-            ax = storage_line.plot(x='Pw',y='Ps',label='{} {:.1f} days. {}'.format(args.svariable, days, label), marker=markers[scount], linestyle=styles[scount])
+            ax = storage_line.plot(x=args.sx,y=args.sy,label='{} {:.1f} days. {}'.format(args.svariable, days, label), marker=markers[scount], linestyle=styles[scount])
 #           line1 = storage_line
 #           label1 = label
         else:
-            storage_line.plot(x='Pw',y='Ps',ax=ax,label='{} {:.1f} days. {}'.format(args.svariable, days, label), marker=markers[scount], linestyle=styles[scount])
+            storage_line.plot(x=args.sx,y=args.sy,ax=ax,label='{} {:.1f} days. {}'.format(args.svariable, days, label), marker=markers[scount], linestyle=styles[scount])
 #           line2 = storage_line
 #           label2 = label
             # If we are on the 2nd or greater scenario then compare the amount
@@ -758,14 +764,10 @@ for key, scenario in scenarios.items():
         scount+=1
 
 plt.title('Constant {} lines {}'.format(args.svariable, scenario_title) )
-if args.energy:
-    plt.xlabel('Wind ( energy in proportion to nomarlised demand)')
-    plt.ylabel('Solar PV ( energy in proportion to normalised demand)')
-else:
-    plt.xlabel('Wind ( capacity in proportion to nomarlised demand)')
-    plt.ylabel('Solar PV ( capacity in proportion to normalised demand)')
+plt.xlabel(axis_labels[args.sx])
+plt.ylabel(axis_labels[args.sy])
 # 2nd axis
-if not args.energy:
+if args.sx == 'Pw' and args.sy=='Ps':
     axx = ax.secondary_xaxis('top', functions=(cf2gw, gw2cf))
     axx.set_xlabel('Capacity GW')
     axy = ax.secondary_yaxis('right', functions=(cf2gw, gw2cf))
@@ -822,7 +824,7 @@ if args.yearly:
 
     plt.title('Interannual variation of electricity demand')
     plt.xlabel('year', fontsize=15)
-    plt.ylabel('Annual Demand (TWh)', fontsize=15)
+    plt.ylabel('Annual Electricity Demand (TWh)', fontsize=15)
 #   plt.legend(loc='upper left', fontsize=15)
     plt.legend(loc='center left', fontsize=15)
 #   plt.legend(tuple(axs), tuple(labels), loc='center left', fontsize=15)
@@ -872,8 +874,8 @@ if args.pdemand:
 
     plt.title('Daily Electricity demand')
     plt.xlabel('year', fontsize=15)
-    plt.ylabel('Demand (MWh)', fontsize=15)
-    plt.legend(loc='upper left', fontsize=15)
+    plt.ylabel('Eelectricity Demand (MWh)', fontsize=15)
+    plt.legend(loc='upper center', fontsize=15)
     plt.show()
 
 # plot the hydrogen demand
@@ -891,7 +893,7 @@ if args.pdemand:
 
     plt.title('Daily Hydrogen demand')
     plt.xlabel('year', fontsize=15)
-    plt.ylabel('Demand (MWh)', fontsize=15)
+    plt.ylabel('Hydrogen Demand (MWh)', fontsize=15)
     plt.legend(loc='upper left', fontsize=15)
     plt.show()
 
