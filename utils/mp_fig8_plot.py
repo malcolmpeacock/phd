@@ -11,6 +11,7 @@ import calendar
 import numpy as np
 from scipy import interpolate
 import math
+from os.path import exists
 
 # custom code
 import stats
@@ -38,8 +39,12 @@ parser.add_argument('--historic', action="store_true", dest="historic", help='Hi
 parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1')
 parser.add_argument('--dir', action="store", dest="dir", help='Directory for my files', default='allS')
 parser.add_argument('--scenario', action="store", dest="scenario", help='Scenario E=existing, N=no heat', default='N')
+parser.add_argument('--ps', action="store_true", dest="ps", help='Storage is pumped storage, default is hydrogen.', default=False)
 parser.add_argument('--model', action="store", dest="model", help='Storage Model', default='old')
 parser.add_argument('--last', action="store_true", dest="last", help='Only include configs which ended with store full', default=False)
+parser.add_argument('--shore', action="store", dest="shore", help='Wind to base cost on both, on, off . default = both ', default='both')
+parser.add_argument('--title', action="store", dest="title", help='Override the plot title', default=None)
+
 args = parser.parse_args()
 
 demand_type = 'S'
@@ -53,21 +58,34 @@ colours = ['red', 'yellow', 'green', 'blue']
 etas = [75, 85]
 styles = ['solid', 'dotted']
 first = True
+output_dir = "/home/malcolm/uclan/output"
 
 ecount=0
 for eta in etas:
     print('eta {} '.format(eta) )
     count=0
-    # read in mp shares data
-    mp = pd.read_csv("/home/malcolm/uclan/output/{}{:02d}/shares{}N{}.csv".format(args.dir,eta,args.scenario, demand_type))
-    if args.last:
-        mp = mp[mp['last']==0.0]
-        print('Only use configs where store ends full {} values'.format(len(mp)))
+    # read in the settings file
+    path = '{}/{}{:02d}/settings{}N{}.csv'.format(output_dir, args.dir, eta,args.scenario, demand_type)
+    if exists(path):
+        settings = readers.read_settings(path)
+    else:
+        settings = {'storage' : 'kf', 'baseload' : '0.0', 'start' : 1980, 'end': 2019, 'hourly': False }
 
-    print('Synthetic time series {} values'.format(len(mp)))
+    # read in mp shares data
+    df = pd.read_csv("{}/{}{:02d}/shares{}N{}.csv".format(output_dir, args.dir,eta,args.scenario, demand_type))
+    # calculate cost and energy
+    n_years = int(settings['end']) - int(settings['start']) + 1
+    storage.generation_cost(df, not args.ps, n_years, settings['hourly']=='True', args.shore )
+    df['energy'] = df['wind_energy'] + df['pv_energy']
+    df['fraction'] = df['wind_energy'] / df['energy']
+    if args.last:
+        df = df[df['last']==0.0]
+        print('Only use configs where store ends full {} values'.format(len(df)))
+
+    print('Synthetic time series {} values'.format(len(df)))
     for line in lines:
-#       points = storage.storage_line(mp,line, args.sline, 'f_wind', 'f_pv')
-        points = get_storage_line(mp, args.model, line, 'f_wind', 'f_pv')
+#       points = storage.storage_line(df,line, args.sline, 'f_wind', 'f_pv')
+        points = get_storage_line(df, args.model, line, 'f_wind', 'f_pv')
         print('Line {} points {} last {} to {} zero {} '.format(line, len(points), points['last'].min(), points['last'].max(), len(points[points['last']==0.0]) ) )
 #       print(points)
         x_var = 'Pw'
@@ -80,7 +98,10 @@ for eta in etas:
         count+=1
     ecount+=1
 
-plt.title('Constant storage lines {} scenario {}'.format(args.dir, args.scenario ))
+if args.title:
+    plt.title(args.title)
+else:
+    plt.title('Constant storage lines {} scenario {}'.format(args.dir, args.scenario ))
 plt.xlabel('Wind ( capacity in proportion to nomarlised demand)')
 plt.ylabel('Solar PV ( capacity in proportion to normalised demand)')
 plt.show()

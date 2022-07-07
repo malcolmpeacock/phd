@@ -44,11 +44,10 @@ def get_storage_line(df, storage_model, days, wind_parm='f_wind', pv_parm='f_pv'
 
 def get_viable(df, last, days):
     if args.last == 'full':
-        pdf = df[df['last']==0.0]
+        pdf = df[df['last']==100.0]
     else:
         if args.last == 'p3':
-            last_val = days * 0.03
-            pdf = df[df['last']>-last_val]
+            pdf = df[df['last']>97.0]
         else:
             pdf = df
     return pdf
@@ -110,7 +109,8 @@ parser.add_argument('--svariable', action="store", dest="svariable", help='Varia
 parser.add_argument('--sx', action="store", dest="sx", help='Variable to plot on the X axis, default is Pw', default='Pw')
 parser.add_argument('--sy', action="store", dest="sy", help='Variable to plot on the Y axis, default is Ps', default='Ps')
 parser.add_argument('--adverse', action="store", dest="adverse", help='Adverse file mnemonic', default='5s1')
-parser.add_argument('--last', action="store", dest="last", help='Only include configs which ended with store: any, full, p3=3 percent full ', default='p3')
+parser.add_argument('--last', action="store", dest="last", help='Only include configs which ended with store: any, full, p3=3 percent full ', default='any')
+parser.add_argument('--shore', action="store", dest="shore", help='Wind to base cost on both, on, off . default = both ', default='both')
 parser.add_argument('--excess', action="store", dest="excess", help='Excess value to find minimum storage against', type=float, default=0.5)
 parser.add_argument('--variable', action="store", dest="variable", help='Variable to plot from scenario', default=None)
 args = parser.parse_args()
@@ -332,6 +332,11 @@ if args.scenario == 'newold':
        {'file': 'ENS', 'dir' : 'new_model/old/', 'title': 'Existing heating 0.75 new model with old constraints'}    }
 if args.scenario == 'newfig8':
     scenarios = {'old' :
+       {'file': 'NNH', 'dir' : 'new_fig8S75/', 'title': 'New input new storage model'},
+                 'new' : 
+       {'file': 'NNH', 'dir' : 'new_fig8S85/', 'title': 'new input new storage model'}    }
+if args.scenario == 'fig8oldvnew':
+    scenarios = {'old' :
        {'file': 'NNH', 'dir' : 'old_fig8S75/', 'title': 'As per Fragaki et. al. Old storage model'},
                  'new' : 
        {'file': 'NNH', 'dir' : 'new_fig8S75/', 'title': 'As per Fragaki et. al. New storage model with old constraints'}    }
@@ -352,9 +357,9 @@ if args.scenario == 'halfhp':
        {'file': 'HNS', 'dir' : 'allS75/', 'title': 'Half Heat Pumps 0.75'}    }
 if args.scenario == 'mfig8':
     scenarios = {'allS75' :
-       {'file': 'NNS', 'dir' : 'allS75/', 'title': 'Existing heating 0.75'},
+       {'file': 'ENS', 'dir' : 'allS75/', 'title': 'Existing heating 0.75'},
                  'allS85' : 
-       {'file': 'NNS', 'dir' : 'allS85/', 'title': 'Existing heating 0.85'}    }
+       {'file': 'ENS', 'dir' : 'allS85/', 'title': 'Existing heating 0.85'}    }
 if args.scenario == 'years':
     scenarios = {'y4' :
        {'file': 'ENS', 'dir' : 'fouryears/y20092012', 'title': 'Existing heating 2009 - 2012'},
@@ -404,6 +409,14 @@ if args.scenario == 'shore':
        {'file': 'ENH', 'dir' : 'ninjaOffshore/', 'title': 'Ninja (offshore)'},
                  'ninja' : 
        {'file': 'ENH', 'dir' : 'ninjaOnshore/', 'title': 'Ninja (onshore)'}    }
+if args.scenario == 'shores':
+    scenario_title = 'Onshore vs Offshore'
+    scenarios = {'off' :
+       {'file': 'ENH', 'dir' : 'ninjaOffshore/', 'title': 'Ninja (offshore)'},
+                 'on' : 
+       {'file': 'ENH', 'dir' : 'ninjaOnshore/', 'title': 'Ninja (onshore)'},
+                 'ons' : 
+       {'file': 'ENH', 'dir' : 'ninjaOnShoreScaled/', 'title': 'Ninja (onshore scaled to offshore cf)'}    }
 if args.scenario == 'kfig8':
     scenario_title = 'Generation and demand from Fragaki et. al.'
     scenarios = {'S75' :
@@ -530,7 +543,7 @@ for key, scenario in scenarios.items():
     if exists(path):
         setting = readers.read_settings(path)
     else:
-        setting = {'storage' : 'kf', 'baseload' : '0.0', 'start' : 1980, 'end': 2019 }
+        setting = {'storage' : 'kf', 'baseload' : '0.0', 'start' : 1980, 'end': 2019, 'hourly': False }
     settings[key] = setting
 
 # Load the shares dfs
@@ -561,19 +574,15 @@ for key, scenario in scenarios.items():
     # calculate cost and energy
 #   storage.configuration_cost(df)
     n_years = int(settings[key]['end']) - int(settings[key]['start']) + 1
-    storage.generation_cost(df, not args.ps, n_years )
+    storage.generation_cost(df, not args.ps, n_years, settings[key]['hourly']=='True', args.shore )
     df['energy'] = df['wind_energy'] + df['pv_energy']
     df['fraction'] = df['wind_energy'] / df['energy']
 
     if args.last == 'full':
-        viable = df[df['last']==0.0]
+        viable = df[df['last']==100.0]
     else:
         if args.last == 'p3':
-            if len(day_list) == 1:
-                last_val = day_list[0] * 0.03
-            else:
-                last_val = 25 * 0.03
-            viable = df[df['last']>-last_val]
+            viable = df[df['last']>97.0]
         else:
             viable = df
     zero = df[df['storage']==0.0]
@@ -631,7 +640,7 @@ if args.plot:
     for key, scenario in scenarios.items():
         label = scenario['title']
         df = dfs[key]
-        scatterHeat(df, 'last', 'Store remaining in days ', label)
+        scatterHeat(df, 'last', 'Store % remaining at end', label)
 
 if args.pfit:
     # Plot viable solutions
@@ -689,6 +698,7 @@ axis_labels = {
     'wind_energy' : 'Wind energy ( normalised to demand )',
     'pv_energy' : 'PV energy ( normalised to demand )',
     'cost' : 'cost ( £/Kwh )',
+    'last' : 'store level % fill at end',
 }
 
 # Plot constant storage lines

@@ -832,7 +832,6 @@ else:
         print('Converting to Wind capacity factors from {} to {} ...'.format(wind.mean(), args.cfwind))
         wind = wind * args.cfwind / wind.mean()
 
-print('Generation PV: Number of value {} mean CF {} ,  Wind: number of values {} meaqn CF {} '.format(len(pv), pv.mean(), len(wind), wind.mean() ) )
 
 if args.plot:
 #   print(wind)
@@ -893,6 +892,8 @@ else:
         wind = wind.resample('D').mean()
         pv = pv.resample('D').mean()
 
+print('Generation PV: Number of value {} mean CF {} ,  Wind: number of values {} meaqn CF {} '.format(len(pv), pv.mean(), len(wind), wind.mean() ) )
+
 df, yd, all_demand, all_hydrogen, sample_hist, sample_durations = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, ref_temperature, args.climate, args.historic, heat_that_is_electric, normalise_factor, args.base, args.baseload, args.variable)
 print("Max storage {} Min Storage {}".format(df['storage'].max(), df['storage'].min()) )
 
@@ -929,6 +930,8 @@ settings = {
     'cfwind'    : args.cfwind,
     'espini'    : args.espini,
     'hourly'    : args.hourly,
+    'kfgen'     : args.kfgen,
+    'shore'     : args.shore,
     'normalise' : normalise_factor,
     'max_storage' : df['storage'].max(),
     'min_storage' : df['storage'].min(),
