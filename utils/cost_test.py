@@ -36,15 +36,18 @@ print("Cstore {} store_cap {} store_pow {} Cw {} Cs {} TCoE {}".format(c_store, 
 print("Ed {} WindP {} SolarP {} StoreP {} ".format(Ed, Cw/TC, Cs/TC, Cb/TC ))
 
 num_days = num_years * 365.25
-normalise_factor = annual_demand / 365.25
-size_days = storage_size / normalise_factor
-wind_days = wind_energy / (normalise_factor * num_days)
-pv_days = pv_energy/ (normalise_factor * num_days)
-discharge_rate = max_discharge / normalise_factor
-charge_rate =  max_charge / normalise_factor
+mean_daily_energy = annual_demand / 365.25
+hourly = False
+
+size_days = storage.capacity2days(storage_size, mean_daily_energy * 1e3, hourly)
+wind_days = storage.energy2days(wind_energy, mean_daily_energy, num_days, hourly)
+pv_days = storage.energy2days(pv_energy, mean_daily_energy, num_days, hourly)
+discharge_rate = storage.capacity2days(max_discharge, mean_daily_energy * 1e3, True)
+charge_rate = storage.capacity2days( max_charge, mean_daily_energy * 1e3, True)
+
 data = { 'storage' : [size_days], 'wind_energy' : [wind_days], 'pv_energy': [pv_days], 'variable_energy' : [0], 'base' : [0], 'charge_rate' : [charge_rate], 'discharge_rate': [discharge_rate], 'variable': [0] }
 
 df = pd.DataFrame(data)
 print(df)
-storage.generation_cost(df, 'caes', normalise_factor, num_years, False, 'both', 'B')
+storage.generation_cost(df, 'caes', mean_daily_energy, num_years, False, 'both', 'B')
 print(df)

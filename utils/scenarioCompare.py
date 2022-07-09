@@ -99,7 +99,7 @@ parser.add_argument('--pfit', action="store_true", dest="pfit", help='Show 2d pl
 parser.add_argument('--yearly', action="store_true", dest="yearly", help='Show Yearly plots', default=False)
 #parser.add_argument('--energy', action="store_true", dest="energy", help='Plot energy instead of capacity', default=False)
 parser.add_argument('--rate', action="store_true", dest="rate", help='Plot the charge and discharge rates', default=False)
-parser.add_argument('--ps', action="store_true", dest="ps", help='Storage is pumped storage, default is hydrogen.', default=False)
+parser.add_argument('--stype', action="store", dest="stype", help='Type of Storage: pumped, hydrogen, caes.', default='pumped')
 parser.add_argument('--min', action="store_true", dest="min", help='Plot the minimum generation line', default=False)
 parser.add_argument('--annotate', action="store_true", dest="annotate", help='Annotate the shares heat map', default=False)
 parser.add_argument('--scenario', action="store", dest="scenario", help='Scenarion to plot', default='adhoc')
@@ -113,6 +113,7 @@ parser.add_argument('--last', action="store", dest="last", help='Only include co
 parser.add_argument('--shore', action="store", dest="shore", help='Wind to base cost on both, on, off . default = both ', default='both')
 parser.add_argument('--excess', action="store", dest="excess", help='Excess value to find minimum storage against', type=float, default=0.5)
 parser.add_argument('--variable', action="store", dest="variable", help='Variable to plot from scenario', default=None)
+parser.add_argument('--costmodel', action="store", dest="costmodel", help='Cost model A or B', default='B')
 args = parser.parse_args()
 
 day_str = args.days.split(',')
@@ -574,7 +575,7 @@ for key, scenario in scenarios.items():
     # calculate cost and energy
 #   storage.configuration_cost(df)
     n_years = int(settings[key]['end']) - int(settings[key]['start']) + 1
-    storage.generation_cost(df, not args.ps, n_years, settings[key]['hourly']=='True', args.shore )
+    storage.generation_cost(df, args.stype, float(settings[key]['normalise']), n_years, settings[key]['hourly']=='True', args.shore, args.costmodel  )
     df['energy'] = df['wind_energy'] + df['pv_energy']
     df['fraction'] = df['wind_energy'] / df['energy']
 

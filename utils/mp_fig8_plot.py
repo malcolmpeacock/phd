@@ -39,11 +39,12 @@ parser.add_argument('--historic', action="store_true", dest="historic", help='Hi
 parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1')
 parser.add_argument('--dir', action="store", dest="dir", help='Directory for my files', default='allS')
 parser.add_argument('--scenario', action="store", dest="scenario", help='Scenario E=existing, N=no heat', default='N')
-parser.add_argument('--ps', action="store_true", dest="ps", help='Storage is pumped storage, default is hydrogen.', default=False)
+parser.add_argument('--stype', action="store", dest="stype", help='Type of Storage: pumped, hydrogen, caes.', default='pumped')
 parser.add_argument('--model', action="store", dest="model", help='Storage Model', default='old')
 parser.add_argument('--last', action="store_true", dest="last", help='Only include configs which ended with store full', default=False)
 parser.add_argument('--shore', action="store", dest="shore", help='Wind to base cost on both, on, off . default = both ', default='both')
 parser.add_argument('--title', action="store", dest="title", help='Override the plot title', default=None)
+parser.add_argument('--costmodel', action="store", dest="costmodel", help='Cost model A or B', default='A')
 
 args = parser.parse_args()
 
@@ -75,7 +76,7 @@ for eta in etas:
     df = pd.read_csv("{}/{}{:02d}/shares{}N{}.csv".format(output_dir, args.dir,eta,args.scenario, demand_type))
     # calculate cost and energy
     n_years = int(settings['end']) - int(settings['start']) + 1
-    storage.generation_cost(df, not args.ps, n_years, settings['hourly']=='True', args.shore )
+    storage.generation_cost(df, args.stype, n_years, float(settings['normalise']), settings['hourly']=='True', args.shore, args.costmodel )
     df['energy'] = df['wind_energy'] + df['pv_energy']
     df['fraction'] = df['wind_energy'] / df['energy']
     if args.last:

@@ -298,15 +298,30 @@ def configuration_cost(config):
 
     config['cost'] = cost * one_day * 1e-6
 
-# Calculate generation cost assuming
+# Calculate generation cost
 
-def generation_cost(config,hydrogen=True,n_years=1,hourly=False,shore='both'):
+def generation_cost(config,stype,one_day,n_years=1,hourly=False,shore='both', model='A'):
+    print(stype,one_day,n_years,hourly,shore,model)
+    if model == 'A' :
+        generation_cost_a(config,stype,one_day,n_years,hourly,shore)
+    else:
+        generation_cost_b(config,stype,one_day,n_years,hourly,shore)
+
+#
+# config
+# stype
+# one_day  - mean daily energy in Mwh
+# n_years
+# hourly
+# shore
+# model
+def generation_cost_a(config,stype,one_day,n_years=1,hourly=False,shore='both', model='A'):
     # number of days
     number_of_days = n_years * 365.25
     # exchange rate euro to £
     eu2p = 0.87
     # Day of energy in MWh
-    one_day = 818386
+#   one_day = 818386
     # Fix Cost per kW capacity in £
     cost_variable = 692
     if shore == 'both':
@@ -327,7 +342,7 @@ def generation_cost(config,hydrogen=True,n_years=1,hourly=False,shore='both'):
     # storage cost
     cost_storage = 0.1 * eu2p
     # Pumped storage
-    if not hydrogen:
+    if stype=='pumped':
         cost_storage = 0.3 * eu2p
 
     storage_kwh = config['storage'] * one_day * 1e3 * number_of_days
@@ -352,10 +367,86 @@ def generation_cost(config,hydrogen=True,n_years=1,hourly=False,shore='both'):
     variable_cost = (wind_kwh * gen_wind) + (base_kwh * gen_base) + ( variable_kwh * gen_variable )
     # overall cost in £
     cost_value = fixed_cost + variable_cost + storage_cost
-    # total energy in kwh
-    total_energy = wind_kwh + base_kwh + variable_kwh + pv_kwh
-    # £ per kwh
-    config['cost'] = cost_value / total_energy
+    # cost per MWh ( divide by the total demand )
+    config['cost'] = cost_value / ( one_day * 1e3 * number_of_days )
+
+# Calculate generation cost based on [capacity v renewable gen UK]
+
+def generation_cost_b(config,stype,one_day,n_years=1,hourly=False,shore='both', model='A' ):
+    # number of days
+    number_of_days = n_years * 365.25
+    # Day of energy in MWh
+#   one_day = 818386
+    # Fixed of storage capacity
+    alpha = 3            # £/kWh
+    beta  = 300          # £/kW
+    life_time = 30
+    if stype=='hydrogen':
+        alpha = 0.67
+        betac  = 1100
+        betad  = 450
+        life_time = 30
+    if stype=='pumped':
+        alpha = 1188
+        beta  = 66.4
+        life_time = 30
+    # LCOE in £ per MWh
+    gen_offshore = 57.5
+    gen_onshore = 46
+    if shore == 'both':
+        gen_wind = ( gen_offshore + gen_onshore ) / 2
+    else:
+        if shore == 'off':
+            gen_wind = gen_offshore
+        else:
+            gen_wind = gen_onshore
+    gen_solar = 60
+    gen_base = 100
+    gen_variable = 66
+#   print('alpha {} beta {} life_time {} '.format(alpha, beta, life_time) )
+#   print(' one_day {} hourly {} '.format(one_day, hourly) )
+
+    storage_kwh = days2capacity(config['storage'], one_day * 1e3, hourly)
+    storage_cap = storage_kwh * alpha
+#   print('storage_kwh')
+#   print(storage_kwh)
+    if stype=='hydrogen':
+        ratec_kw = days2capacity(config['charge_rate'], one_day * 1e3, True)
+        rated_kw = days2capacity(config['discharge_rate'], one_day * 1e3, True)
+        storage_pow = ratec_kw * betac + rated_kw * betad
+    else:
+        rate_kw = days2capacity(config[['discharge_rate','charge_rate']].max(axis=1), one_day * 1e3, True)
+        storage_pow = rate_kw * beta
+#   print('rate_kw')
+#   print(rate_kw)
+    c_store = storage_cap + storage_pow
+#   print('storage_cap')
+#   print(storage_cap / c_store)
+#   print('storage_pow ')
+#   print(storage_pow / c_store)
+#   print('c_store')
+#   print(c_store)
+    storage_cost = c_store * (n_years /life_time)
+#   print('storage_cost')
+#   print(storage_cost)
+
+    #  variable generation costs. 
+    #  base load is assumed always on so we just use the capacity
+    pv_mwh = days2energy(config['pv_energy'], one_day, number_of_days, hourly)
+    wind_mwh = days2energy(config['wind_energy'] , one_day , number_of_days, hourly)
+    base_mwh = days2energy(config['base'] , one_day , number_of_days, hourly)
+    variable_mwh = days2energy(config['variable'] , one_day , number_of_days, hourly)
+#   print(pv_mwh)
+#   print(wind_mwh)
+#   print(base_mwh)
+#   print(variable_mwh)
+
+    variable_cost = (wind_mwh * gen_wind) + (pv_mwh * gen_solar) + (base_mwh * gen_base) + ( variable_mwh * gen_variable )
+
+    # overall cost in £
+    cost_value = variable_cost + storage_cost
+    # cost per MWh ( divide by the total demand )
+    config['cost'] = cost_value / ( one_day * number_of_days )
 
 # get the minimum energy point in a storage line
 def min_point(storage_line, variable='energy', wind_var='Pw', pv_var='Ps'):
@@ -796,3 +887,34 @@ def storage_all(demand, wind, pv, base, eta, hydrogen, f_wind, f_pv):
         print('Got balance at days {:.2f}'.format(store_max) )
         store_size = store_size * -1.0
     return store_size, store_hist, variable_total
+
+# convert energy to days
+def capacity2days(energy, mean_daily_energy, hourly=False):
+    normalise_factor = mean_daily_energy
+    if hourly:
+        normalise_factor = normalise_factor / 24.0
+    days = energy / normalise_factor
+    return days
+
+
+def days2capacity(days, mean_daily_energy, hourly=False):
+    normalise_factor = mean_daily_energy
+    if hourly:
+        normalise_factor = normalise_factor / 24.0
+    energy = days * normalise_factor
+    return energy
+    
+def days2energy(days, mean_daily_energy, number_of_days, hourly=False):
+    normalise_factor = mean_daily_energy
+    if hourly:
+        normalise_factor = normalise_factor / 24.0
+    energy = days * normalise_factor * number_of_days
+    return energy
+    
+# convert energy to days
+def energy2days(energy, mean_daily_energy, number_of_days, hourly=False):
+    normalise_factor = mean_daily_energy
+    if hourly:
+        normalise_factor = normalise_factor / 24.0
+    days = energy / ( normalise_factor * number_of_days )
+    return days
