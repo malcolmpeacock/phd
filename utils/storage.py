@@ -299,6 +299,16 @@ def configuration_cost(config):
     config['cost'] = cost * one_day * 1e-6
 
 # Calculate generation cost
+# Inputs:
+#  config
+#  stype
+#  one_day  - mean daily energy in Mwh
+#  n_years
+#  hourly
+#  shore
+#  model
+# Output:
+#  cost £/kWh
 
 def generation_cost(config,stype,one_day,n_years=1,hourly=False,shore='both', model='A'):
     print(stype,one_day,n_years,hourly,shore,model)
@@ -307,14 +317,6 @@ def generation_cost(config,stype,one_day,n_years=1,hourly=False,shore='both', mo
     else:
         generation_cost_b(config,stype,one_day,n_years,hourly,shore)
 
-#
-# config
-# stype
-# one_day  - mean daily energy in Mwh
-# n_years
-# hourly
-# shore
-# model
 def generation_cost_a(config,stype,one_day,n_years=1,hourly=False,shore='both', model='A'):
     # number of days
     number_of_days = n_years * 365.25
@@ -445,8 +447,9 @@ def generation_cost_b(config,stype,one_day,n_years=1,hourly=False,shore='both', 
 
     # overall cost in £
     cost_value = variable_cost + storage_cost
-    # cost per MWh ( divide by the total demand )
-    config['cost'] = cost_value / ( one_day * number_of_days )
+    # cost per kWh ( divide by the total demand )
+    # ( note paper with the cost model has in MWh )
+    config['cost'] = cost_value / ( one_day * number_of_days * 1e3 )
 
 # get the minimum energy point in a storage line
 def min_point(storage_line, variable='energy', wind_var='Pw', pv_var='Ps'):
