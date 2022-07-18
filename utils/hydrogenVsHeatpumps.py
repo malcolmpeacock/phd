@@ -499,8 +499,8 @@ parser.add_argument('--climate', action="store_true", dest="climate", help='Use 
 parser.add_argument('--base', action="store_true", dest="base", help='Use range of  baseload shares', default=False)
 parser.add_argument('--ev', action="store_true", dest="ev", help='Include Electric Vehicles', default=False)
 parser.add_argument('--genh', action="store_true", dest="genh", help='Assume hydrogen made from electricity and stored in the same store', default=False)
-parser.add_argument('--normalise', action="store", dest="normalise", help='Method of normalise by: annual, peak, kf.', default='annual')
-parser.add_argument('--scale', action="store", dest="scale", help='How to scale : average (energy over the period), reference (year) or kf.', default="reference")
+parser.add_argument('--normalise', action="store", dest="normalise", help='Method of normalise by (ie converting to days): annual, peak, kf.', default='annual', choices=['annual', 'peak', 'kf', 'scale'])
+parser.add_argument('--scale', action="store", dest="scale", help='How to scale : average (energy over the period), reference (by the reference year) or a value passed in.', default="reference")
 parser.add_argument('--storage', action="store", dest="storage", help='Storage model kf , mp, new or all', default="kf")
 parser.add_argument('--constraints', action="store", dest="constraints", help='Constraints on new storage model: new or old', default="new")
 parser.add_argument('--eta', action="store", dest="eta", help='Round Trip Efficiency.', type=int, default=85)
@@ -512,7 +512,8 @@ parser.add_argument('--kf2', action="store_true", dest="kf2", help='Scale the ge
 parser.add_argument('--cfpv', action="store", dest="cfpv", help='PV capacity factor to scale to, default is to leave unchanged', type=float, default=0)
 parser.add_argument('--cfwind', action="store", dest="cfwind", help='Wind capacity factor to scale to, default is to leave unchanged', type=float, default=0)
 parser.add_argument('--shore', action="store", dest="shore", default="all", help='on=Use only onshore wind off=only offshore, all=all' )
-parser.add_argument('--kfgen', action="store_true", dest="kfgen", help='Use KF generation from matlab', default=False)
+parser.add_argument('--kfpv', action="store_true", dest="kfpv", help='Use KF PV generation from matlab', default=False)
+parser.add_argument('--kfwind', action="store_true", dest="kfwind", help='Use KF wind generation from matlab', default=False)
 parser.add_argument('--espini', action="store_true", dest="espini", help='Use Electricity demand from espini', default=False)
 parser.add_argument('--shift', action="store_true", dest="shift", help='Shift the days to match weather calender', default=False)
 parser.add_argument('--wind', action="store", dest="wind", help='Wind value of store history to output', type=float, default=2.0)
@@ -648,12 +649,13 @@ else:
     mod_electric_ref = pd.Series(kf.values[0:len(d)], d, dtype='float64', name='ENGLAND_WALES_DEMAND')
     # scale england and wales to scotland
     mod_electric_ref = mod_electric_ref * scotland_factor
-    # use the KF method of scaling to the average annual energy of the 30 years
-    #  instead of # of the reference year.
+    # Scale by reference year
     if args.scale == 'average':
         total_energy = mod_electric_ref.sum() / 30
-    if args.scale == 'kf':
-        total_energy = 305000000.0
+    # or a value passed in ( eg KF 305.0 ) in TWh
+    else:
+        if args.scale != 'reference':
+            total_energy = float(args.scale) * 1e6
 
     # scale by adding or subtracting a constant as per KF method
     new_values = np.empty(0)
@@ -751,53 +753,48 @@ if args.adverse:
     years = pd.Series(wind.index.year).unique()
     print(years)
 else:
-    if args.kfgen:
-        print('Loading KF generation')
-        wind_filename = '/home/malcolm/uclan/data/kf/wind.txt'
-        wind = pd.read_csv(wind_filename, header=None, squeeze=True)
-        pv_filename = '/home/malcolm/uclan/data/kf/pv.txt'
-        pv = pd.read_csv(pv_filename, header=None, squeeze=True)
+    years = range(args.start, last_weather_year+1)
+    ninja_start = str(years[0]) + '-01-01 00:00:00'
+    ninja_end = str(years[-1]) + '-12-31 23:00:00'
+    print(ninja_start, ninja_end)
+    if args.kfpv or args.kfwind:
         # create index
         kf_start = '1984-01-01'
         kf_end = '2013-12-31'
         kf_index = pd.date_range(start = kf_start, end = kf_end, freq='D', tz='UTC' )
-        wind.index = kf_index
-        pv.index = kf_index
-#       kf_wcf = 0.405
-        kf_wcf = 0.28
-#       kf_pcf = 0.115176519
-        kf_pcf = 0.1156
+        years = range(1984, 2014)
         energy_per_day = daily_electric_ref.mean() * 1e6
         print('KF GEN Energy {}'.format(energy_per_day))
-        energy_per_day = 836758271617.0925
         energy_per_day = 836757995855.537
-        wind = wind * kf_wcf / energy_per_day
+
+    if args.kfpv:
+        print('Loading KF PV generation')
+        pv_filename = '/home/malcolm/uclan/data/kf/pv.txt'
+        pv = pd.read_csv(pv_filename, header=None, squeeze=True)
+        pv.index = kf_index
+        kf_pcf = 0.1156
         pv = pv * kf_pcf / energy_per_day
-        years = range(1984, 2014)
-
     else:
-
-        # weather years from the start to 2019
-        # ( need to download more ninja to get up to 2020 )
-        #last_weather_year = 2019
-        years = range(args.start, last_weather_year+1)
-#       print(years)
-        # read ninja
-        ninja_start = str(years[0]) + '-01-01 00:00:00'
-        ninja_end = str(years[-1]) + '-12-31 23:00:00'
-        print(ninja_start, ninja_end)
         # Ninja capacity factors for pv
         ninja_filename_pv = '/home/malcolm/uclan/data/ninja/ninja_pv_country_GB_merra-2_corrected.csv'
-        # Ninja capacity factors for wind
-        ninja_filename_wind = '/home/malcolm/uclan/data/ninja/ninja_wind_country_GB_near-termfuture-merra-2_corrected.csv'
-
         print('Loading ninja ...')
         ninja_pv = readers.read_ninja_country(ninja_filename_pv)
-        ninja_wind = readers.read_ninja_country(ninja_filename_wind)
-
         print('Extracting PV ...')
         ninja_pv = ninja_pv[ninja_start : ninja_end]
         pv = ninja_pv['national']
+
+    if args.kfwind:
+        wind_filename = '/home/malcolm/uclan/data/kf/wind.txt'
+        wind = pd.read_csv(wind_filename, header=None, squeeze=True)
+        wind.index = kf_index
+        kf_wcf = 0.28
+        wind = wind * kf_wcf / energy_per_day
+
+    else:
+
+        # Ninja capacity factors for wind
+        ninja_filename_wind = '/home/malcolm/uclan/data/ninja/ninja_wind_country_GB_near-termfuture-merra-2_corrected.csv'
+        ninja_wind = readers.read_ninja_country(ninja_filename_wind)
 
         print('Extracting Wind ...')
         ninja_wind = ninja_wind[ninja_start : ninja_end]
@@ -836,18 +833,22 @@ else:
 if args.plot:
 #   print(wind)
 #   print(pv)
-    weather_source = 'ninja'
+    wind_source = 'ninja'
+    pv_source = 'ninja'
     if args.adverse:
-        weather_source = 'adv ' + args.adverse
-    if args.kfgen:
-        weather_source = 'kf'
+        wind_source = 'adv ' + args.adverse
+        pv_source = 'adv ' + args.adverse
+    if args.kfwind:
+        wind_source = 'kf'
+    if args.kfpv:
+        pv_source = 'kf'
   
     # daily plot
     wind_daily = wind.resample('D').mean()
     pv_daily = pv.resample('D').mean()
-    wind_daily.plot(color='blue', label='{} wind generation'.format(weather_source))
-    pv_daily.plot(color='red', label='{} pv generation'.format(weather_source))
-    plt.title('Wind and solar generation from {}'.format(weather_source))
+    wind_daily.plot(color='blue', label='{} wind generation'.format(wind_source))
+    pv_daily.plot(color='red', label='{} pv generation'.format(pv_source))
+    plt.title('Wind and solar generation')
     plt.xlabel('Year', fontsize=15)
     plt.ylabel('Electricity generation capacity factor per day', fontsize=15)
     plt.legend(loc='upper right')
@@ -930,7 +931,8 @@ settings = {
     'cfwind'    : args.cfwind,
     'espini'    : args.espini,
     'hourly'    : args.hourly,
-    'kfgen'     : args.kfgen,
+    'kfpv'      : args.kfpv,
+    'kfwind'    : args.kfwind,
     'shore'     : args.shore,
     'normalise' : normalise_factor,
     'max_storage' : df['storage'].max(),
