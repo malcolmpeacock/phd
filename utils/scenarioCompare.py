@@ -22,11 +22,17 @@ def print_titles(sl=11):
     print('Scenario'.ljust(sl), 'Point             Wind  PV    Fraction-C/E NP Energy Storage Cost')
 
 def print_min(point, point_title, scenario_title, sl=11):
-    capacity_wind_fraction = point['wind'] / ( point['wind'] + point['pv'] )
+#   print(point_title)
+#   print(point)
+    if point['f_wind']>0.0001:
+        capacity_wind_fraction = point['f_wind'] / ( point['f_wind'] + point['f_pv'] )
+    else:
+        capacity_wind_fraction = 0.0
     energy_wind_fraction = point['fraction']
-    print('{} {}  {:.2f}  {:.2f}  {:.2f} {:.2f}    {}  {:.2f}   {:05.2f}   {:.2f}'.format(scenario_title.ljust(sl), point_title,  point['wind'], point['pv'], capacity_wind_fraction, energy_wind_fraction, point['np'], point['energy'], point['days'], point['cost'], capacity_wind_fraction) )
+    print('{} {}  {:.2f}  {:.2f}  {:.2f} {:.2f}    {}  {:.2f}   {:05.2f}   {:.3f}'.format(scenario_title.ljust(sl), point_title,  point['f_wind'], point['f_pv'], capacity_wind_fraction, energy_wind_fraction, point['np'], point['energy'], point['storage'], point['cost'] ) )
     output = point
-    output['fraction'] = capacity_wind_fraction
+    output['fraction'] = energy_wind_fraction
+    output['cfraction'] = capacity_wind_fraction
     output['scenario'] = scenario_title
     output['point'] = point_title
     return output
@@ -34,8 +40,7 @@ def print_min(point, point_title, scenario_title, sl=11):
 def get_storage_line(df, storage_model, days, wind_parm='f_wind', pv_parm='f_pv', variable='storage'):
     if storage_model == 'new':
         storage_line = df[df[variable] == days].copy()
-        storage_line.rename(columns={'f_pv': 'Ps', 'f_wind': 'Pw'}, inplace=True)
-        storage_line = storage_line.sort_values(['Pw', 'Ps'], ascending=[True, True])
+        storage_line = storage_line.sort_values(['f_wind', 'f_pv'], ascending=[True, True])
     else:
         storage_line = storage.storage_line(df, days, args.sline, wind_parm, pv_parm, variable)
     storage_line['energy'] = storage_line['wind_energy'] + storage_line['pv_energy']
@@ -66,7 +71,7 @@ def scatterHeat(df, variable, title, label, annotate=False):
     plt.title('{} for different proportions of wind and solar ({} ).'.format(title, label))
     if annotate:
         for i, point in df.iterrows():
-            ax.text(point['f_wind'],point['f_pv'],'{:.1f}'.format(point['storage']))
+            ax.text(point['f_wind'],point['f_pv'],'{:.1f}'.format(point[variable]))
     plt.show()
 
 def min_gen_line(ax, days, marker):
@@ -83,9 +88,9 @@ def min_gen_line(ax, days, marker):
     Ps.append(0.0)
     Pw.append( days / Lw )
 
-    min_energy_line = { 'Pw' : Pw, 'Ps' : Ps }
+    min_energy_line = { 'f_wind' : Pw, 'f_pv' : Ps }
     df_min = pd.DataFrame(data=min_energy_line)
-    df_min.plot(x='Pw', y='Ps', ax=ax, label='theorectical minimum generation from mean cf', marker=marker)
+    df_min.plot(x='f_wind', y='f_pv', ax=ax, label='theorectical minimum generation from mean cf', marker=marker)
 
 
 # main program
@@ -96,24 +101,29 @@ parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagn
 parser.add_argument('--pstore', action="store_true", dest="pstore", help='Plot the sample store history ', default=False)
 parser.add_argument('--pdemand', action="store_true", dest="pdemand", help='Plot the demand ', default=False)
 parser.add_argument('--pfit', action="store_true", dest="pfit", help='Show 2d plots', default=False)
+parser.add_argument('--pmin', action="store", dest="pmin", help='Plot minimum point of given variable', default=None)
+parser.add_argument('--dcolour', action="store_true", dest="dcolour", help='Use same colour for same number of days', default=False)
 parser.add_argument('--yearly', action="store_true", dest="yearly", help='Show Yearly plots', default=False)
 #parser.add_argument('--energy', action="store_true", dest="energy", help='Plot energy instead of capacity', default=False)
 parser.add_argument('--rate', action="store_true", dest="rate", help='Plot the charge and discharge rates', default=False)
-parser.add_argument('--stype', action="store", dest="stype", help='Type of Storage: pumped, hydrogen, caes.', default='pumped')
+parser.add_argument('--stype', action="store", dest="stype", help='Type of Storage: pumped, hydrogen, caes.', default='pumped', choices=['pumped','hydrogen','caes', 'none' ])
 parser.add_argument('--min', action="store_true", dest="min", help='Plot the minimum generation line', default=False)
 parser.add_argument('--annotate', action="store_true", dest="annotate", help='Annotate the shares heat map', default=False)
 parser.add_argument('--scenario', action="store", dest="scenario", help='Scenarion to plot', default='adhoc')
 parser.add_argument('--days', action="store", dest="days", help='Days of storage line to plot', default='0.5, 1, 3, 10, 25, 30, 40, 60' )
 parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1')
 parser.add_argument('--svariable', action="store", dest="svariable", help='Variable to contour, default is storage', default='storage')
-parser.add_argument('--sx', action="store", dest="sx", help='Variable to plot on the X axis, default is Pw', default='Pw')
-parser.add_argument('--sy', action="store", dest="sy", help='Variable to plot on the Y axis, default is Ps', default='Ps')
+parser.add_argument('--sx', action="store", dest="sx", help='Variable to plot on the X axis, default is f_wind', default='f_wind')
+parser.add_argument('--sy', action="store", dest="sy", help='Variable to plot on the Y axis, default is f_pv', default='f_pv')
 parser.add_argument('--adverse', action="store", dest="adverse", help='Adverse file mnemonic', default='5s1')
 parser.add_argument('--last', action="store", dest="last", help='Only include configs which ended with store: any, full, p3=3 percent full ', default='any')
 parser.add_argument('--shore', action="store", dest="shore", help='Wind to base cost on both, on, off . default = both ', default='both')
 parser.add_argument('--excess', action="store", dest="excess", help='Excess value to find minimum storage against', type=float, default=0.5)
 parser.add_argument('--variable', action="store", dest="variable", help='Variable to plot from scenario', default=None)
-parser.add_argument('--costmodel', action="store", dest="costmodel", help='Cost model A or B', default='B')
+parser.add_argument('--heat', action="store", dest="heat", help='Variable to plot a heat map of', default=None)
+parser.add_argument('--pwind', action="store", dest="pwind", help='Print points with this wind proportion', default=None, type=float)
+parser.add_argument('--ppv', action="store", dest="ppv", help='Print points with this PV proportion', default=None, type=float)
+parser.add_argument('--costmodel', action="store", dest="costmodel", help='Cost model A or B', default='B', choices=['A', 'B'])
 args = parser.parse_args()
 
 day_str = args.days.split(',')
@@ -253,6 +263,10 @@ if args.scenario == 'hydrogen':
        {'file': 'ENS', 'dir' : 'hydrogen/hbase05/', 'title': 'Hydrogen 50% Base load 0.50'},
                  'b60' : 
        {'file': 'ENS', 'dir' : 'hydrogen/hbase06/', 'title': 'Hydrogen 50% Base load 0.60'} }
+if args.scenario == 'todayc':
+    scenarios = {'var11base020' :
+       {'file': 'ENS', 'dir' : 'today/var11base020/', 'title': 'Base 020 Variable generation 1.1'},
+    }
 if args.scenario == 'today':
     scenarios = {'var12base020' :
        {'file': 'ENS', 'dir' : 'today/var12base020/', 'title': 'Base 020 Variable generation 1.2'},
@@ -332,10 +346,17 @@ if args.scenario == 'newold':
                  'new' : 
        {'file': 'ENS', 'dir' : 'new_model/old/', 'title': 'Existing heating 0.75 new model with old constraints'}    }
 if args.scenario == 'newfig8':
+    scenario_title = 'Fig (8) Fragaki et. al. with model and data changes'
     scenarios = {'old' :
-       {'file': 'NNH', 'dir' : 'new_fig8S75/', 'title': 'New input new storage model'},
+       {'file': 'ENS', 'dir' : 'new_fig8S75/', 'title': 'Existing heating 0.75 Store 70% at start'},
                  'new' : 
-       {'file': 'NNH', 'dir' : 'new_fig8S85/', 'title': 'new input new storage model'}    }
+       {'file': 'ENS', 'dir' : 'new_fig8S85/', 'title': 'Existing heating 0.85 Store 70% at start'}    }
+if args.scenario == 'newfig8hg':
+    scenario_title = 'Fig (8) Fragaki et. al. with model and data changes'
+    scenarios = {'old' :
+       {'file': 'ENS', 'dir' : 'new_fig8hgS75/', 'title': 'Existing heating 0.75 Store 70% at start'},
+                 'new' : 
+       {'file': 'ENS', 'dir' : 'new_fig8hgS85/', 'title': 'Existing heating 0.85 Store 70% at start'}    }
 if args.scenario == 'fig8oldvnew':
     scenarios = {'old' :
        {'file': 'NNH', 'dir' : 'old_fig8S75/', 'title': 'As per Fragaki et. al. Old storage model'},
@@ -401,9 +422,17 @@ if args.scenario == 'historic':
        {'file': 'ENS', 'dir' : ninja85, 'title': 'Synthetic time series'}    }
 if args.scenario == 'generation':
     scenarios = {'ninja' :
-       {'file': 'ENH', 'dir' : 'ninjaOnshore/', 'title': 'Generation from Renewables Ninja (onshore)'},
+       {'file': 'ENH', 'dir' : 'ninjaOnshore/', 'title': 'Wind Generation from Renewables Ninja (onshore)'},
                  'kf' : 
-       {'file': 'ENH', 'dir' : 'kfgen/', 'title': 'Generation from Fragaki et. al. '} }
+       {'file': 'ENH', 'dir' : 'kfwind/', 'title': 'Wind Generation from Fragaki et. al. '} }
+if args.scenario == 'ninjapv':
+    scenario_title = 'PV MIDAS Stations vs Ninja'
+    scenarios = {'ninja' :
+       {'file': 'ENH', 'dir' : 'ninjaOnshore/', 'title': 'PV Generation from Renewables Ninja'},
+                 'kfs' : 
+       {'file': 'ENH', 'dir' : 'kfpvs/', 'title': 'PV Generation from Fragaki et. al. scaled to Ninja CF'},
+                 'kf' : 
+       {'file': 'ENH', 'dir' : 'kfpv/', 'title': 'PV Generation from Fragaki et. al. '} }
 if args.scenario == 'shore':
     scenario_title = 'Onshore vs Offshore'
     scenarios = {'kf' :
@@ -461,6 +490,18 @@ if args.scenario == 'zero':
     scenario_title = ' baseload 0.4 maximum and minimum storage'
     scenarios = {'FNS' :
        {'file': 'FNS', 'dir' : 'fouryears/zero', 'title': 'Four years with existing heat'},
+    }
+if args.scenario == 'cost_comp':
+    scenario_title = ' cost model paper comparison'
+    scenarios = {'baseline' :
+       {'file': 'ENS', 'dir' : 'cost', 'title': 'Synthetic Demand with baseline'},
+                 'cost' :
+       {'file': 'ENM', 'dir' : 'cost', 'title': 'Scaled demand as per cost paper'}
+    }
+if args.scenario == 'cost':
+    scenario_title = ' cost model paper comparison'
+    scenarios = {'cost' :
+       {'file': 'ENM', 'dir' : 'cost', 'title': 'Nine years from cost paper with existing heat'},
     }
 #scenarios = {'NNS' :
 #   {'file': 'NNS', 'dir' : kf, 'title': 'No Added Electric Heating'},
@@ -543,8 +584,14 @@ for key, scenario in scenarios.items():
     path = '{}/{}/settings{}.csv'.format(output_dir, folder, filename)
     if exists(path):
         setting = readers.read_settings(path)
+        if not 'normalise' in setting:
+            setting['normalise'] = 818387.7082191781
+        if not 'hourly' in setting:
+            setting['hourly'] = False
+        if not 'baseload' in setting:
+            setting['baseload'] = 0.0
     else:
-        setting = {'storage' : 'kf', 'baseload' : '0.0', 'start' : 1980, 'end': 2019, 'hourly': False }
+        setting = {'storage' : 'kf', 'baseload' : '0.0', 'start' : 1980, 'end': 2019, 'hourly': False, 'normalise' : 818387.7082191781 }
     settings[key] = setting
 
 # Load the shares dfs
@@ -560,7 +607,7 @@ for key, scenario in scenarios.items():
     filename = scenario['file']
     path = '{}/{}/shares{}.csv'.format(output_dir, folder, filename)
     df = pd.read_csv(path, header=0, index_col=0)
-    for col in ['base', 'variable', 'wind_energy', 'pv_energy']:
+    for col in ['base', 'variable', 'wind_energy', 'pv_energy', 'charge_rate', 'discharge_rate', 'variable_energy', 'baseload']:
         if col not in df.columns:
             print('Warning {} missing, setting to zero'.format(col))
             df[col] = 0.0
@@ -573,10 +620,15 @@ for key, scenario in scenarios.items():
         gen_cap[key] = wind_at_1['gw_wind'].values[0]
   
     # calculate cost and energy
-#   storage.configuration_cost(df)
     n_years = int(settings[key]['end']) - int(settings[key]['start']) + 1
-    storage.generation_cost(df, args.stype, float(settings[key]['normalise']), n_years, settings[key]['hourly']=='True', args.shore, args.costmodel  )
+    if args.stype == 'none':
+        df['cost'] = 0.0
+    else:
+        storage.generation_cost(df, args.stype, float(settings[key]['normalise']), n_years, settings[key]['hourly']=='True', args.shore, args.costmodel  )
+
+    # calculate energy
     df['energy'] = df['wind_energy'] + df['pv_energy']
+    # calculate wind energy fraction
     df['fraction'] = df['wind_energy'] / df['energy']
 
     if args.last == 'full':
@@ -614,27 +666,28 @@ for key, scenario in scenarios.items():
     output = print_min(min_excess, '{} excess this '.format(args.excess), label, max_sl)
     outputs.append(output)
     if not excess_wind:
-        excess_wind = min_excess['wind']
-        excess_pv = min_excess['pv']
+        excess_wind = min_excess['f_wind']
+        excess_pv = min_excess['f_pv']
 #       print('EXCESS ENERGY compare point: wind {} pv {}'.format(excess_wind, excess_pv) )
     excess_point = storage.get_point(df, excess_wind, excess_pv, 'f_wind', 'f_pv')
-    print_min(excess_point, '{} excess first'.format(args.excess), label, max_sl)
+    output = print_min(excess_point, '{} excess first'.format(args.excess), label, max_sl)
+    outputs.append(output)
     # print the minimum cost point of the scenario
     min_energy = storage.min_point(df, 'cost', 'f_wind', 'f_pv')
-    print_min(min_energy, 'minimum cost    ', label, max_sl)
+    output = print_min(min_energy, 'minimum cost    ', label, max_sl)
+    outputs.append(output)
     # print the minimum storage point of the scenario
-    min_energy = storage.min_point(df, 'storage', 'f_wind', 'f_pv')
-    print_min(min_energy, 'min storage     ', label, max_sl)
+    min_storage = storage.min_point(df, 'storage', 'f_wind', 'f_pv')
+    output = print_min(min_storage, 'min storage     ', label, max_sl)
+    outputs.append(output)
 
 # Plot storage heat maps
 
-if args.plot:
+if args.heat:
     for key, scenario in scenarios.items():
         label = scenario['title']
         df = dfs[key]
-        pdf = get_viable(df, args.last, day_list[0])
-        pdf = pdf[pdf['storage']>0.0]
-        scatterHeat(pdf, 'storage', 'Storage in days ', label, args.annotate)
+        scatterHeat(df, args.heat, args.heat, label, args.annotate)
 
 if args.plot:
     # Plot viable solutions
@@ -692,8 +745,8 @@ if args.rate:
 
 # variables and axis labels
 axis_labels = {
-    'Ps': 'Solar PV ( energy in proportion to normalised demand)',
-    'Pw': 'Wind ( energy in proportion to nomarlised demand)',
+    'f_pv': 'Solar PV ( energy in proportion to normalised demand)',
+    'f_wind': 'Wind ( energy in proportion to nomarlised demand)',
     'energy' : 'Energy generated ( normalised to demand )',
     'fraction' : 'Wind energy fraction',
     'wind_energy' : 'Wind energy ( normalised to demand )',
@@ -707,9 +760,16 @@ axis_labels = {
 #pws = {}
 first = True
 #print('Scenario   Points in contour  Generation capacity')
-markers = ['o', 'v', '+', '<', 'x', 'D']
-styles = ['solid', 'dotted', 'dashed', 'dashdot', 'solid', 'dotted' ]
+markers = ['o', 'v', '+', '<', 'x', 'D', '*', 'X']
+styles = ['solid', 'dotted', 'dashed', 'dashdot', 'solid', 'dotted', 'dashed' ]
+colours = ['blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'black' ]
 scount=0
+points={}
+min_vars=[]
+if args.pmin:
+    min_vars = args.pmin.split(',')
+    for mvar in min_vars:
+        points[mvar] = []
 for key, scenario in scenarios.items():
     df = dfs[key].copy()
     filename = scenario['file']
@@ -723,62 +783,68 @@ for key, scenario in scenarios.items():
     # or the value specified
     storage_model = settings[key]['storage']
     baseload = float(settings[key]['baseload'])
+    dcount = 0
     for days in day_list:
         storage_line = get_storage_line(df, storage_model, days, 'f_wind', 'f_pv', args.svariable)
         if len(storage_line) == 0:
             print('Skipping line {: <12} {} {} '.format(key, days, len(storage_line) ))
             continue
 
-        # print the line details
-#       print('LINE {} {}'.format(days, label))
-#       print('FROM wind {} pv {} TO wind {} pv {}'.format(storage_line.head(1)['Pw'].values[0], storage_line.head(1)['Ps'].values[0], storage_line.tail(1)['Pw'].values[0], storage_line.tail(1)['Ps'].values[0]) )
         # print the minimum energy point in the contour
         min_energy = storage.min_point(storage_line, 'energy')
-        print_min(min_energy, '{:.1f} days energy'.format(days), label, max_sl)
+        output = print_min(min_energy, '{:.1f} days energy'.format(days), label, max_sl)
+        outputs.append(output)
         # print the minimum cost point in the contour
-        min_energy = storage.min_point(storage_line, 'cost')
-        print_min(min_energy, '{:.1f} days cost  '.format(days), label, max_sl)
+        min_cost = storage.min_point(storage_line, 'cost')
+        output = print_min(min_cost, '{:.1f} days cost  '.format(days), label, max_sl)
+        outputs.append(output)
         # print the minimum storage point in the contour
-        min_energy = storage.min_point(storage_line, 'storage')
-        print_min(min_energy, '{:.1f} days storag'.format(days), label, max_sl)
+        min_storage = storage.min_point(storage_line, 'storage')
+        output = print_min(min_storage, '{:.1f} days storag'.format(days), label, max_sl)
+        outputs.append(output)
+        # get the colour
+        if args.dcolour:
+            line_colour = colours[dcount]
+        else:
+            line_colour = colours[scount]
+
         # save axis for the first one, and plot
         if first:
-            ax = storage_line.plot(x=args.sx,y=args.sy,label='{} {:.1f} days. {}'.format(args.svariable, days, label), marker=markers[scount], linestyle=styles[scount])
-#           line1 = storage_line
-#           label1 = label
+            ax = storage_line.plot(x=args.sx,y=args.sy,label='{} {:.1f} days. {}'.format(args.svariable, days, label), marker=markers[scount], linestyle=styles[scount], color=line_colour)
         else:
-            storage_line.plot(x=args.sx,y=args.sy,ax=ax,label='{} {:.1f} days. {}'.format(args.svariable, days, label), marker=markers[scount], linestyle=styles[scount])
-#           line2 = storage_line
-#           label2 = label
-            # If we are on the 2nd or greater scenario then compare the amount
-            # of storage, pv and wind with the previous scenario
-#           wind_diff, ratio1, ratio2 = storage.compare_lines(line1, line2)
-#           print('Scenario {} to {}          {}      {} '.format(label2, label1, label1, label2) )
-#           print('Difference in wind {:.2f} pv/wind {:.2f} {:.2f} '.format(wind_diff, ratio1, ratio2) )
-#           line1 = line2
-#           label1 = label2
-
-#           storage_diff = df['storage'] - last_df['storage']
-#           print('Mean storage difference between {} {} and {} {} is {}'.format(key, df['storage'].mean(), last_key, last_df['storage'].mean(), storage_diff.mean() ) )
-#       last_df = df
-#       last_key = key
+            storage_line.plot(x=args.sx,y=args.sy,ax=ax,label='{} {:.1f} days. {}'.format(args.svariable, days, label), marker=markers[scount], linestyle=styles[scount], color=line_colour)
         first = False
+        # Plot minimum point if requested
+        for mvar in min_vars:
+            if mvar == 'energy':
+                points[mvar].append(min_energy)
+            if mvar == 'cost':
+                points[mvar].append(min_cost)
+            if mvar == 'storage':
+                points[mvar].append(min_storage)
+        dcount+=1
     scount+=1
 
     # plot energy generation of 1.0 line 
     if args.min:
         min_days = 1.0 - (baseload * 0.6)
         energy_line = get_storage_line(df, storage_model, min_days, 'f_wind', 'f_pv', 'energy')
-        energy_line.plot(x='Pw',y='Ps',ax=ax,label='energy {:.2f} days. {}'.format(min_days,label), marker=markers[scount])
+        energy_line.plot(x='f_wind',y='f_pv',ax=ax,label='energy {:.2f} days. {}'.format(min_days,label), marker=markers[scount])
         scount+=1
         min_gen_line(ax, min_days, markers[scount])
         scount+=1
 
+# plot the points ( here because otherwise is screws up the legend )
+pmarkers = { 'energy' : '*', 'cost' : 'X', 'storage' : 'p' }
+for v in points.keys():
+    for p in points[v]:
+        ax.plot(p[args.sx], p[args.sy], label='minimum {}'.format(args.pmin), marker=pmarkers[v], color='black', ms=15)
+
 plt.title('Constant {} lines {}'.format(args.svariable, scenario_title) )
 plt.xlabel(axis_labels[args.sx])
 plt.ylabel(axis_labels[args.sy])
-# 2nd axis
-if args.sx == 'Pw' and args.sy=='Ps':
+# 2nd axis#
+if not first and args.sx == 'f_wind' and args.sy=='f_pv':
     axx = ax.secondary_xaxis('top', functions=(cf2gw, gw2cf))
     axx.set_xlabel('Capacity GW')
     axy = ax.secondary_yaxis('right', functions=(cf2gw, gw2cf))
@@ -836,9 +902,8 @@ if args.yearly:
     plt.title('Interannual variation of electricity demand')
     plt.xlabel('year', fontsize=15)
     plt.ylabel('Annual Electricity Demand (TWh)', fontsize=15)
-#   plt.legend(loc='upper left', fontsize=15)
     plt.legend(loc='center left', fontsize=15)
-#   plt.legend(tuple(axs), tuple(labels), loc='center left', fontsize=15)
+
     plt.show()
     
 
@@ -952,6 +1017,17 @@ if args.plot:
         plt.ylabel('Storage days')
         plt.title('{}  '.format(label))
         plt.show()
+
+if args.pwind or args.ppv:
+    for key, scenario in scenarios.items():
+        label = scenario['title']
+        df = dfs[key]
+        if args.pwind:
+            df = df[df['f_wind'] == args.pwind]
+        if args.ppv:
+            df = df[df['f_pv'] == args.ppv]
+        print('POINTS : {}'.format(label))
+        print(df[['f_wind','f_pv','cost','fraction','storage']])
 
 if args.pstore:
     durations = {}

@@ -23,8 +23,8 @@ def get_storage_line(df, storage_model, days, wind_parm='f_wind', pv_parm='f_pv'
     if storage_model == 'new':
         storage_line = df[df['storage'] == days]
         storage_line = storage_line[['f_pv','f_wind','last']]
-        storage_line.columns = ['Ps', 'Pw', 'last']
-        storage_line = storage_line.sort_values(['Pw', 'Ps'], ascending=[True, True])
+#       storage_line.columns = ['Ps', 'Pw', 'last']
+        storage_line = storage_line.sort_values(['f_wind', 'f_pv'], ascending=[True, True])
     else:
         storage_line = storage.storage_line(df, days, args.sline, wind_parm, pv_parm)
     return storage_line
@@ -89,8 +89,8 @@ for eta in etas:
         points = get_storage_line(df, args.model, line, 'f_wind', 'f_pv')
         print('Line {} points {} last {} to {} zero {} '.format(line, len(points), points['last'].min(), points['last'].max(), len(points[points['last']==0.0]) ) )
 #       print(points)
-        x_var = 'Pw'
-        y_var = 'Ps'
+        x_var = 'f_wind'
+        y_var = 'f_pv'
         if first:
             ax = points.plot(x=x_var,y=y_var,color=colours[count],linestyle=styles[ecount],label='Efficiency {} days storage {}'.format(eta, line))
             first = False

@@ -130,11 +130,11 @@ def hybrid_heat_pump(heat, efficiency, threshold):
 #   normalise_factor - factor to normalise by.
 #                      If doing daily is the max daily demand so that storage
 #                      is relative to peak daily demand energy.
-def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly, ref_temp, climate, historic, heat_that_is_electric, normalise_factor, base, baseload, variable):
+def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly, climate, use_baseline, heat_that_is_electric, normalise_factor, base, baseload, variable):
     total_demand = 0
 
     # create the synthetic years
-    if not historic:
+    if use_baseline:
         # ordinary year
         ordinary_year = mod_electric_ref.values
         # leap year
@@ -171,7 +171,6 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
     mean_temp_years={}
     monthly_temp_years={}
     monthly_sd_years={}
-    yearly_wd={}
     dec31_wind={}
     dec31_pv={}
     dec31_demand={}
@@ -198,7 +197,6 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         monthly_temp_years[year] = demand['temperature'].resample('M').mean().values
         monthly_sd_years[year] = demand['temperature'].resample('M').std().values
         # wasserstein distance between temperatures
-        yearly_wd[year] = wasserstein_distance(ref_temp, demand['temperature'])
         #  account for leap years.
         #  Need to create a new df with the index same as heat_weather
         #  then create a 29th of Feb by interpolation between 28th and
@@ -208,7 +206,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         heat_weather = demand['heat']
 #       print(heat_weather)
 
-        if historic:
+        if not use_baseline:
             electric_ref = mod_electric_ref[str(year) + '-01-01' : str(year) + '-12-31']
             electric_ref.index = heat_weather.index
         else:
@@ -249,7 +247,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
             heat_added = electric_heat.sum()
         # Existing heat only
         if scenario == 'E' :
-            if historic:
+            if not use_baseline:
                 heat_that_is_electric = 0
             electric_heat = heat_weather * heat_that_is_electric
             electric_ref = electric_ref + electric_heat
@@ -420,15 +418,6 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         plt.ylabel('Store size in days', fontsize=15)
         plt.show()
 
-    if args.cplot:
-        # plot the wasserstein distances
-        plt.scatter(list(year_var), yearly_wd.values())
-        plt.title('Wasserstien distance of temperature distributions from 2018' )
-        plt.xlabel('Year', fontsize=15)
-        plt.ylabel('Wasserstien distance', fontsize=15)
-        plt.show()
-        
-
     # energy from hydrogen
     if args.genh:
         h_input = all_hydrogen
@@ -441,7 +430,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         for i_base in range(0,grid):
             base_load = i_base * 0.05
             print('Base load {}'.format(base_load))
-            df= storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, base_load, h_input, args.storage)
+            df= storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, base_load, variable, h_input, args.storage)
             df['base'] = df['storage'] * 0.0 + base_load
             df_list.append(df)
         df = pd.concat(df_list)
@@ -451,7 +440,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         if args.storage == 'new':
             df, sample_hist, sample_durations = storage.storage_grid_new(all_demand, wind, pv, eta, hourly, grid, step, baseload, h_input, args.constraints, args.wind, args.pv, args.days, args.threshold, variable, args.contours, args.debug)
         else:
-            df, sample_hist, sample_durations = storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, baseload, h_input, args.storage, args.wind, args.pv)
+            df, sample_hist, sample_durations = storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, baseload, variable, h_input, args.storage, args.wind, args.pv, args.threshold, args.constraints)
         df['base'] = df['storage'] * 0.0 + baseload
         df['variable'] = df['storage'] * 0.0 + variable
 
@@ -463,7 +452,6 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
     yearly_data = { 'year'   : total_heat_demand_years.keys(),
                     'heat'   : total_heat_demand_years.values(),
                     'temp'   : mean_temp_years.values(),
-                    'wd'     : yearly_wd.values(),
                     'storage'      : yearly_diff,
                     'dec31_wind'   : dec31_wind.values(),
                     'dec31_pv'     :    dec31_pv.values(),
@@ -488,12 +476,12 @@ parser.add_argument('--start', action="store", dest="start", help='Start Year', 
 parser.add_argument('--end', action="store", dest="end", help='End Year', type=int, default=2019 )
 parser.add_argument('--reference', action="store", dest="reference", help='Reference Year', default='2018' )
 parser.add_argument('--adverse', action="store", dest="adverse", help='Use specified Adverse scenario file of the form a5s1 where a=warming, 5=return period, s=severity or d=duration, 1=event. The possible warmings are: a=12-3, b=12-4, c=4', default=None )
-parser.add_argument('--scenario', action="store", dest="scenario", help=str(scenarios), default='H' )
+parser.add_argument('--scenario', action="store", dest="scenario", help=str(scenarios), default='H', choices=scenarios.keys() )
 parser.add_argument('--dir', action="store", dest="dir", help='Output directory', default='40years' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--debug', action="store_true", dest="debug", help='Output debug info', default=False)
 parser.add_argument('--cplot', action="store_true", dest="cplot", help='Show climate related plots', default=False)
-parser.add_argument('--historic', action="store_true", dest="historic", help='Use historic time series instead of synthetic', default=False)
+parser.add_argument('--dmethod', action="store", dest="dmethod", help='Method of creating a multi year demand series: add=add a varying amount as per KF, multiply=multiply by a varying amount as per the cost paper, baseline=my method (synthetic time series)', choices=['baseline', 'add', 'multiply'], default='baseline')
 parser.add_argument('--hourly', action="store_true", dest="hourly", help='Use hourly time series', default=False)
 parser.add_argument('--climate', action="store_true", dest="climate", help='Use climate change adjusted time series', default=False)
 parser.add_argument('--base', action="store_true", dest="base", help='Use range of  baseload shares', default=False)
@@ -504,7 +492,7 @@ parser.add_argument('--scale', action="store", dest="scale", help='How to scale 
 parser.add_argument('--storage', action="store", dest="storage", help='Storage model kf , mp, new or all', default="kf")
 parser.add_argument('--constraints', action="store", dest="constraints", help='Constraints on new storage model: new or old', default="new")
 parser.add_argument('--eta', action="store", dest="eta", help='Round Trip Efficiency.', type=int, default=85)
-parser.add_argument('--grid', action="store", dest="grid", help='Number of pionts in grid.', type=int, default=60)
+parser.add_argument('--grid', action="store", dest="grid", help='Number of points in grid.', type=int, default=60)
 parser.add_argument('--baseload', action="store", dest="baseload", help='Base load capacity.', type=float, default=0.0)
 parser.add_argument('--step', action="store", dest="step", help='Step size.', type=float, default=0.1)
 parser.add_argument('--kf', action="store_true", dest="kf", help='Scale the generation data to KF Capacity factors', default=False)
@@ -514,7 +502,7 @@ parser.add_argument('--cfwind', action="store", dest="cfwind", help='Wind capaci
 parser.add_argument('--shore', action="store", dest="shore", default="all", help='on=Use only onshore wind off=only offshore, all=all' )
 parser.add_argument('--kfpv', action="store_true", dest="kfpv", help='Use KF PV generation from matlab', default=False)
 parser.add_argument('--kfwind', action="store_true", dest="kfwind", help='Use KF wind generation from matlab', default=False)
-parser.add_argument('--espini', action="store_true", dest="espini", help='Use Electricity demand from espini', default=False)
+parser.add_argument('--demand', action="store", dest="demand", help='Electricity demand source', choices=['espini', 'kf', 'ngrid'], default='espini')
 parser.add_argument('--shift', action="store_true", dest="shift", help='Shift the days to match weather calender', default=False)
 parser.add_argument('--wind', action="store", dest="wind", help='Wind value of store history to output', type=float, default=2.0)
 parser.add_argument('--pv', action="store", dest="pv", help='Pv value of store history to output', type=float, default=3.0)
@@ -534,28 +522,51 @@ if not os.path.isdir(output_dir):
     print('Error output dir {} does not exist'.format(output_dir))
     quit()
     
+if args.dmethod == 'baseline':
+    if args.demand == 'kf' : 
+        if args.reference < '1984' or args.reference > '2013':
+            print('Error reference year {} out of range'.format(args.reference))
+            quit()
+    if args.demand == 'espini' : 
+        if args.reference < '2009' or args.reference > '2020':
+            print('Error reference year {} out of range'.format(args.reference))
+            quit()
+else:
+    if args.demand == 'espini' : 
+        if args.start < 2009 or args.end > 2020:
+            print('Error years {} to {} out of range'.format(args.start, args.end))
+            quit()
+if args.demand == 'kf' : 
+    if args.start < 1984 or args.end > 2013:
+        print('Error years {} to {} out of range'.format(args.start, args.end))
+        quit()
 
 last_weather_year = args.end
 hourly = args.hourly
-if args.historic:
-    hourly = False
+if args.demand == 'kf' and hourly:
+    print('Error hourly time series not possible with kf demand')
+    quit()
+
 # print arguments
-print('Start year {} End Year {} Reference year {} plot {} hourly {} climate {} historic {} base {} ev {} genh {}'.format(args.start, args.end, args.reference, args.plot, args.hourly, args.climate, args.historic, args.base, args.ev, args.genh) )
+print('Start year {} End Year {} Reference year {} plot {} hourly {} climate {} demand {} dmethod {} base {} ev {} genh {}'.format(args.start, args.end, args.reference, args.plot, args.hourly, args.climate, args.demand, args.dmethod, args.base, args.ev, args.genh) )
 
 # calculate charge and discharge efficiency from round trip efficiency
 eta = math.sqrt(args.eta / 100)
 print('Round trip efficiency {} Charge/Discharge {} '.format(args.eta / 100, eta) )
 
-# input assumptions for reference year
-heat_that_is_electric = 0.06     # my spreadsheet from DUKES
-heat_that_is_heat_pumps = 0.01   # greenmatch.co.uk, renewableenergyhub.co.uk
-
 scotland_factor = 1.1    # ( Fragaki et. al )
+
+if args.dmethod == 'baseline':
+    if args.demand == 'kf':
+        print('ERROR: baseline not implemented with kf demand')
+        quit()
 
 # read historical electricity demand for reference year
 # NOTE: espini includes actual Scottish demand.
+#  ( even if using historic series we calculate it so can scale to it )
 
-if args.espini:
+
+if args.demand == 'espini':
     demand_filename = '/home/malcolm/uclan/data/electricity/espeni.csv'
     demand_ref = readers.read_espeni(demand_filename, args.reference)
     electric_ref = demand_ref
@@ -564,65 +575,9 @@ else:
     demand_ref = readers.read_electric_hourly(demand_filename)
     electric_ref = demand_ref['ENGLAND_WALES_DEMAND'] * scotland_factor
 
-# read reference year electric heat series based on purely resistive heating
-# so that it can be removed from the reference year series. 
-
-demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{0:}Weather{0:}I-Bbdew_resistive.csv'.format(args.reference) 
-ref_resistive = readers.read_copheat(demand_filename, ['electricity', 'temperature'])
-ref_resistive_heat = ref_resistive['electricity']
-ref_temperature = ref_resistive['temperature']
-
-#  To remove existing space and water heating from the electricity demand time 
-#  series for the reference year - subtract the resistive heat series
-#  ( even if using historic series we calculate it so can scale to it )
-
-# existing_heat = ref_resistive_heat * heat_that_is_electric * 1e-6
-mod_electric_ref = electric_ref - (ref_resistive_heat * heat_that_is_electric)
-total_energy = electric_ref.sum()
-
-
-daily_original_electric_with_heat = electric_ref.resample('D').sum()
-daily_electric_ref = mod_electric_ref.resample('D').sum()
-
-# plot the electricity time series with heating removed
-if args.plot:
-    daily_original_electric_with_heat.plot(color='green', label='Historic 2018 electricity demand')
-    daily_electric_ref.plot(color='blue', label='Baseline electricity demand with heat removed')
-    plt.title('Removing existing heating from reference year electricity')
-    plt.xlabel('Time', fontsize=15)
-    plt.ylabel('Electricity demand (TWh)', fontsize=15)
-    plt.legend(loc='upper right')
-    plt.show()
-
-# plot the 2018 series with all heat pumps vs the historic 2018
-if args.plot:
-    demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{0:}Weather{0:}I-Bbdew.csv'.format(args.reference) 
-    ref_electric_hp = readers.read_copheat(demand_filename, ['electricity'])
-    electric2018_withhp = mod_electric_ref + ref_electric_hp
-    fes_withhp = mod_electric_ref + ref_electric_hp * 0.41
-    daily_new_2018 = electric2018_withhp.resample('D').sum()
-    daily_fes = fes_withhp.resample('D').sum()
-    daily_original_electric_with_heat.plot(color='blue', label='Historic 2018 electricity demand')
-    daily_new_2018.plot(color='red', label='2018 electricity demand with all heating as heat pumps')
-    daily_fes.plot(color='green', label='2018 electricity demand with 41% heating as heat pumps')
-    plt.title('Impact of heat pumps on 2018 daily electricity demand')
-    plt.xlabel('Time', fontsize=15)
-    plt.ylabel('Electricity demand (TWh)', fontsize=15)
-    plt.legend(loc='upper right')
-    plt.show()
-    
-    print('Historic Electric {} With all Heat Pumps added {} with 41% heat pumps {}'.format(daily_original_electric_with_heat.sum(), daily_new_2018.sum(), daily_fes.sum() ) )
-
-# output time series for KF
-#   timeseries_dir = '/home/malcolm/uclan/output/timeseries/'
-#   daily_electric_ref.to_csv(timeseries_dir + 'baseline_daily_2018.csv', float_format='%g')
-#   daily_original_electric_with_heat.to_csv(timeseries_dir + 'historic_daily_2018.csv', float_format='%g')
-#   daily_new_2018.to_csv(timeseries_dir + 'heatpumps_all_daily_2018.csv', float_format='%g')
-#   daily_fes.to_csv(timeseries_dir + 'heatpumps_41_daily_2018.csv', float_format='%g')
- 
-
 # Normalise by the unmodified reference year time series
 # so comparisons are possible
+daily_original_electric_with_heat = electric_ref.resample('D').sum()
 if args.normalise == 'annual':
     normalise_factor = daily_original_electric_with_heat.mean()
 else:
@@ -630,44 +585,120 @@ else:
         normalise_factor = daily_original_electric_with_heat.max()
     else:
         normalise_factor = 835616.0
-print('PEAK DEMAND {} Annual Demand {} Mean Daily Demand {} Normalise Factor {}'.format(daily_original_electric_with_heat.max(), daily_original_electric_with_heat.sum(), daily_original_electric_with_heat.mean(), normalise_factor))
 if args.hourly:
     normalise_factor = normalise_factor / 24.0
+print('PEAK DEMAND {} Annual Demand {} Mean Daily Demand {} Normalise Factor {}'.format(daily_original_electric_with_heat.max(), daily_original_electric_with_heat.sum(), daily_original_electric_with_heat.mean(), normalise_factor))
 
-if not args.historic:
+# input assumptions for reference year
+heat_that_is_electric = 0.06     # my spreadsheet from DUKES
+#   heat_that_is_heat_pumps = 0.01   # greenmatch.co.uk, renewableenergyhub.co.uk
 
+total_energy = electric_ref.sum()
+# baseline demand
+if args.dmethod == 'baseline':
+
+    # read reference year electric heat series based on purely resistive heating
+    # so that it can be removed from the reference year series. 
+
+    demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{0:}Weather{0:}I-Bbdew_resistive.csv'.format(args.reference) 
+    ref_resistive = readers.read_copheat(demand_filename, ['electricity', 'temperature'])
+    ref_resistive_heat = ref_resistive['electricity']
+    ref_temperature = ref_resistive['temperature']
+
+    #  To remove existing space and water heating from the electricity demand time 
+    #  series for the reference year - subtract the resistive heat series
+    mod_electric_ref = electric_ref - (ref_resistive_heat * heat_that_is_electric)
+    daily_electric_ref = mod_electric_ref.resample('D').sum()
+
+    # plot the electricity time series with heating removed
+    if args.plot:
+        daily_original_electric_with_heat.plot(color='green', label='Historic 2018 electricity demand')
+        daily_electric_ref.plot(color='blue', label='Baseline electricity demand with heat removed')
+        plt.title('Removing existing heating from reference year electricity')
+        plt.xlabel('Time', fontsize=15)
+        plt.ylabel('Electricity demand (TWh)', fontsize=15)
+        plt.legend(loc='upper right')
+        plt.show()
+
+    # plot the 2018 series with all heat pumps vs the historic 2018
+    if args.plot:
+        demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{0:}Weather{0:}I-Bbdew.csv'.format(args.reference) 
+        ref_electric_hp = readers.read_copheat(demand_filename, ['electricity'])
+        electric2018_withhp = mod_electric_ref + ref_electric_hp
+        fes_withhp = mod_electric_ref + ref_electric_hp * 0.41
+        daily_new_2018 = electric2018_withhp.resample('D').sum()
+        daily_fes = fes_withhp.resample('D').sum()
+        daily_original_electric_with_heat.plot(color='blue', label='Historic 2018 electricity demand')
+        daily_new_2018.plot(color='red', label='2018 electricity demand with all heating as heat pumps')
+        daily_fes.plot(color='green', label='2018 electricity demand with 41% heating as heat pumps')
+        plt.title('Impact of heat pumps on 2018 daily electricity demand')
+        plt.xlabel('Time', fontsize=15)
+        plt.ylabel('Electricity demand (TWh)', fontsize=15)
+        plt.legend(loc='upper right')
+        plt.show()
+    
+        print('Historic Electric {} With all Heat Pumps added {} with 41% heat pumps {}'.format(daily_original_electric_with_heat.sum(), daily_new_2018.sum(), daily_fes.sum() ) )
+
+# output time series for KF
+#   timeseries_dir = '/home/malcolm/uclan/output/timeseries/'
+#   daily_electric_ref.to_csv(timeseries_dir + 'baseline_daily_2018.csv', float_format='%g')
+#   daily_original_electric_with_heat.to_csv(timeseries_dir + 'historic_daily_2018.csv', float_format='%g')
+#   daily_new_2018.to_csv(timeseries_dir + 'heatpumps_all_daily_2018.csv', float_format='%g')
+#   daily_fes.to_csv(timeseries_dir + 'heatpumps_41_daily_2018.csv', float_format='%g')
+
+# not baseline demand, using scaled historic series
     daily_electric_ref = mod_electric_ref.resample('D').sum()
 else:
-    # use KFs historic series instead
-    demand_filename = '/home/malcolm/uclan/data/kf/UKDailyELD19832014.csv'
-    last_weather_year = 2013
-    if args.start > last_weather_year:
-        print("ERROR: start year > last")
-        quit()
-    kf = pd.read_csv(demand_filename, header=None, squeeze=True)
-    d = pd.date_range(start = '1983-01-01', end = '2013-12-31', freq='D' )
-    mod_electric_ref = pd.Series(kf.values[0:len(d)], d, dtype='float64', name='ENGLAND_WALES_DEMAND')
-    # scale england and wales to scotland
-    mod_electric_ref = mod_electric_ref * scotland_factor
+    if args.demand == 'espini':
+        demand_filename = '/home/malcolm/uclan/data/electricity/espeni.csv'
+        demand_espini = readers.read_espeni(demand_filename, None)
+        print(demand_espini)
+        espini_start = str(args.start) + '-01-01 00:00:00+00:00'
+        espini_end = str(args.end) + '-12-31 23:00:00+00:00'
+        mod_electric_ref = demand_espini[espini_start : espini_end]
+        d = pd.date_range(start = espini_start, end = espini_end, freq='H' )
+
+    else:
+        # use KFs historic series instead
+        demand_filename = '/home/malcolm/uclan/data/kf/UKDailyELD19832014.csv'
+        last_weather_year = 2013
+        if args.start > last_weather_year:
+            print("ERROR: start year > last")
+            quit()
+        kf = pd.read_csv(demand_filename, header=None, squeeze=True)
+        d = pd.date_range(start = '1984-01-01', end = '2013-12-31', freq='D' )
+        mod_electric_ref = pd.Series(kf.values[0:len(d)], d, dtype='float64', name='ENGLAND_WALES_DEMAND')
+        # scale england and wales to scotland
+        mod_electric_ref = mod_electric_ref * scotland_factor
+
     # Scale by reference year
     if args.scale == 'average':
-        total_energy = mod_electric_ref.sum() / 30
+        total_energy = mod_electric_ref.sum() / (1 + args.end - args.start)
     # or a value passed in ( eg KF 305.0 ) in TWh
     else:
         if args.scale != 'reference':
             total_energy = float(args.scale) * 1e6
 
-    # scale by adding or subtracting a constant as per KF method
     new_values = np.empty(0)
-    for year in range(args.start, last_weather_year+1):
-        year_electric = mod_electric_ref[str(year)]
-#       print(year)
-#       print(year_electric)
-        adjustment = (total_energy - year_electric.sum()) / year_electric.size
-        print("Year {} len {} adjustment {} total {}".format(year, year_electric.size, adjustment, total_energy) )
-        year_electric = year_electric + adjustment
-        new_values = np.concatenate((new_values, year_electric.values))
-    d = pd.date_range(start = str(args.start) + '-01-01', end = str(last_weather_year) + '-12-31', freq='D' )
+    if args.dmethod == 'add':
+        # scale by adding or subtracting a constant as per KF method
+        for year in range(args.start, last_weather_year+1):
+            year_electric = mod_electric_ref[str(year)]
+            adjustment = (total_energy - year_electric.sum()) / year_electric.size
+            print("Year {} len {} adjustment {} total {}".format(year, year_electric.size, adjustment, total_energy) )
+            year_electric = year_electric + adjustment
+            new_values = np.concatenate((new_values, year_electric.values))
+
+    else:
+        # scale by multiplying as per the cost paper
+        for year in range(args.start, last_weather_year+1):
+            year_electric = mod_electric_ref[str(year)]
+            adjustment = total_energy / year_electric.sum()
+            print("Year {} len {} adjustment {} total {}".format(year, year_electric.size, adjustment, total_energy) )
+            year_electric = year_electric * adjustment
+            new_values = np.concatenate((new_values, year_electric.values))
+
+
     mod_electric_ref = pd.Series(new_values, d, dtype='float64', name='ENGLAND_WALES_DEMAND')
     daily_electric_ref = mod_electric_ref
 
@@ -895,12 +926,14 @@ else:
 
 print('Generation PV: Number of value {} mean CF {} ,  Wind: number of values {} meaqn CF {} '.format(len(pv), pv.mean(), len(wind), wind.mean() ) )
 
-df, yd, all_demand, all_hydrogen, sample_hist, sample_durations = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, ref_temperature, args.climate, args.historic, heat_that_is_electric, normalise_factor, args.base, args.baseload, args.variable)
+df, yd, all_demand, all_hydrogen, sample_hist, sample_durations = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, args.climate, args.dmethod == 'baseline', heat_that_is_electric, normalise_factor, args.base, args.baseload, args.variable)
 print("Max storage {} Min Storage {}".format(df['storage'].max(), df['storage'].min()) )
 
 electricChar = 'S'
-if args.historic:
+if args.dmethod == 'add':
     electricChar = 'H'
+if args.dmethod == 'multiply':
+    electricChar = 'M'
 climateChar = 'N'
 if args.climate:
     climateChar = 'C'
@@ -929,11 +962,13 @@ settings = {
     'eta'       : args.eta,
     'cfpv'      : args.cfpv,
     'cfwind'    : args.cfwind,
-    'espini'    : args.espini,
+    'demand'    : args.demand,
+    'dmethod'   : args.dmethod,
     'hourly'    : args.hourly,
     'kfpv'      : args.kfpv,
     'kfwind'    : args.kfwind,
     'shore'     : args.shore,
+    'threshold' : args.threshold,
     'normalise' : normalise_factor,
     'max_storage' : df['storage'].max(),
     'min_storage' : df['storage'].min(),
