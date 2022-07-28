@@ -137,7 +137,7 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
 #   print(df)
     return df
 
-def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.0, variable=0.0, hydrogen=None, method='kf', hist_wind=1.0, hist_pv=1.0, threshold=0.01, constraints='new' ):
+def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.0, variable=0.0, hydrogen=None, method='kf', hist_wind=1.0, hist_pv=1.0, threshold=0.01, constraints='new', debug=False ):
     print('storage_grid: demand max {} min {} mean {}'.format(demand.max(), demand.min(), demand.mean()) )
 
     # do one example for a store history
@@ -159,6 +159,8 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
     print('Sample wind {} pv {} needs {} days'.format(hist_wind, hist_pv, store_size) )
     # get durations for sample store history
     sample_durations = storage_duration(sample_hist)
+    if debug: 
+        quit()
 
     results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge_rate' : [], 'discharge_rate' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [], 'variable_energy' : [] }
     # For hourly the storage will be in hours, so divide by 24 to convert to 

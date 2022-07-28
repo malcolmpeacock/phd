@@ -607,7 +607,7 @@ for key, scenario in scenarios.items():
     filename = scenario['file']
     path = '{}/{}/shares{}.csv'.format(output_dir, folder, filename)
     df = pd.read_csv(path, header=0, index_col=0)
-    for col in ['base', 'variable', 'wind_energy', 'pv_energy', 'charge_rate', 'discharge_rate', 'variable_energy', 'baseload']:
+    for col in ['base', 'variable', 'wind_energy', 'pv_energy', 'charge_rate', 'discharge_rate', 'variable_energy']:
         if col not in df.columns:
             print('Warning {} missing, setting to zero'.format(col))
             df[col] = 0.0

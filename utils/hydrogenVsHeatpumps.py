@@ -440,7 +440,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         if args.storage == 'new':
             df, sample_hist, sample_durations = storage.storage_grid_new(all_demand, wind, pv, eta, hourly, grid, step, baseload, h_input, args.constraints, args.wind, args.pv, args.days, args.threshold, variable, args.contours, args.debug)
         else:
-            df, sample_hist, sample_durations = storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, baseload, variable, h_input, args.storage, args.wind, args.pv, args.threshold, args.constraints)
+            df, sample_hist, sample_durations = storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, baseload, variable, h_input, args.storage, args.wind, args.pv, args.threshold, args.constraints, args.debug)
         df['base'] = df['storage'] * 0.0 + baseload
         df['variable'] = df['storage'] * 0.0 + variable
 
