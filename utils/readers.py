@@ -259,10 +259,19 @@ def read_advm(filename, location):
     analysis = { 'nans' : nans, 'location' : location, 'fixed' : fnans }
     return advm, analysis
 
-def read_espeni(filename, year):
-    espini = pd.read_csv(filename, header=0, parse_dates=[0], index_col=0, usecols=['ELEXM_utc', 'POWER_ESPENI_MW'], squeeze=True)
+def read_espeni(filename, year=None, cols=['ELEXM_utc', 'POWER_ESPENI_MW']):
+    espini = pd.read_csv(filename, header=0, parse_dates=[0], index_col=0, usecols=cols, squeeze=True)
     # convert from half hourly to hourly
     hourly = espini.resample('H').sum() * 0.5
+    hourly.index = pd.DatetimeIndex(pd.to_datetime(hourly.index.strftime("%Y-%m-%d %H") )).tz_localize('UTC')
+    if year==None:
+        return hourly
+    else:
+        return hourly.loc[year+'-01-01 00:00:00' : year + '-12-31 23:00:00']
+
+def read_ngrid_wind(filename, year=None):
+    hourly = pd.read_csv(filename, header=0, parse_dates=[0], index_col=0, squeeze=True)
+    # convert from half hourly to hourly
     hourly.index = pd.DatetimeIndex(pd.to_datetime(hourly.index.strftime("%Y-%m-%d %H") )).tz_localize('UTC')
     if year==None:
         return hourly

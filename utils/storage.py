@@ -1,5 +1,5 @@
-# How much storage is required for different amounts of PV and Wind ? using the capacity factors
-# Reproduce Katerina graph for 2018 only.
+# Functions related to how much storage is required for different amounts of
+# PV and Wind. Includes calculating lines of constant value
 
 # library stuff
 import sys
@@ -99,43 +99,85 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
     # linearly interpolate along wind and then pv
     else:
 #       print('storage_line for {} days '.format(storage_value) )
-        variables = [wind_parm, pv_parm, 'last', 'wind_energy', 'pv_energy', 'storage', 'discharge', 'base', 'cost', 'charge_rate', 'discharge_rate', 'charge', 'variable_energy', 'variable', 'gw_wind', 'gw_pv']
-        if variable not in variables:
-            variables.append(variable)
+        variables = ['f_wind', 'f_pv', 'storage', 'last', 'wind_energy', 'pv_energy', 'discharge', 'base', 'cost', 'charge_rate', 'discharge_rate', 'charge', 'variable_energy', 'variable', 'gw_wind', 'gw_pv', 'fraction', 'energy']
+        if variable not in variables or wind_parm not in variables or pv_parm not in variables:
+            print('ERROR variable : {} not in variables list'.format(variable) )
+            quit()
         value_lists={}
         for var in variables:
             value_lists[var] = []
 
-        # for each wind value ...
-        wind_values = df[wind_parm].unique()
-        for f_wind in wind_values:
-#       print('Fwind {} '.format(f_wind) )
-        # extract those values with a wind=xs
-            is_xs = df[wind_parm] == f_wind
-            df_xs = df[is_xs]
-        # check storage in range
-            if storage_value < df_xs[variable].max() and storage_value > df_xs[variable].min():
-                # add the wind and storage values
-                value_lists[wind_parm].append(f_wind)
-                value_lists[variable].append(storage_value)
-
-                # sort them by storage
-                df_xs = df_xs.sort_values(variable,ascending=False)
-
-                for var in variables:
-                    if var not in [wind_parm, variable]:
-                        # interpolate a value for the storage
-                        y_interp = scipy.interpolate.interp1d(df_xs[variable], df_xs[var])
-                        var_value = y_interp(storage_value)
-                        value_lists[var].append(var_value.item())
-
-        value_lists['f_wind'] = value_lists.pop(wind_parm)
-        value_lists['f_pv'] = value_lists.pop(pv_parm)
+#       value_lists[wind_parm] = value_lists.pop(wind_parm)
+#       value_lists[pv_parm] = value_lists.pop(pv_parm)
+        if method == 'both' or method== 'sboth':
+            storage_interpolate(value_lists, pv_parm, variable, df, storage_value, variables)
+        storage_interpolate(value_lists, wind_parm, variable, df, storage_value, variables)
         df = pd.DataFrame(data=value_lists)
-        df = df.sort_values(['f_pv', 'f_wind'], ascending=[True, True])
-#   print('Line: Pw max {} min {} '.format(df['f_wind'].max(), df['f_wind'].min() ) )
-#   print(df)
+        if len(df)>1:
+            df = df.sort_values([pv_parm, wind_parm], ascending=[True, True])
+            if method == 'smooth' or method == 'sboth':
+                df = sort_df_contour(df, pv_parm, wind_parm)
     return df
+
+def sort_df_contour(df, pv_parm, wind_parm):
+    # convert data frame to list of dicts
+    LD = df.to_dict('records')
+
+    # define a start point
+    start = LD[0]
+
+    # order the points to the closest one is adjacent
+    LD = optimized_path(LD, start, pv_parm, wind_parm)
+
+    # convert list of dicts to dict of lists
+    v = {k: [dic[k] for dic in LD] for k in LD[0]}
+
+    # convert back to a DataFrame
+    dfs = pd.DataFrame(data=v)
+
+    return dfs
+
+# order the points in terms of the closest point to the next one
+# so that the line is smooth
+def optimized_path(coords, start, pv_parm, wind_parm):
+    if start is None:
+        start = coords[0]
+    pass_by = coords
+    path = [start]
+    pass_by.remove(start)
+    while pass_by:
+        nearest = min(pass_by, key=lambda x: storage_grid_distance(path[-1], x, pv_parm, wind_parm))
+        path.append(nearest)
+        pass_by.remove(nearest)
+    return path
+
+# calculate the 'distance' between 2 points
+def storage_grid_distance(P1, P2, pv_parm, wind_parm):
+    return ((P1[pv_parm] - P2[pv_parm])**2 + (P1[wind_parm] - P2[wind_parm])**2) ** 0.5
+
+def storage_interpolate(value_lists, wind_parm, variable, df, storage_value, variables):
+    # for each wind value ...
+    wind_values = df[wind_parm].unique()
+    for f_wind in wind_values:
+    # extract those values with a wind=xs
+        is_xs = df[wind_parm] == f_wind
+        df_xs = df[is_xs]
+        # check storage in range
+        if storage_value < df_xs[variable].max() and storage_value > df_xs[variable].min():
+            # sort them by storage
+            df_xs = df_xs.sort_values(variable,ascending=False)
+
+            # add the wind and storage values
+            value_lists[wind_parm].append(f_wind)
+            value_lists[variable].append(storage_value)
+
+            # add the values of the other variables
+            for var in variables:
+                if var not in [wind_parm, variable]:
+                    # interpolate a value for the storage
+                    y_interp = scipy.interpolate.interp1d(df_xs[variable], df_xs[var])
+                    var_value = y_interp(storage_value)
+                    value_lists[var].append(var_value.item())
 
 def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.0, variable=0.0, hydrogen=None, method='kf', hist_wind=1.0, hist_pv=1.0, threshold=0.01, constraints='new', debug=False ):
     print('storage_grid: demand max {} min {} mean {}'.format(demand.max(), demand.min(), demand.mean()) )
@@ -177,10 +219,10 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
             f_wind = i_wind * step
             sys.stdout.write('\rCalculating f_pv {:.2f} f_wind {:.2f} '.format(f_pv, f_wind) )
 
-            # energy supply is calculated using the capacity factors
+            # energy supply is calculated using the capacity factors multiplied
+            # by the capacity
             wind_energy = wind * f_wind
             pv_energy = pv * f_pv
-#           supply = (wind * f_wind) + (pv * f_pv)
             supply = wind_energy + pv_energy
             net = demand - supply - base
 
@@ -520,7 +562,7 @@ def compare_lines(line1, line2):
 
 def get_point(df, wind_val, pv_val, wind_var, pv_var):
     if df[wind_var].min() > wind_val or df[wind_var].max() < wind_val or df[pv_var].min() > pv_val or df[pv_var].max() < pv_val:
-        print("WARNING: can't interpolat to {} {} , {} {}".format(wind_var, wind_val, pv_var. pv_val))
+        print("WARNING: can't interpolat to {} {} , {} {}".format(wind_var, wind_val, pv_var, pv_val))
 
     new_row = df.head(1).copy()
     new_row_ind = new_row.index[0]

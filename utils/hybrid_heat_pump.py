@@ -21,7 +21,9 @@ efficiency = 0.85
 
 # read 2017 electric heat for ref year 2018 temperature, heat, electric
 
-demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/2017/GBRef2018Weather2017I-Sbdew.csv'
+year = '2018'
+#demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/2017/GBRef2018Weather2017I-Sbdew.csv'
+demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{}/GBRef2018Weather{}I-Brhpp.csv'.format(year, year)
 demand = readers.read_copheat(demand_filename,['electricity','heat','temperature'])
 print(demand)
 
@@ -86,7 +88,7 @@ daily_electric_hybrid.plot(ax=ax2,color='blue',label='Hybrid heat pump electrici
 daily_electric_original.plot(ax=ax2,color='green',label='Ordinary heat pump electricity')
 #  -the hybrid heat pump gas series
 daily_gas.plot(ax=ax2,color='yellow',label='Hybrid heat pump gas')
-plt.title('2017 weather hybrid heat pumps')
+plt.title('{} weather hybrid heat pumps'.format(year))
 plt.xlabel('Hour of the year')
 plt.legend(loc='upper right')
 plt.show()
@@ -94,11 +96,13 @@ plt.show()
 # plot of 4 days hourly
 
 days4_electric_hybrid = demand['electricity']
-days4_electric_hybrid = days4_electric_hybrid['2017-03-01 00:00:00' : '2017-03-04 23:00:00' ]
-days4_electric_original = original_electric['2017-03-01 00:00:00' : '2017-03-04 23:00:00' ]
-days4_gas = gas['2017-03-01 00:00:00' : '2017-03-04 23:00:00' ]
+start_time = '{}-03-14 00:00:00'.format(year)
+end_time = '{}-03-17 23:00:00'.format(year)
+days4_electric_hybrid = days4_electric_hybrid[start_time : end_time ]
+days4_electric_original = original_electric[start_time : end_time ]
+days4_gas = gas[start_time : end_time ]
 days4_temperature = demand['temperature']
-days4_temperature = days4_temperature['2017-03-01 00:00:00' : '2017-03-04 23:00:00' ]
+days4_temperature = days4_temperature[start_time : end_time ]
 # plot:
 # temperature
 ax1 = days4_temperature.plot(color='red',label='Air temperature')
@@ -115,7 +119,7 @@ days4_electric_hybrid.plot(ax=ax2,color='blue',label='Hybrid heat pump electrici
 days4_electric_original.plot(ax=ax2,color='green',label='Ordinary heat pump electricity')
 #  -the hybrid heat pump gas series
 days4_gas.plot(ax=ax2,color='yellow',label='Hybrid heat pump gas')
-plt.title('2017 weather hybrid heat pumps')
+plt.title('{} weather hybrid heat pumps'.format(year))
 plt.xlabel('Hour of the year')
-plt.legend(loc='upper right')
+plt.legend(loc='upper center')
 plt.show()
