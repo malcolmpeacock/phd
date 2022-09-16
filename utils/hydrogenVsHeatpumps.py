@@ -440,7 +440,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         if args.storage == 'new':
             df, sample_hist, sample_durations = storage.storage_grid_new(all_demand, wind, pv, eta, hourly, grid, step, baseload, h_input, args.constraints, args.wind, args.pv, args.days, args.threshold, variable, args.contours, args.debug)
         else:
-            df, sample_hist, sample_durations = storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, baseload, variable, h_input, args.storage, args.wind, args.pv, args.threshold, args.constraints, args.debug)
+            df, sample_hist, sample_durations = storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, baseload, variable, h_input, args.storage, args.wind, args.pv, args.threshold, args.constraints, args.debug, args.store_max)
         df['base'] = df['storage'] * 0.0 + baseload
         df['variable'] = df['storage'] * 0.0 + variable
 
@@ -509,6 +509,7 @@ parser.add_argument('--pv', action="store", dest="pv", help='Pv value of store h
 parser.add_argument('--days', action="store", dest="days", help='Example store size to find for store hist plotting', type=float, default=30)
 parser.add_argument('--threshold', action="store", dest="threshold", help='Threshold for considering 2 wind values the same in new storage model', type=float, default=0.01)
 parser.add_argument('--variable', action="store", dest="variable", help='Amount of variable generation, default-0.0', type=float, default=0.0)
+parser.add_argument('--store_max', action="store", dest="store_max", help='Maximum value of storage in days, default=60.0', type=float, default=60.0)
 parser.add_argument('--contours', action="store", dest="contours", help='Set of values to use for contour lines', default='med')
 
 args = parser.parse_args()

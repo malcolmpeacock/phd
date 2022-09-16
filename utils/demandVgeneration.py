@@ -6,10 +6,17 @@ import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
 import argparse
+import numpy as np
 
 # custom code
 import stats
 import readers
+
+def correlation(s1, s2):
+    # Pearsons correlation coefficient
+    corr = s1.corr(s2)
+    return corr
+
 
 def normalize(df):
     normalized_df=(df-df.min())/(df.max()-df.min())
@@ -27,6 +34,8 @@ def read_demand(filename, ninja_start, ninja_end):
 parser = argparse.ArgumentParser(description='Compare demand profile with generation')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--ngrid', action="store_true", dest="ngrid", help='Include national grid wind', default=False)
+parser.add_argument('--monthly', action="store_true", dest="monthly", help='Do monthly correlations', default=False)
+parser.add_argument('--step', action="store", dest="step", help='Step size for wind PV combinations', default=0, type=float)
 args = parser.parse_args()
 
 
@@ -62,7 +71,6 @@ norm_ninja_pv = normalize(ninja_pv_daily)
 print('Extracting Wind ...')
 ninja_wind = wind_hourly[ninja_start : ninja_end]
 ninja_onshore = ninja_wind['onshore']
-#ninja_onshore = ninja_onshore.resample('D').mean()
 ninja_offshore = ninja_wind['offshore']
 ninja_onshore = ninja_wind['onshore']
 ninja_both = ninja_wind['national']
@@ -111,8 +119,14 @@ norm_kf_pv = normalize(kf_pv)
 
 baseline = read_demand('baseline_daily_all.csv', ninja_start, ninja_end)
 hp_41 = read_demand('heatpumps_41_all_daily_all.csv', ninja_start, ninja_end)
-hp_all = read_demand('heatpumps_41_all_daily_all.csv', ninja_start, ninja_end)
+hp_all = read_demand('heatpumps_all_daily_all.csv', ninja_start, ninja_end)
 existing = read_demand('existing_all_daily.csv', ninja_start, ninja_end)
+
+print('Demand    min(days)  max(days)');
+print('Existing  {:.2f}         {:.2f}'.format(existing.min()/existing.mean(), existing.max()/existing.mean()));
+print('HP 41     {:.2f}         {:.2f}'.format(hp_41.min()/existing.mean(), hp_41.max()/existing.mean()));
+print('HP all    {:.2f}         {:.2f}'.format(hp_all.min()/existing.mean(), hp_all.max()/existing.mean()));
+
 
 norm_baseline = normalize(baseline)
 norm_hp41 = normalize(hp_41)
@@ -126,7 +140,23 @@ if args.ngrid:
     wind_ngrid_hourly = wind_ngrid_hourly[ninja_start : ninja_end]
     wind_ngrid_daily = wind_ngrid_hourly.resample('D').mean()
     norm_ngrid_wind = normalize(wind_ngrid_daily)
+# monthly
+    if args.monthly:
+        norm_ngrid_wind = norm_ngrid_wind.resample('M').mean()
 
+if args.monthly:
+    norm_ninja_pv = norm_ninja_pv.resample('M').mean()
+    norm_ninja_both = norm_ninja_both.resample('M').mean()
+    norm_ninja_onshore = norm_ninja_onshore.resample('M').mean()
+    norm_ninja_offshore = norm_ninja_offshore.resample('M').mean()
+    norm_ninja_future = norm_ninja_future.resample('M').mean()
+    norm_ninja_current = norm_ninja_current.resample('M').mean()
+    norm_kf_pv = norm_kf_pv.resample('M').mean()
+    norm_kf_wind = norm_kf_wind.resample('M').mean()
+    norm_existing = norm_existing.resample('M').mean()
+    norm_baseline = norm_baseline.resample('M').mean()
+    norm_hp41 = norm_hp41.resample('M').mean()
+    norm_hp_all = norm_hp_all.resample('M').mean()
 # plot 
 
 if args.plot:
@@ -198,3 +228,28 @@ stats.print_stats(norm_ninja_current, norm_hp_all,   'Ninja current Wind ')
 stats.print_stats(norm_ninja_pv, norm_hp_all,   'Ninja PV ')
 if args.ngrid:
     stats.print_stats(norm_ngrid_wind, norm_hp_all,   'Nat grid wind ')
+
+if args.step>0:
+
+    ra = []
+    re = []
+    fs = []
+    for fraction in np.arange(0.0,1.0+args.step, args.step):
+        fs.append(fraction)
+        supply = fraction * norm_ninja_both + (1-fraction) * norm_ninja_pv
+        re.append(correlation(supply, norm_existing))
+        ra.append(correlation(supply, norm_hp_all))
+    data = { 'fraction' : fs, 're' : re, 'ra' : ra }
+    df = pd.DataFrame(data=data)
+    print(df)
+    if args.plot:
+        plt.plot(df['fraction'], df['re'], label='existing heating')
+        plt.plot(df['fraction'], df['ra'], label='all heat pumps')
+        freq = 'Daily '
+        if args.monthly:
+            freq = 'Monthly '
+        plt.title('{}correlation of wind fraction in the supply and demand'.format(freq))
+        plt.xlabel('Wind Capacity Fraction', fontsize=15)
+        plt.ylabel('Pearsons correlation coefficient (R)', fontsize=15)
+        plt.legend(loc='upper left')
+        plt.show()

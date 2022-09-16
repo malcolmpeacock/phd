@@ -43,12 +43,11 @@ ninja_pv = ninja_pv.resample('D').mean()
 print('Extracting Wind ...')
 ninja_wind = wind_hourly[ninja_start : ninja_end]
 ninja_onshore = ninja_wind['onshore']
+ninja_onshore_daily = ninja_onshore.resample('D').mean()
 #ninja_onshore = ninja_onshore.resample('D').mean()
 ninja_offshore = ninja_wind['offshore']
 ninja_onshore = ninja_wind['onshore']
 ninja_offshore_daily = ninja_offshore.resample('D').mean()
-ninja_onshore_daily = ninja_onshore.resample('D').mean()
-
 # print(ninja_onshore_daily)
 
 kf_wind.index = ninja_onshore_daily.index
@@ -167,3 +166,23 @@ stats.print_stats_header('Ninja Wind          ')
 stats.print_stats(ninja_offshore, ninja_onshore, 'offshore to onshore hourly', predr2=False)
 stats.print_stats(ninja_offshore_daily, ninja_onshore_daily, 'offshore to onshore daily')
 
+# ninja wind monthly
+ninja_start = '1980-01-01 00:00:00'
+ninja_end = '2019-12-31 23:00:00'
+ninja_wind = wind_hourly[ninja_start : ninja_end]
+ninja_onshore = ninja_wind['onshore']
+ninja_onshore_monthly = ninja_onshore.resample('M').mean()
+ninja_onshore_monthly.plot(color='blue', label='Wind Generation from Renewables Ninja')
+plt.title('Monthly UK Wind generation')
+plt.xlabel('Time', fontsize=15)
+plt.ylabel('Energy', fontsize=15)
+plt.legend(loc='upper right')
+plt.show()
+
+ninja_onshore_yearly = ninja_onshore.resample('Y').mean()
+ninja_onshore_yearly.plot(color='blue', label='Yearly Wind Generation from Renewables Ninja')
+plt.title('Monthly UK Wind generation')
+plt.xlabel('Time', fontsize=15)
+plt.ylabel('Energy', fontsize=15)
+plt.legend(loc='upper right')
+plt.show()
