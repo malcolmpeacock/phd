@@ -423,14 +423,15 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         h_input = all_hydrogen
     else:
         h_input = None
-    grid=args.grid    # number of points (60)
+    nwind=args.nwind    # number of points (60)
+    npv=args.npv    # number of points (60)
     step=args.step    # step size (0.1)
     if base:
         df_list=[]
-        for i_base in range(0,grid):
+        for i_base in range(0,10):
             base_load = i_base * 0.05
             print('Base load {}'.format(base_load))
-            df= storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, base_load, variable, h_input, args.storage)
+            df= storage.storage_grid(all_demand, wind, pv, eta, hourly, npv, nwind, step, base_load, variable, h_input, args.storage)
             df['base'] = df['storage'] * 0.0 + base_load
             df_list.append(df)
         df = pd.concat(df_list)
@@ -438,9 +439,9 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
     else:
         print('Base load Zero')
         if args.storage == 'new':
-            df, sample_hist, sample_durations = storage.storage_grid_new(all_demand, wind, pv, eta, hourly, grid, step, baseload, h_input, args.constraints, args.wind, args.pv, args.days, args.threshold, variable, args.contours, args.debug)
+            df, sample_hist, sample_durations = storage.storage_grid_new(all_demand, wind, pv, eta, hourly, npv, nwind, step, baseload, h_input, args.constraints, args.wind, args.pv, args.days, args.threshold, variable, args.contours, args.debug)
         else:
-            df, sample_hist, sample_durations = storage.storage_grid(all_demand, wind, pv, eta, hourly, grid, step, baseload, variable, h_input, args.storage, args.wind, args.pv, args.threshold, args.constraints, args.debug, args.store_max)
+            df, sample_hist, sample_durations = storage.storage_grid(all_demand, wind, pv, eta, hourly, npv, nwind, step, baseload, variable, h_input, args.storage, args.wind, args.pv, args.threshold, args.constraints, args.debug, args.store_max)
         df['base'] = df['storage'] * 0.0 + baseload
         df['variable'] = df['storage'] * 0.0 + variable
 
@@ -492,7 +493,8 @@ parser.add_argument('--scale', action="store", dest="scale", help='How to scale 
 parser.add_argument('--storage', action="store", dest="storage", help='Storage model kf , mp, new or all', default="kf")
 parser.add_argument('--constraints', action="store", dest="constraints", help='Constraints on new storage model: new or old', default="new")
 parser.add_argument('--eta', action="store", dest="eta", help='Round Trip Efficiency.', type=int, default=85)
-parser.add_argument('--grid', action="store", dest="grid", help='Number of points in grid.', type=int, default=60)
+parser.add_argument('--npv', action="store", dest="npv", help='Number of points in pv grid.', type=int, default=60)
+parser.add_argument('--nwind', action="store", dest="nwind", help='Number of points in wind grid.', type=int, default=60)
 parser.add_argument('--baseload', action="store", dest="baseload", help='Base load capacity.', type=float, default=0.0)
 parser.add_argument('--step', action="store", dest="step", help='Step size.', type=float, default=0.1)
 parser.add_argument('--kf', action="store_true", dest="kf", help='Scale the generation data to KF Capacity factors', default=False)
@@ -925,7 +927,7 @@ else:
         wind = wind.resample('D').mean()
         pv = pv.resample('D').mean()
 
-print('Generation PV: Number of value {} mean CF {} ,  Wind: number of values {} meaqn CF {} '.format(len(pv), pv.mean(), len(wind), wind.mean() ) )
+print('Generation PV: Number of values {} mean CF {} Total {} ,  Wind: number of values {} mean CF {} Total {} '.format(len(pv), pv.mean(), pv.sum(), len(wind), wind.mean(), wind.sum() ) )
 
 df, yd, all_demand, all_hydrogen, sample_hist, sample_durations = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, args.climate, args.dmethod == 'baseline', heat_that_is_electric, normalise_factor, args.base, args.baseload, args.variable)
 print("Max storage {} Min Storage {}".format(df['storage'].max(), df['storage'].min()) )

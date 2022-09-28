@@ -15,6 +15,7 @@ import readers
 parser = argparse.ArgumentParser(description='Compare and plot scenarios')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--scale', action="store_true", dest="scale", help='Scale to ninja CF', default=False)
+parser.add_argument('--rolling', action="store", dest="rolling", help='Rolling average window', default=0, type=int)
 args = parser.parse_args()
 
 wind_filename = '/home/malcolm/uclan/data/kf/wind.txt'
@@ -117,9 +118,14 @@ print('WIND mean {:.2f} {:.2f}  {:.2f} '.format(ninja_offshore_daily.mean(), nin
 print('WIND std  {:.2f} {:.2f}  {:.2f} '.format(ninja_offshore_daily.std(), ninja_onshore_daily.std(), kf_wind.std() ) )
 print('WIND var  {:.2f} {:.2f}  {:.2f} '.format(ninja_offshore_daily.var(), ninja_onshore_daily.var(), kf_wind.var() ) )
 
+kf_pv_p = kf_pv
+ninja_pv_p = ninja_pv
+if args.rolling >0:
+    kf_pv_p = kf_pv.rolling(args.rolling, min_periods=1).mean()
+    ninja_pv_p = ninja_pv.rolling(args.rolling, min_periods=1).mean()
 
-kf_pv.plot(color='blue', label='PV Generation from Fragaki et. al')
-ninja_pv.plot(color='red', label='PV Generation from ninja')
+kf_pv_p.plot(color='blue', label='PV Generation from Fragaki et. al')
+ninja_pv_p.plot(color='red', label='PV Generation from ninja')
 plt.title('Comparison of daily UK PV genreation')
 plt.xlabel('Time', fontsize=15)
 plt.ylabel('Energy', fontsize=15)

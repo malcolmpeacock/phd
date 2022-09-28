@@ -483,18 +483,18 @@ if args.scenario == 'ninjapv':
        {'file': 'ENH', 'dir' : 'kfpv/', 'title': 'PV Generation from Fragaki et. al. '} }
 if args.scenario == 'shore':
     scenario_title = 'Onshore vs Offshore'
-    scenarios = {'kf' :
-       {'file': 'ENH', 'dir' : 'ninjaOffshore/', 'title': 'Ninja (offshore)'},
-                 'ninja' : 
-       {'file': 'ENH', 'dir' : 'ninjaOnshore/', 'title': 'Ninja (onshore)'}    }
+    scenarios = {'off' :
+       {'file': 'ENS', 'dir' : 'ninjaOffshore/', 'title': 'Ninja (offshore)'},
+                 'on' : 
+       {'file': 'ENS', 'dir' : 'ninjaOnshore/', 'title': 'Ninja (onshore)'}    }
 if args.scenario == 'shores':
     scenario_title = 'Onshore vs Offshore'
     scenarios = {'off' :
-       {'file': 'ENH', 'dir' : 'ninjaOffshore/', 'title': 'Ninja (offshore)'},
+       {'file': 'ENS', 'dir' : 'ninjaOffshore/', 'title': 'Ninja (offshore)'},
                  'on' : 
-       {'file': 'ENH', 'dir' : 'ninjaOnshore/', 'title': 'Ninja (onshore)'},
+       {'file': 'ENS', 'dir' : 'ninjaOnshore/', 'title': 'Ninja (onshore)'},
                  'ons' : 
-       {'file': 'ENH', 'dir' : 'ninjaOnShoreScaled/', 'title': 'Ninja (onshore scaled to offshore cf)'}    }
+       {'file': 'ENS', 'dir' : 'ninjaOnShoreScaled/', 'title': 'Ninja (onshore scaled to offshore cf)'}    }
 if args.scenario == 'soc':
     scenario_title = 'Onshore vs Offshore'
     scenarios = {'off' :
@@ -560,7 +560,14 @@ if args.scenario == 'cost_comp':
     scenarios = {'baseline' :
        {'file': 'ENS', 'dir' : 'cost', 'title': 'Synthetic Demand with baseline'},
                  'cost' :
-       {'file': 'ENM', 'dir' : 'cost', 'title': 'Scaled demand as per cost paper'}
+       {'file': 'ENM', 'dir' : 'cost', 'title': 'Scaled demand as Cardenas et. al.'}
+    }
+if args.scenario == 'cost_comph':
+    scenario_title = ' cost model paper comparison (hourly)'
+    scenarios = {'baseline' :
+       {'file': 'ENS', 'dir' : 'cost_hourly', 'title': 'Synthetic Demand with baseline'},
+                 'cost' :
+       {'file': 'ENM', 'dir' : 'cost_hourly', 'title': 'Scaled demand as Cardenas et. al.'}
     }
 if args.scenario == 'cost':
     scenario_title = ' cost model paper comparison'
@@ -728,14 +735,14 @@ for key, scenario in scenarios.items():
 
 # output comparison values
 
-print('COMPARISONS ****')
-print_titles(max_sl)
 
 outputs=[]
 excess_wind=None
 excess_pv=None
 
 if args.compare:
+    print('COMPARISONS ****')
+    print_titles(max_sl)
     for key, scenario in scenarios.items():
         label = scenario['title']
         df = dfs[key]
@@ -832,8 +839,8 @@ if args.rate:
 first = True
 #print('Scenario   Points in contour  Generation capacity')
 markers = ['o', 'v', '+', '<', 'x', 'D', '*', 'X','o', 'v', '+', '<', 'x', 'D', '*', 'X']
-styles = ['solid', 'dotted', 'dashed', 'dashdot', 'solid', 'dotted', 'dashed', 'solid', 'dotted', 'dashed', 'dashdot' ]
-colours = ['blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'black', 'grey', 'pink', 'oive' ]
+styles = ['solid', 'dotted', 'dashed', 'dashdot', 'solid', 'dotted', 'dashed', 'solid', 'dotted', 'dashed', 'dashdot', 'dashdot', 'solid', 'dotted', 'dashed' ]
+colours = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'grey', 'olive', 'cyan', 'yellow', 'black', 'salmon' ]
 scount=0
 points={}
 min_vars=[]

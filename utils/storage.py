@@ -179,8 +179,14 @@ def storage_interpolate(value_lists, wind_parm, variable, df, storage_value, var
                     var_value = y_interp(storage_value)
                     value_lists[var].append(var_value.item())
 
-def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.0, variable=0.0, hydrogen=None, method='kf', hist_wind=1.0, hist_pv=1.0, threshold=0.01, constraints='new', debug=False, store_max=60 ):
+def storage_grid(demand, wind, pv, eta, hourly=False, npv=14, nwind=14, step=0.5, base=0.0, variable=0.0, hydrogen=None, method='kf', hist_wind=1.0, hist_pv=1.0, threshold=0.01, constraints='new', debug=False, store_max=60 ):
     print('storage_grid: demand max {} min {} mean {}'.format(demand.max(), demand.min(), demand.mean()) )
+    # For hourly the storage will be in hours, so divide by 24 to convert to 
+    # days
+    if hourly:
+        store_factor = 1 / 24
+    else:
+        store_factor = 1
 
     # do one example for a store history
     supply = (wind * hist_wind) + (pv * hist_pv)
@@ -197,24 +203,18 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
             # turn into positive values
             sample_hist = sample_hist - sample_hist.min()
         else:
-            store_size, sample_hist, variable_total = storage_all(demand, wind, pv, base, variable, eta, hydrogen, hist_wind, hist_pv, threshold, constraints, store_max)
-    print('Sample wind {} pv {} needs {} days'.format(hist_wind, hist_pv, store_size) )
+            store_size, sample_hist, variable_total = storage_all(demand, wind, pv, base, variable, eta, hydrogen, hist_wind, hist_pv, threshold, constraints, store_max / store_factor, debug)
+    print('Sample wind {} pv {} needs {} days'.format(hist_wind, hist_pv, store_size * store_factor) )
     # get durations for sample store history
     sample_durations = storage_duration(sample_hist)
     if debug: 
         quit()
 
     results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge_rate' : [], 'discharge_rate' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [], 'variable_energy' : [] }
-    # For hourly the storage will be in hours, so divide by 24 to convert to 
-    # days
-    if hourly:
-        store_factor = 1 / 24
-    else:
-        store_factor = 1
 
     # For each percent of PV/Wind
-    for i_pv in range(0,grid):
-        for i_wind in range(0,grid):
+    for i_pv in range(0,npv):
+        for i_wind in range(0,nwind):
             f_pv = i_pv * step
             f_wind = i_wind * step
             sys.stdout.write('\rCalculating f_pv {:.2f} f_wind {:.2f} '.format(f_pv, f_wind) )
@@ -237,7 +237,7 @@ def storage_grid(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.
                     store_hist = storage_mp(net, eta, hydrogen) * -1.0
                     store_size = store_hist.max() - store_hist.min()
                 else:
-                    store_size, store_hist, variable_total = storage_all(demand, wind, pv, base, variable, eta, hydrogen, f_wind, f_pv, threshold, constraints, store_max)
+                    store_size, store_hist, variable_total = storage_all(demand, wind, pv, base, variable, eta, hydrogen, f_wind, f_pv, threshold, constraints, store_max / store_factor, debug)
 
                 
             # kf  model is always viable.
@@ -463,7 +463,7 @@ def generation_cost_b(config,stype,one_day,n_years=1,hourly=False,shore='both', 
 #   print('alpha {} beta {} life_time {} '.format(alpha, beta, life_time) )
 #   print(' one_day {} hourly {} '.format(one_day, hourly) )
 
-    storage_kwh = days2capacity(config['storage'], one_day * 1e3, hourly)
+    storage_kwh = days2capacity(config['storage'], one_day * 1e3, False)
     storage_cap = storage_kwh * alpha
 #   print('storage_kwh')
 #   print(storage_kwh)
@@ -489,10 +489,10 @@ def generation_cost_b(config,stype,one_day,n_years=1,hourly=False,shore='both', 
 
     #  variable generation costs. 
     #  base load is assumed always on so we just use the capacity
-    pv_mwh = days2energy(config['pv_energy'], one_day, number_of_days, hourly)
-    wind_mwh = days2energy(config['wind_energy'] , one_day , number_of_days, hourly)
-    base_mwh = days2energy(config['base'] , one_day , number_of_days, hourly)
-    variable_mwh = days2energy(config['variable'] , one_day , number_of_days, hourly)
+    pv_mwh = days2energy(config['pv_energy'], one_day, number_of_days, False)
+    wind_mwh = days2energy(config['wind_energy'] , one_day , number_of_days, False)
+    base_mwh = days2energy(config['base'] , one_day , number_of_days, False)
+    variable_mwh = days2energy(config['variable'] , one_day , number_of_days, False)
 #   print(pv_mwh)
 #   print(wind_mwh)
 #   print(base_mwh)
@@ -588,7 +588,7 @@ def get_point(df, wind_val, pv_val, wind_var, pv_var):
 # new storage model which finds pv and wind combinations matching a set list
 # of storage values
 
-def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, base=0.0, hydrogen=None, constraints='new', hist_wind=1.0, hist_pv=1.0, hist_days=30, threshold=0.01, variable=0.0, contours='med', debug=False):
+def storage_grid_new(demand, wind, pv, eta, hourly=False, npv=14, nwind=14, step=0.5, base=0.0, hydrogen=None, constraints='new', hist_wind=1.0, hist_pv=1.0, hist_days=30, threshold=0.01, variable=0.0, contours='med', debug=False):
     print('storage_grid new: constraints {}  demand max {} min {} mean {}'.format(constraints, demand.max(), demand.min(), demand.mean()) )
 
     # try one example and get the store history
@@ -620,11 +620,11 @@ def storage_grid_new(demand, wind, pv, eta, hourly=False, grid=14, step=0.5, bas
         # converts to hourly if needed.
         store_size = store_days / store_factor
         # For each percent of PV
-        for i_pv in range(0,grid):
+        for i_pv in range(0,npv):
             f_pv = i_pv * step
       
             # try different amounts of wind 
-            wind_max = grid * step
+            wind_max = nwind * step
 #           wind_min = max( 1 - f_pv, 0.0 )
             wind_min = 0.0
             f_wind = wind_max
@@ -930,11 +930,11 @@ def storage_duration(store_hist):
     return d_series
 
 # new storage model to modify the storage until it balances
-def storage_all(demand, wind, pv, base, variable, eta, hydrogen, f_wind, f_pv, threshold=0.01, constraints = 'new', store_max = 60):
+def storage_all(demand, wind, pv, base, variable, eta, hydrogen, f_wind, f_pv, threshold=0.01, constraints = 'new', store_max = 60, debug=False):
     # try different amounts of storage 
     store_min = 0.0
     store_size = store_max
-    balanced, store_hist, variable_total = storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, store_size, constraints, variable)
+    balanced, store_hist, variable_total = storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, store_size, constraints, variable, debug)
     if not balanced:
         print(' No solution found for {} wind, pv {} at max {} '.format(f_wind, f_pv, store_max) )
         store_size = None
@@ -942,7 +942,7 @@ def storage_all(demand, wind, pv, base, variable, eta, hydrogen, f_wind, f_pv, t
         while abs(store_max - store_min) > threshold:
             store_size = ( store_max + store_min ) / 2.0
             sys.stdout.write('\rCalculating f_pv {:.2f} f_wind {:.2f} days {:.2f} '.format(f_pv, f_wind, store_size) )
-            balanced, store_hist, variable_total = storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, store_size, constraints, variable)
+            balanced, store_hist, variable_total = storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, store_size, constraints, variable, debug)
             # store_max is the always the last one that balanced
             # store_min is the always the last one that didn't
             if balanced:
