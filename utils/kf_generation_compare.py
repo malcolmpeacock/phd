@@ -132,8 +132,14 @@ plt.ylabel('Energy', fontsize=15)
 plt.legend(loc='upper right')
 plt.show()
 
-kf_wind.plot(color='blue', label='Wind Generation from Fragaki et. al ')
-ninja_onshore_daily.plot(color='red', label='Wind Generation from ninja')
+kf_wind_p = kf_wind
+ninja_wind_p = ninja_onshore_daily
+if args.rolling >0:
+    kf_wind_p = kf_wind.rolling(args.rolling, min_periods=1).mean()
+    ninja_wind_p = ninja_onshore_daily.rolling(args.rolling, min_periods=1).mean()
+
+kf_wind_p.plot(color='blue', label='Wind Generation from Fragaki et. al ')
+ninja_wind_p.plot(color='red', label='Wind Generation from ninja')
 plt.title('Comparison of daily UK Wind genreation')
 plt.xlabel('Time', fontsize=15)
 plt.ylabel('Energy', fontsize=15)

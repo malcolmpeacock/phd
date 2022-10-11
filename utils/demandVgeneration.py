@@ -26,7 +26,6 @@ def read_demand(filename, ninja_start, ninja_end):
     demand_dir = '/home/malcolm/uclan/output/timeseries_kf/'
     demand = pd.read_csv(demand_dir+filename, header=0, squeeze=True)
     demand.index = pd.DatetimeIndex(demand['time'])
-    print(demand)
     demand = demand[ninja_start : ninja_end]
     return demand['demand']
 
@@ -36,6 +35,7 @@ parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagn
 parser.add_argument('--ngrid', action="store_true", dest="ngrid", help='Include national grid wind', default=False)
 parser.add_argument('--monthly', action="store_true", dest="monthly", help='Do monthly correlations', default=False)
 parser.add_argument('--step', action="store", dest="step", help='Step size for wind PV combinations', default=0, type=float)
+parser.add_argument('--base', action="store", dest="base", help='Proportion of base load', default=0, type=float)
 args = parser.parse_args()
 
 
@@ -92,6 +92,8 @@ norm_ninja_offshore = normalize(ninja_offshore_daily)
 norm_ninja_both = normalize(ninja_both_daily)
 norm_ninja_future = normalize(ninja_future_daily)
 norm_ninja_current = normalize(ninja_current_daily)
+
+print('Ninja PV daily min {} Wind daily min {}'.format(ninja_pv_daily.min(), ninja_both_daily.min()) )
 
 # Load kf generation data and normalise
 
@@ -237,6 +239,9 @@ if args.step>0:
     for fraction in np.arange(0.0,1.0+args.step, args.step):
         fs.append(fraction)
         supply = fraction * norm_ninja_both + (1-fraction) * norm_ninja_pv
+        if args.base>0:
+            supply = supply + args.base
+            supply = normalize(supply)
         re.append(correlation(supply, norm_existing))
         ra.append(correlation(supply, norm_hp_all))
     data = { 'fraction' : fs, 're' : re, 'ra' : ra }
@@ -248,7 +253,7 @@ if args.step>0:
         freq = 'Daily '
         if args.monthly:
             freq = 'Monthly '
-        plt.title('{}correlation of wind fraction in the supply and demand'.format(freq))
+        plt.title('{}correlation of wind fraction in the supply to the demand'.format(freq))
         plt.xlabel('Wind Capacity Fraction', fontsize=15)
         plt.ylabel('Pearsons correlation coefficient (R)', fontsize=15)
         plt.legend(loc='upper left')

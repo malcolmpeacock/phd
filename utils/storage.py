@@ -370,7 +370,7 @@ def generation_cost(config,stype,one_day,n_years=1,hourly=False,shore='both', mo
     if model == 'A' :
         generation_cost_a(config,stype,one_day,n_years,hourly,shore)
     else:
-        generation_cost_b(config,stype,one_day,n_years,hourly,shore)
+        generation_cost_b(config,stype,one_day,n_years,hourly,shore,model)
 
 def generation_cost_a(config,stype,one_day,n_years=1,hourly=False,shore='both', model='A'):
     # number of days
@@ -432,8 +432,6 @@ def generation_cost_a(config,stype,one_day,n_years=1,hourly=False,shore='both', 
 def generation_cost_b(config,stype,one_day,n_years=1,hourly=False,shore='both', model='A' ):
     # number of days
     number_of_days = n_years * 365.25
-    # Day of energy in MWh
-#   one_day = 818386
     # Fixed of storage capacity
     alpha = 3            # £/kWh
     beta  = 300          # £/kW
@@ -450,8 +448,13 @@ def generation_cost_b(config,stype,one_day,n_years=1,hourly=False,shore='both', 
     # LCOE in £ per MWh
     gen_offshore = 57.5
     gen_onshore = 46
+    gen_fraction = 0.5
+    if model == 'C':
+        gen_offshore = 40.0
+        gen_onshore = 44.0
+        gen_fraction = 0.77
     if shore == 'both':
-        gen_wind = ( gen_offshore + gen_onshore ) / 2
+        gen_wind = gen_offshore*gen_fraction + gen_onshore*(1-gen_fraction)
     else:
         if shore == 'off':
             gen_wind = gen_offshore
@@ -460,13 +463,12 @@ def generation_cost_b(config,stype,one_day,n_years=1,hourly=False,shore='both', 
     gen_solar = 60
     gen_base = 100
     gen_variable = 66
-#   print('alpha {} beta {} life_time {} '.format(alpha, beta, life_time) )
-#   print(' one_day {} hourly {} '.format(one_day, hourly) )
+    if model == 'C':
+        gen_solar = 33
+        gen_variable = 120
 
     storage_kwh = days2capacity(config['storage'], one_day * 1e3, False)
     storage_cap = storage_kwh * alpha
-#   print('storage_kwh')
-#   print(storage_kwh)
     if stype=='hydrogen':
         ratec_kw = days2capacity(config['charge_rate'], one_day * 1e3, True)
         rated_kw = days2capacity(config['discharge_rate'], one_day * 1e3, True)
@@ -474,18 +476,8 @@ def generation_cost_b(config,stype,one_day,n_years=1,hourly=False,shore='both', 
     else:
         rate_kw = days2capacity(config[['discharge_rate','charge_rate']].max(axis=1), one_day * 1e3, True)
         storage_pow = rate_kw * beta
-#   print('rate_kw')
-#   print(rate_kw)
     c_store = storage_cap + storage_pow
-#   print('storage_cap')
-#   print(storage_cap / c_store)
-#   print('storage_pow ')
-#   print(storage_pow / c_store)
-#   print('c_store')
-#   print(c_store)
     storage_cost = c_store * (n_years /life_time)
-#   print('storage_cost')
-#   print(storage_cost)
 
     #  variable generation costs. 
     #  base load is assumed always on so we just use the capacity
@@ -493,10 +485,6 @@ def generation_cost_b(config,stype,one_day,n_years=1,hourly=False,shore='both', 
     wind_mwh = days2energy(config['wind_energy'] , one_day , number_of_days, False)
     base_mwh = days2energy(config['base'] , one_day , number_of_days, False)
     variable_mwh = days2energy(config['variable'] , one_day , number_of_days, False)
-#   print(pv_mwh)
-#   print(wind_mwh)
-#   print(base_mwh)
-#   print(variable_mwh)
 
     variable_cost = (wind_mwh * gen_wind) + (pv_mwh * gen_solar) + (base_mwh * gen_base) + ( variable_mwh * gen_variable )
 

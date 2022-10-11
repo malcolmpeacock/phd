@@ -1,5 +1,5 @@
 # Investigate the affect of onshore wind pattern vs offshore.
-# Plot of capacity vs storage for different efficiency
+# Plot of wind capacity vs storage for different efficiency (zero pv)
 
 # library stuff
 import sys
