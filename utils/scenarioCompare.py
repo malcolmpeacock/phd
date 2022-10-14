@@ -104,6 +104,7 @@ parser.add_argument('--nolines', action="store_true", dest="nolines", help='Do n
 parser.add_argument('--compare', action="store_true", dest="compare", help='Output comparison stats', default=False)
 parser.add_argument('--pstore', action="store_true", dest="pstore", help='Plot the sample store history ', default=False)
 parser.add_argument('--pdemand', action="store_true", dest="pdemand", help='Plot the demand ', default=False)
+parser.add_argument('--heatdiff', action="store_true", dest="heatdiff", help='Create a heat map as difference of 2 scenarios', default=False)
 parser.add_argument('--pfit', action="store_true", dest="pfit", help='Show 2d plots', default=False)
 parser.add_argument('--pmin', action="store", dest="pmin", help='Plot minimum point of given variable', default=None)
 parser.add_argument('--dcolour', action="store_true", dest="dcolour", help='Use same colour for same number of days', default=False)
@@ -495,13 +496,27 @@ if args.scenario == 'shore':
                  'on' : 
        {'file': 'ENS', 'dir' : 'ninjaOnshore/', 'title': 'Ninja (onshore)'}    }
 if args.scenario == 'pattern':
-    scenario_title = 'Impact of wind generation pattern'
+    scenario_title = 'Impact of wind generation pattern - efficiency 80%'
     scenarios = {'off' :
-       {'file': 'ENS', 'dir' : 'ninjaOffshore/', 'title': 'Ninja (offshore)'},
-                 'kf' : 
-       {'file': 'ENS', 'dir' : 'kfwindScaled/', 'title': 'Fragaki. et. al. (onshore scaled to offshore cf )'},
+       {'file': 'ENS', 'dir' : 'ninjaOffshore/', 'title': 'Ninja (offshore near future)'},
                  'ons' : 
-       {'file': 'ENS', 'dir' : 'ninjaOnShoreScaled/', 'title': 'Ninja (onshore scaled to offshore cf)'}    }
+       {'file': 'ENS', 'dir' : 'ninjaOnShoreScaled/', 'title': 'Ninja (onshore scaled to offshore cf)'},
+                 'current' : 
+       {'file': 'ENS', 'dir' : 'ninjaOffshoreCurrent/', 'title': 'Ninja (offshore current)'},
+                 'kf' : 
+       {'file': 'ENS', 'dir' : 'kfwindScaled/', 'title': 'Fragaki. et. al. (onshore scaled to ninja offshore cf )'},
+    }
+if args.scenario == 'patternh':
+    scenario_title = 'Impact of wind generation pattern - efficiency 50%'
+    scenarios = {'off' :
+       {'file': 'ENS', 'dir' : 'hydrogen/ninjaOffshore/', 'title': 'Ninja (offshore near future)'},
+                 'ons' : 
+       {'file': 'ENS', 'dir' : 'hydrogen/ninjaOnShoreScaled/', 'title': 'Ninja (onshore scaled to offshore cf)'},
+#                'current' : 
+#      {'file': 'ENS', 'dir' : 'ninjaOffshoreCurrent/', 'title': 'Ninja (offshore current)'},
+#                'kf' : 
+#      {'file': 'ENS', 'dir' : 'kfwindScaled/', 'title': 'Fragaki. et. al. (onshore scaled to ninja offshore cf )'},
+    }
 if args.scenario == 'shores':
     scenario_title = 'Onshore vs Offshore'
     scenarios = {'off' :
@@ -539,15 +554,15 @@ if args.scenario == 'models':
        {'file': 'PNS', 'dir' : y40, 'title': 'All heat pumps, kf storage model'}    }
 if args.scenario == 'eheat':
     scenarios = {'NNS' :
-       {'file': 'NNS', 'dir' : kf, 'title': '2018 with heating electricity removed'},
+       {'file': 'NNS', 'dir' : 'heatpaper', 'title': '2018 with heating electricity removed'},
                  'PNS' :
-       {'file': 'PNS', 'dir' : kf, 'title': 'All heating is provided by heat pumps'},
+       {'file': 'PNS', 'dir' : 'heatpaper', 'title': 'All heating is provided by heat pumps'},
     }
 if args.scenario == 'eheat2':
     scenarios = {'BBB' :
-       {'file': 'GNS', 'dir' : kf, 'title': '41% heating is provided by heat pumps'},
+       {'file': 'GNS', 'dir' : 'heatpaper', 'title': '41% heating is provided by heat pumps'},
                  'AAA' :
-       {'file': 'ENS', 'dir' : kf, 'title': '2018 with existing heating electricity'}
+       {'file': 'ENS', 'dir' : 'heatpaper', 'title': '2018 with existing heating electricity'}
     }
 if args.scenario == 'hp':
     scenarios = {'GNS' :
@@ -743,10 +758,18 @@ for key, scenario in scenarios.items():
     store_min = viable['storage'].min()
     print('{: <12}  {}  {}    {}   {:.2f}    {:.2f} '.format(key, len(zero), len(viable), len(df), store_max, store_min ) )
 
+    # TODO this merges two together and then the 3rd into it so it gets a wierd result!
     if len(last_viable)>0:
         last_viable = pd.merge(last_viable, viable, how='inner', on=['f_pv', 'f_wind'])
+        if args.heatdiff:
+            print('HEATDIFF')
+            print(last_viable)
+            last_viable['storage_diff'] = last_viable['storage_x'] - last_viable['storage_y']
+            scatterHeat(last_viable, 'storage_diff', 'Storage difference ', 'between {} and {}'.format(label, last_label), args.annotate)
     else:
         last_viable = viable
+    last_label = label
+
 
 # output comparison values
 
@@ -963,7 +986,7 @@ if args.yearly:
         yearly_demand = demand.resample('Y').sum()
         yearly_demand.index = yearly_demand.index.year
         yearly_demand.plot(linestyle='dotted', label='Annual Demand {}'.format(label), marker=markers[count])
-#       ax = plt.scatter(yearly_demand.index, yearly_demand, s=12, marker=markers[count])
+        ax = plt.scatter(yearly_demand.index, yearly_demand, s=12, marker=markers[count])
         count+=1
         axs.append(ax)
         labels.append(label)
@@ -980,7 +1003,7 @@ if args.yearly:
         print('Annual demand max {} min {} Winter demand max {} min {}'.format(yearly_demand.max(), yearly_demand.min(), winter.max(), winter.min() ) )
 
     plt.title('Interannual variation of electricity demand')
-    plt.xlabel('year', fontsize=15)
+    plt.xlabel('weather year', fontsize=15)
     plt.ylabel('Annual Electricity Demand (TWh)', fontsize=15)
     plt.legend(loc='center left', fontsize=15)
 
@@ -1029,7 +1052,7 @@ if args.pdemand:
         demand.plot(label='Electricity Demand {}'.format(label) )
 
     plt.title('Daily Electricity demand')
-    plt.xlabel('year', fontsize=15)
+    plt.xlabel('weather year', fontsize=15)
     plt.ylabel('Eelectricity Demand (MWh)', fontsize=15)
     plt.legend(loc='upper center', fontsize=15)
     plt.show()
@@ -1049,7 +1072,7 @@ if args.pdemand:
         demand.plot(label='Hydrogen Demand {}'.format(label) )
 
     plt.title('Daily Hydrogen demand')
-    plt.xlabel('year', fontsize=15)
+    plt.xlabel('weather year', fontsize=15)
     plt.ylabel('Hydrogen Demand (MWh)', fontsize=15)
     plt.legend(loc='upper left', fontsize=15)
     plt.show()
@@ -1183,6 +1206,7 @@ if args.variable:
     plt.title('Base load vs Storage')
     plt.legend(loc='upper right', fontsize=12)
     plt.show()
+
 
 # output csv file
 output_dict = {}

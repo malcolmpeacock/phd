@@ -17,6 +17,7 @@ from datetime import datetime
 import pytz
 import matplotlib.pyplot as plt
 import matplotlib
+from matplotlib.lines import Line2D
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import normalize
 from sklearn.preprocessing import MaxAbsScaler
@@ -166,12 +167,15 @@ print(coeffs)
 # plot regression with hdd
 #hdh = daily_weather['hdh']
 y = c0 + hdd * c1
-plt.scatter(hdd.values, gas.values, color='blue', label='Daily gas demand 2018')
+ax = plt.scatter(hdd.values, gas.values, color='blue', label='Daily gas demand 2018')
 plt.plot(hdd, y, color='red')
 plt.title('Relationship between daily gas consumption and HDD')
 plt.xlabel('Heat Degree Days (degrees C)', fontsize=15)
 plt.ylabel('Gas Demand (Twh) per day', fontsize=15)
-#plt.legend(loc='upper center')
+#plt.legend(loc='upper left')
+legend_elements = [Line2D([0], [0], color='red', label='Ordinary Least Squares Regression (Rd)'),
+                   Line2D([0], [0], marker='o', color='blue', label='Daily gas demand 2018 (Gd)') ]
+plt.legend(loc='upper left', handles=legend_elements)
 plt.show()
 # forecast of gas time series from hdh
 #gas_hdh  = daily_weather ['hdh'] * c1

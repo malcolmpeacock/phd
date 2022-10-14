@@ -204,7 +204,10 @@ def storage_grid(demand, wind, pv, eta, hourly=False, npv=14, nwind=14, step=0.5
             sample_hist = sample_hist - sample_hist.min()
         else:
             store_size, sample_hist, variable_total = storage_all(demand, wind, pv, base, variable, eta, hydrogen, hist_wind, hist_pv, threshold, constraints, store_max / store_factor, debug)
-    print('Sample wind {} pv {} needs {} days'.format(hist_wind, hist_pv, store_size * store_factor) )
+    if store_size == None:
+        print('Sample wind {} pv {} no solution found'.format(hist_wind, hist_pv) )
+    else:
+        print('Sample wind {} pv {} needs {} days'.format(hist_wind, hist_pv, store_size * store_factor) )
     # get durations for sample store history
     sample_durations = storage_duration(sample_hist)
     if debug: 

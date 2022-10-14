@@ -232,6 +232,8 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         heat_pump_share = 0.0
         if scenario == 'H':
             heat_pump_share = 0.5
+        if scenario == 'R':
+            heat_pump_share = heat_that_is_electric
         if scenario == 'P':
             heat_pump_share = 1.0
         if scenario == 'F':
@@ -241,7 +243,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
                                     # the hybrid heat pumps in with others.
 
         # Half Heat pumps of all heat pumps
-        if scenario == 'H' or scenario == 'P' or scenario == 'F' or scenario == 'G':
+        if scenario == 'H' or scenario == 'P' or scenario == 'F' or scenario == 'G' or scenario == 'R':
             electric_heat = demand['electricity'] * heat_pump_share
             electric_ref = electric_ref + electric_heat
             heat_added = electric_heat.sum()
@@ -270,12 +272,13 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
             electric_ref = electric_ref + electric_hp * percent_hybdrid_heat_pump
             hydrogen = hydrogen + hydrogen_hp * percent_hybdrid_heat_pump
 
-        print('Demand for {} total {} heat {}'.format(year, electric_ref.sum(), heat_added ))
 
         # electric transport charging
         if args.ev:
             ev = ev_series(demand['temperature'], ev_annual_energy)
             electric_ref = electric_ref + ev
+
+        print('Demand for {} total {} heat {}'.format(year, electric_ref.sum(), heat_added ))
 
         # normalise and add to the list
         demand_years.append( electric_ref / normalise_factor)
@@ -465,8 +468,9 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
 # Scenarios
 scenarios = { 'P' : 'All Heat Pumps', 
               'F' : 'FES Net Zero Hybrid Heat Pumps',
-              'G' : 'FES Net Zero with Hybrid Heat Pumps combined in',
+              'G' : '41 percent Heat Pumps',
               'H' : 'Half Heat Pumps',
+              'R' : 'Existing heating provided by Heat Pumps',
               'B' : 'All Hydrgoen Boilers',
               'N' : 'No heating',
               'E' : 'Existing Heating based on weather' }
@@ -502,6 +506,7 @@ parser.add_argument('--kf2', action="store_true", dest="kf2", help='Scale the ge
 parser.add_argument('--cfpv', action="store", dest="cfpv", help='PV capacity factor to scale to, default is to leave unchanged', type=float, default=0)
 parser.add_argument('--cfwind', action="store", dest="cfwind", help='Wind capacity factor to scale to, default is to leave unchanged', type=float, default=0)
 parser.add_argument('--shore', action="store", dest="shore", default="all", help='on=Use only onshore wind off=only offshore, all=all' )
+parser.add_argument('--ninja', action="store", dest="ninja", default="near", help='Which ninja to use: near, current, future', choices=['near', 'current', 'future'] )
 parser.add_argument('--kfpv', action="store_true", dest="kfpv", help='Use KF PV generation from matlab', default=False)
 parser.add_argument('--kfwind', action="store_true", dest="kfwind", help='Use KF wind generation from matlab', default=False)
 parser.add_argument('--demand', action="store", dest="demand", help='Electricity demand source', choices=['espini', 'kf', 'ngrid'], default='espini')
@@ -634,6 +639,10 @@ if args.dmethod == 'baseline':
         daily_original_electric_with_heat.plot(color='blue', label='Historic 2018 electricity demand')
         daily_new_2018.plot(color='red', label='2018 electricity demand with all heating as heat pumps')
         daily_fes.plot(color='green', label='2018 electricity demand with 41% heating as heat pumps')
+        if args.scenario == 'R':
+            existing_withhp = mod_electric_ref + ref_electric_hp * heat_that_is_electric
+            daily_existing_withhp = existing_withhp.resample('D').sum()
+            daily_existing_withhp.plot(color='purple', label='2018 electricity demand with eixsting heating as heat pumps')
         plt.title('Impact of heat pumps on 2018 daily electricity demand')
         plt.xlabel('Time', fontsize=15)
         plt.ylabel('Electricity demand (TWh)', fontsize=15)
@@ -827,10 +836,17 @@ else:
     else:
 
         # Ninja capacity factors for wind
-        ninja_filename_wind = '/home/malcolm/uclan/data/ninja/ninja_wind_country_GB_near-termfuture-merra-2_corrected.csv'
+        if args.ninja == 'near' :
+            ninja_filename_wind = '/home/malcolm/uclan/data/ninja/ninja_wind_country_GB_near-termfuture-merra-2_corrected.csv'
+        else:
+            if args.ninja == 'future' :
+                ninja_filename_wind = '/home/malcolm/uclan/data/ninja/ninja_wind_country_GB_long-termfuture-merra-2_corrected.csv'
+            else:
+                ninja_filename_wind = '/home/malcolm/uclan/data/ninja/ninja_wind_country_GB_current-merra-2_corrected.csv'
+
         ninja_wind = readers.read_ninja_country(ninja_filename_wind)
 
-        print('Extracting Wind ...')
+        print('Extracting Wind ninja {} ...'.format(args.ninja))
         ninja_wind = ninja_wind[ninja_start : ninja_end]
         if args.shore == 'on':
             wind = ninja_wind['onshore']

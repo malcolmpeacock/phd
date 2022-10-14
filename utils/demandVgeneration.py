@@ -39,7 +39,7 @@ parser.add_argument('--base', action="store", dest="base", help='Proportion of b
 args = parser.parse_args()
 
 
-# load ninja genration data and normalise
+# load ninja generation data and normalise
 ninja_start = '1984-01-01 00:00:00'
 ninja_end = '2013-12-31 23:00:00'
 if args.ngrid:
@@ -80,6 +80,20 @@ ninja_future_both = ninja_future['national']
 
 ninja_current = wind_current[ninja_start : ninja_end]
 ninja_current_both = ninja_current['national']
+ninja_current_offshore = ninja_current['offshore']
+ninja_current_onshore = ninja_current['onshore']
+
+print('#### Capacity Factors')
+print('Series                 mean    min     max    length')
+print('Ninja current offshore {:.4f}  {:.4f}  {:.4f}  {}'.format(ninja_current_offshore.mean(), ninja_current_offshore.min(), ninja_current_offshore.max(), len(ninja_current_offshore) ) )
+print('Ninja current onshore  {:.4f}  {:.4f}  {:.4f}  {}'.format(ninja_current_onshore.mean(), ninja_current_onshore.min(), ninja_current_onshore.max(), len(ninja_current_onshore) ) )
+print('Ninja current combined {:.4f}  {:.4f}  {:.4f}  {}'.format(ninja_current_both.mean(), ninja_current_both.min(), ninja_current_both.max(), len(ninja_current_both) ) )
+print('Ninja near offshore    {:.4f}  {:.4f}  {:.4f}  {}'.format(ninja_offshore.mean(), ninja_offshore.min(), ninja_offshore.max(), len(ninja_offshore) ) )
+print('Ninja near onshore     {:.4f}  {:.4f}  {:.4f}  {}'.format(ninja_onshore.mean(), ninja_onshore.min(), ninja_onshore.max(), len(ninja_onshore) ) )
+print('Ninja near combined    {:.4f}  {:.4f}  {:.4f}  {}'.format(ninja_both.mean(), ninja_both.min(), ninja_both.max(), len(ninja_both) ) )
+print('Ninja long combined    {:.4f}  {:.4f}  {:.4f}  {}'.format(ninja_future_both.mean(), ninja_future_both.min(), ninja_future_both.max(), len(ninja_future_both) ) )
+print('Ninja near PV          {:.4f}  {:.4f}  {:.4f}  {}'.format(ninja_pv.mean(), ninja_pv.min(), ninja_pv.max(), len(ninja_pv) ) )
+print(' ---------------- ')
 
 ninja_offshore_daily = ninja_offshore.resample('D').mean()
 ninja_onshore_daily = ninja_onshore.resample('D').mean()
