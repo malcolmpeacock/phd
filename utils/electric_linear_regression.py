@@ -217,7 +217,7 @@ if args.plot:
     plt.title('Adding heating electricity by different methods - {}'.format(freqs[args.frequency]))
     plt.xlabel('Time', fontsize=15)
     plt.ylabel('Energy', fontsize=15)
-    plt.legend(loc='upper right')
+    plt.legend(loc='upper center')
     plt.show()
 
 print('{} Comparison of predictions to base'.format(freqs[args.frequency]))

@@ -14,7 +14,6 @@ import argparse
 import calendar
 import numpy as np
 from scipy.stats import wasserstein_distance
-from icecream import ic 
 
 # custom code
 import stats
@@ -642,7 +641,9 @@ if args.dmethod == 'baseline':
         if args.scenario == 'R':
             existing_withhp = mod_electric_ref + ref_electric_hp * heat_that_is_electric
             daily_existing_withhp = existing_withhp.resample('D').sum()
-            daily_existing_withhp.plot(color='purple', label='2018 electricity demand with eixsting heating as heat pumps')
+            daily_existing_withhp.plot(color='purple', label='2018 electricity demand with existing heating as heat pumps')
+            print('Annual Demand for Existing heat with heat pumps {} Historic {} 41% {} All {}'.format(daily_existing_withhp.sum(), daily_original_electric_with_heat.sum(), daily_fes.sum(), daily_new_2018.sum()) )
+            print('Peak Demand for Existing heat with heat pumps {} Historic {} 41% {} All {}'.format(existing_withhp.max(), electric_ref.max(), fes_withhp.max(), electric2018_withhp.max()) )
         plt.title('Impact of heat pumps on 2018 daily electricity demand')
         plt.xlabel('Time', fontsize=15)
         plt.ylabel('Electricity demand (TWh)', fontsize=15)
