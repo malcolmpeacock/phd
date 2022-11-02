@@ -12,6 +12,7 @@ import argparse
 import calendar
 import numpy as np
 from os.path import exists
+from skimage import measure
 
 # custom code
 import stats
@@ -37,12 +38,20 @@ def print_min(point, point_title, scenario_title, sl=11):
     output['point'] = point_title
     return output
 
+def get_skline(df, storage_model, days, wind_parm='f_wind', pv_parm='f_pv', variable='storage'):
+    contours = measure.find_contours(df[variable], days)
+    print(contours)
+    quit()
+
 def get_storage_line(df, storage_model, days, wind_parm='f_wind', pv_parm='f_pv', variable='storage'):
     if storage_model == 'new':
         storage_line = df[df[variable] == days].copy()
         storage_line = storage_line.sort_values([wind_parm, pv_parm], ascending=[True, True])
     else:
-        storage_line = storage.storage_line(df, days, args.sline, wind_parm, pv_parm, variable)
+        if args.sline == 'skline':
+            storage_line = get_skline(df, days, args.sline, wind_parm, pv_parm, variable)
+        else:
+            storage_line = storage.storage_line(df, days, args.sline, wind_parm, pv_parm, variable)
     storage_line['energy'] = storage_line['wind_energy'] + storage_line['pv_energy']
     storage_line['fraction'] = storage_line['wind_energy'] / storage_line['energy']
     storage_line['cfraction'] = storage_line['f_wind'] / (storage_line['f_pv'] + storage_line['f_wind'] )
@@ -99,6 +108,7 @@ def min_gen_line(ax, days, marker):
 # process command line
 parser = argparse.ArgumentParser(description='Compare and plot scenarios')
 parser.add_argument('--rolling', action="store", dest="rolling", help='Rolling average window', default=0, type=int)
+parser.add_argument('--decimals', action="store", dest="decimals", help='Number of decimal places', default=2, type=int)
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--nolines', action="store_true", dest="nolines", help='Do not plot the contour lines', default=False)
 parser.add_argument('--compare', action="store_true", dest="compare", help='Output comparison stats', default=False)
@@ -116,7 +126,7 @@ parser.add_argument('--min', action="store_true", dest="min", help='Plot the min
 parser.add_argument('--annotate', action="store_true", dest="annotate", help='Annotate the shares heat map', default=False)
 parser.add_argument('--scenario', action="store", dest="scenario", help='Scenarion to plot', default='adhoc')
 parser.add_argument('--days', action="store", dest="days", help='Days of storage line to plot', default='0.5, 1, 3, 10, 25, 30, 40, 60' )
-parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1', choices=['interp1','threshold','smooth','sboth','both'])
+parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1', choices=['interp1','threshold','smooth','sboth','both','skline'])
 parser.add_argument('--cvariable', action="store", dest="cvariable", help='Variable to contour, default is storage', default='storage')
 parser.add_argument('--cx', action="store", dest="cx", help='X Variable for contour creation, default is f_wind', default='f_wind')
 parser.add_argument('--cy', action="store", dest="cy", help='Y Variable for contour creation, default is f_pv', default='f_pv')
@@ -208,6 +218,13 @@ if args.scenario == 'hydrogenfes':
        {'file': 'ENS', 'dir' : 'hydrogen/gbase04/', 'title': 'Base load 0.4 existing heating'},
                  'hfes' : 
        {'file': 'FNS', 'dir' : 'hydrogen/gbase04/', 'title': 'Base load 0.4 electrified heat FES Net Zero'} 
+    }
+if args.scenario == 'hydrogenfesh':
+    scenario_title = 'The impact of electrification of heating'
+    scenarios = {'he' :
+       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 existing heating'},
+                 'hfes' : 
+       {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 electrified heat FES Net Zero'} 
     }
 if args.scenario == 'zerowind':
     scenario_title = 'The impact of electrification of heating'
@@ -671,6 +688,19 @@ axis_labels = {
     'last' : 'store level % fill at end',
 }
 
+# variables and axis labels
+units = {
+    'f_pv': 'days',
+    'f_wind': 'days',
+    'energy' : 'days',
+    'fraction' : '%',
+    'wind_energy' : 'days',
+    'pv_energy' : 'days',
+    'storage' : 'days',
+    'cost' : '£/Kwh',
+    'last' : '%',
+}
+
 # load the demands
 demands = {}
 capacities = {}
@@ -721,7 +751,7 @@ for key, scenario in scenarios.items():
     filename = scenario['file']
     path = '{}/{}/shares{}.csv'.format(output_dir, folder, filename)
     df = pd.read_csv(path, header=0, index_col=0)
-    for col in ['base', 'variable', 'wind_energy', 'pv_energy', 'charge_rate', 'discharge_rate', 'variable_energy']:
+    for col in ['base', 'variable', 'wind_energy', 'pv_energy', 'charge_rate', 'discharge_rate', 'variable_energy', 'yearly_store_min', 'yearly_store_max']:
         if col not in df.columns:
             print('Warning {} missing, setting to zero'.format(col))
             df[col] = 0.0
@@ -762,10 +792,12 @@ for key, scenario in scenarios.items():
     if len(last_viable)>0:
         last_viable = pd.merge(last_viable, viable, how='inner', on=['f_pv', 'f_wind'])
         if args.heatdiff:
-            print('HEATDIFF')
-            print(last_viable)
-            last_viable['storage_diff'] = last_viable['storage_x'] - last_viable['storage_y']
-            scatterHeat(last_viable, 'storage_diff', 'Storage difference ', 'between {} and {}'.format(label, last_label), args.annotate)
+            diff_variable = 'storage'
+            if args.heat:
+                diff_variable = args.heat
+            diff_label = '{} difference'.format(diff_variable)
+            last_viable['heat_diff'] = last_viable[diff_variable + '_x'] - last_viable[diff_variable + '_y']
+            scatterHeat(last_viable, 'heat_diff', diff_label, 'between {} and {}'.format(label, last_label), args.annotate)
     else:
         last_viable = viable
     last_label = label
@@ -924,11 +956,14 @@ if not args.nolines:
             else:
                 line_colour = colours[scount]
 
+            # format the line label
+            label_string = '{} {:.' + str(args.decimals) + 'f} ({}). {}'
+            label_formated = label_string.format(args.cvariable, days, units[args.cvariable], label)
             # save axis for the first one, and plot
             if first:
-                ax = storage_line.plot(x=args.sx,y=args.sy,label='{} {:.2f} days. {}'.format(args.cvariable, days, label), marker=markers[scount], linestyle=styles[scount], color=line_colour)
+                ax = storage_line.plot(x=args.sx,y=args.sy,label=label_formated, marker=markers[scount], linestyle=styles[scount], color=line_colour)
             else:
-                storage_line.plot(x=args.sx,y=args.sy,ax=ax,label='{} {:.2f} days. {}'.format(args.cvariable, days, label), marker=markers[scount], linestyle=styles[scount], color=line_colour)
+                storage_line.plot(x=args.sx,y=args.sy,ax=ax,label=label_formated, marker=markers[scount], linestyle=styles[scount], color=line_colour)
             first = False
             # Plot minimum point if requested
             for mvar in min_vars:

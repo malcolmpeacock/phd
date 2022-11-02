@@ -363,63 +363,6 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         plt.ylabel('Mean population weighted temperature (degrees C)', fontsize=15)
         plt.show()
 
-    # look at the storage history for 2 wind and 1 pv
-    # which is what we have now
-    f_wind = 3.0
-    f_pv = 2.0
-    supply = wind * f_wind  +  pv * f_pv
-    net = all_demand - supply
-#   print('NET')
-#   print(net)
-
-    #  calculate how much storage we need
-    store_hist = storage.storage(net, eta)
-#   print(store_hist)
-    store_size = store_hist.min()
-    storage_days = round(store_size * -1.0)
-    # if minimum value was the last one then store is just emptying more and
-    # more so we didn't find out the size
-    last_one = store_hist.iat[-1]
-#   if store_size == store_hist.iat[-1] or storage_days>200:
-#       storage_days = 200
-    if storage_days <0.0:
-        storage_days = 0.0
-    print('Storage for {} wind {} pv size {} is {} days. last_one {}'.format(f_wind, f_pv, store_size, storage_days, last_one) )
-    period_hist = store_hist + storage_days
-    period_hist = period_hist.clip(0.0, storage_days)
-
-    if plot:
-        ax = period_hist.plot(label='store', color='green')
-        plt.xlabel('day', fontsize=15)
-        plt.ylabel('Store size in days', fontsize=15)
-        ax2 = ax.twinx()
-        ax2.set_ylabel('Energy ',color='red', fontsize=15)
-        all_demand.plot(color='red', label='demand')
-        supply.plot(color='blue', label='supply')
-        net.plot(color='yellow', label='net')
-        plt.title('Daily store size: wind {} pv {} days {} '.format(f_wind, f_pv, storage_days))
-        plt.legend(loc='upper right')
-        plt.show()
-
-#   Calculate storage for different years for plotting
-    yearly_start = store_hist.resample('Y').first()
-#   print(yearly_start)
-    yearly_max = store_hist.resample('Y').max()
-#   print(yearly_max)
-    yearly_min = store_hist.resample('Y').min()
-#   print(yearly_min)
-#   yearly_diff = yearly_max - yearly_min
-    yearly_diff = yearly_start - yearly_min
-#   print('YEARLY_DIFF')
-#   print(yearly_diff)
-    if plot:
-        yearly_diff.plot(color='green', label='yearly store size')
-        plt.legend(loc='upper right')
-        plt.title('Store size at the end of each year: {} wind to {} solar'.format(f_wind, f_pv) )
-        plt.xlabel('Year', fontsize=15)
-        plt.ylabel('Store size in days', fontsize=15)
-        plt.show()
-
     # energy from hydrogen
     if args.genh:
         h_input = all_hydrogen
@@ -450,6 +393,13 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
     # store actual capacity in GW
     df['gw_wind'] = df['f_wind'] * normalise_factor / ( 24 * 1000.0 )
     df['gw_pv'] = df['f_pv'] * normalise_factor / ( 24 * 1000.0 )
+
+    # calculate storage for different years.
+    yearly_start = sample_hist.resample('Y').first()
+    yearly_max = sample_hist.resample('Y').max()
+    yearly_min = sample_hist.resample('Y').min()
+#   yearly_diff = yearly_max - yearly_min
+    yearly_diff = yearly_start - yearly_min
 
     # store yearly values
     yearly_data = { 'year'   : total_heat_demand_years.keys(),
@@ -510,12 +460,12 @@ parser.add_argument('--kfpv', action="store_true", dest="kfpv", help='Use KF PV 
 parser.add_argument('--kfwind', action="store_true", dest="kfwind", help='Use KF wind generation from matlab', default=False)
 parser.add_argument('--demand', action="store", dest="demand", help='Electricity demand source', choices=['espini', 'kf', 'ngrid'], default='espini')
 parser.add_argument('--shift', action="store_true", dest="shift", help='Shift the days to match weather calender', default=False)
-parser.add_argument('--wind', action="store", dest="wind", help='Wind value of store history to output', type=float, default=2.0)
-parser.add_argument('--pv', action="store", dest="pv", help='Pv value of store history to output', type=float, default=3.0)
-parser.add_argument('--days', action="store", dest="days", help='Example store size to find for store hist plotting', type=float, default=30)
+parser.add_argument('--wind', action="store", dest="wind", help='Wind value of store history to output', type=float, default=0)
+parser.add_argument('--pv', action="store", dest="pv", help='Pv value of store history to output', type=float, default=0)
+parser.add_argument('--days', action="store", dest="days", help='Example store size to find for store hist plotting', type=float, default=0)
 parser.add_argument('--threshold', action="store", dest="threshold", help='Threshold for considering 2 wind values the same in new storage model', type=float, default=0.01)
 parser.add_argument('--variable', action="store", dest="variable", help='Amount of variable generation, default-0.0', type=float, default=0.0)
-parser.add_argument('--store_max', action="store", dest="store_max", help='Maximum value of storage in days, default=60.0', type=float, default=60.0)
+parser.add_argument('--store_max', action="store", dest="store_max", help='Maximum value of storage in days, default=80.0', type=float, default=80.0)
 parser.add_argument('--contours', action="store", dest="contours", help='Set of values to use for contour lines', default='med')
 
 args = parser.parse_args()

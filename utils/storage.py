@@ -99,7 +99,7 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
     # linearly interpolate along wind and then pv
     else:
 #       print('storage_line for {} days '.format(storage_value) )
-        variables = ['f_wind', 'f_pv', 'storage', 'last', 'wind_energy', 'pv_energy', 'discharge', 'base', 'cost', 'charge_rate', 'discharge_rate', 'charge', 'variable_energy', 'variable', 'gw_wind', 'gw_pv', 'fraction', 'energy']
+        variables = ['f_wind', 'f_pv', 'storage', 'last', 'wind_energy', 'pv_energy', 'discharge', 'base', 'cost', 'charge_rate', 'discharge_rate', 'charge', 'variable_energy', 'variable', 'gw_wind', 'gw_pv', 'fraction', 'energy', 'yearly_store_min', 'yearly_store_max']
         if variable not in variables or wind_parm not in variables or pv_parm not in variables:
             print('ERROR variable : {} not in variables list'.format(variable) )
             quit()
@@ -179,6 +179,86 @@ def storage_interpolate(value_lists, wind_parm, variable, df, storage_value, var
                     var_value = y_interp(storage_value)
                     value_lists[var].append(var_value.item())
 
+def storage_grid_config(demand, wind, pv, eta, hourly,base, variable, hydrogen, method, f_wind, f_pv, threshold, constraints, store_max, debug, results):
+
+    # For hourly the storage will be in hours, so divide by 24 to convert to 
+    # days
+    if hourly:
+        store_factor = 1 / 24
+    else:
+        store_factor = 1
+
+    # energy supply is calculated using the capacity factors multiplied
+    # by the capacity
+    wind_energy = wind * f_wind
+    pv_energy = pv * f_pv
+    supply = wind_energy + pv_energy
+    net = demand - supply - base
+
+    variable_total = 0
+    #  calculate how much storage we need.
+    #  ( only difference is that mp can overfill )
+    if method == 'kf':
+        store_hist = storage(net, eta, hydrogen) * -1.0
+        store_size = store_hist.max()
+    else:
+        if method == 'mp':
+            store_hist = storage_mp(net, eta, hydrogen) * -1.0
+            store_size = store_hist.max() - store_hist.min()
+        else:
+            store_size, store_hist, variable_total = storage_all(demand, wind, pv, base, variable, eta, hydrogen, f_wind, f_pv, threshold, constraints, store_max / store_factor, debug)
+
+                
+    # kf  model is always viable.
+    # mp  model not viable unless more energy at the end.
+    # all model returns None if didn't find valid balance
+    if method == 'kf' or (method == 'mp' and store_hist.iat[-1] > 0) or (method == 'all' and store_size):
+        # storage size in days
+        storage_days = store_size * store_factor
+        # amount remaining in store at the end in days
+        store_last = store_hist.iat[-1] * store_factor
+        # percentage remaining
+        store_remaining = store_last / storage_days
+
+        #  rate of charge or discharge in a period
+        charge_rate=0.0
+        charge=0.0
+        #  TODO discharge needs splitting into hydrogen for boilers and
+        #  hydrogen for electricity to estimate generation capacity
+        discharge_rate=0.0
+        discharge=0.0
+        rate = store_hist.diff()
+        plus_rates = rate[rate>0]
+        if len(plus_rates)>0:
+            charge_rate = plus_rates.max()
+            charge = plus_rates.sum()
+        minus_rates = rate[rate<0]
+        if len(minus_rates)>0:
+            discharge_rate = minus_rates.min() * -1.0
+            discharge = minus_rates.sum() * -1.0
+
+        # store at the start of the year
+        yearly_store = store_hist.resample('Y').first()
+        year_store_min = yearly_store.min() / store_size
+        year_store_max = yearly_store.max() / store_size
+
+        # store the results
+        results['f_pv'].append(f_pv)
+        results['f_wind'].append(f_wind)
+        results['storage'].append(storage_days)
+        results['last'].append(store_remaining)
+        results['charge_rate'].append(charge_rate)
+        results['discharge_rate'].append(discharge_rate)
+        results['charge'].append(charge)
+        results['discharge'].append(discharge)
+        results['wind_energy'].append(wind_energy.sum() / demand.sum())
+        results['pv_energy'].append(pv_energy.sum() / demand.sum())
+        results['variable_energy'].append(variable_total)
+        results['yearly_store_min'].append(year_store_min)
+        results['yearly_store_max'].append(year_store_max)
+
+    return store_hist
+
 def storage_grid(demand, wind, pv, eta, hourly=False, npv=14, nwind=14, step=0.5, base=0.0, variable=0.0, hydrogen=None, method='kf', hist_wind=1.0, hist_pv=1.0, threshold=0.01, constraints='new', debug=False, store_max=60 ):
     print('storage_grid: demand max {} min {} mean {}'.format(demand.max(), demand.min(), demand.mean()) )
     # For hourly the storage will be in hours, so divide by 24 to convert to 
@@ -188,100 +268,29 @@ def storage_grid(demand, wind, pv, eta, hourly=False, npv=14, nwind=14, step=0.5
     else:
         store_factor = 1
 
+    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge_rate' : [], 'discharge_rate' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [], 'variable_energy' : [], 'yearly_store_min' : [], 'yearly_store_max' : [] }
+
     # do one example for a store history
-    supply = (wind * hist_wind) + (pv * hist_pv)
-    net = demand - supply - base
-    if method == 'kf':
-        sample_hist = storage(net, eta, hydrogen)
-        store_size = sample_hist.min() * -1.0
-        # turn into positive values
-        sample_hist = sample_hist - sample_hist.min()
-    else:
-        if method == 'mp':
-            store_hist = storage_mp(net, eta, hydrogen) * -1.0
-            store_size = store_hist.max() - store_hist.min()
-            # turn into positive values
-            sample_hist = sample_hist - sample_hist.min()
+    if hist_wind>0 or hist_pv>0:
+        sample_hist = storage_grid_config(demand, wind, pv, eta, hourly, base, variable, hydrogen, method, hist_wind, hist_pv, threshold, constraints, store_max, debug, results)
+        if len(results['storage']) == 0:
+            print('Sample wind {} pv {} no solution found'.format(hist_wind, hist_pv) )
         else:
-            store_size, sample_hist, variable_total = storage_all(demand, wind, pv, base, variable, eta, hydrogen, hist_wind, hist_pv, threshold, constraints, store_max / store_factor, debug)
-    if store_size == None:
-        print('Sample wind {} pv {} no solution found'.format(hist_wind, hist_pv) )
+            print('Sample wind {} pv {} needs {} days'.format(hist_wind, hist_pv, results['storage'][0] ) )
+
     else:
-        print('Sample wind {} pv {} needs {} days'.format(hist_wind, hist_pv, store_size * store_factor) )
+
+        # For each percent of PV/Wind
+        for i_pv in range(0,npv):
+            for i_wind in range(0,nwind):
+                f_pv = i_pv * step
+                f_wind = i_wind * step
+                sys.stdout.write('\rCalculating f_pv {:.2f} f_wind {:.2f} '.format(f_pv, f_wind) )
+
+                sample_hist = storage_grid_config(demand, wind, pv, eta, hourly, base, variable, hydrogen, method, f_wind, f_pv, threshold, constraints, store_max, debug, results)
+
     # get durations for sample store history
     sample_durations = storage_duration(sample_hist)
-    if debug: 
-        quit()
-
-    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge_rate' : [], 'discharge_rate' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [], 'variable_energy' : [] }
-
-    # For each percent of PV/Wind
-    for i_pv in range(0,npv):
-        for i_wind in range(0,nwind):
-            f_pv = i_pv * step
-            f_wind = i_wind * step
-            sys.stdout.write('\rCalculating f_pv {:.2f} f_wind {:.2f} '.format(f_pv, f_wind) )
-
-            # energy supply is calculated using the capacity factors multiplied
-            # by the capacity
-            wind_energy = wind * f_wind
-            pv_energy = pv * f_pv
-            supply = wind_energy + pv_energy
-            net = demand - supply - base
-
-            variable_total = 0
-            #  calculate how much storage we need.
-            #  ( only difference is that mp can overfill )
-            if method == 'kf':
-                store_hist = storage(net, eta, hydrogen) * -1.0
-                store_size = store_hist.max()
-            else:
-                if method == 'mp':
-                    store_hist = storage_mp(net, eta, hydrogen) * -1.0
-                    store_size = store_hist.max() - store_hist.min()
-                else:
-                    store_size, store_hist, variable_total = storage_all(demand, wind, pv, base, variable, eta, hydrogen, f_wind, f_pv, threshold, constraints, store_max / store_factor, debug)
-
-                
-            # kf  model is always viable.
-            # mp  model not viable unless more energy at the end.
-            # all model returns None if didn't find valid balance
-            if method == 'kf' or (method == 'mp' and store_hist.iat[-1] > 0) or (method == 'all' and store_size):
-                # storage size in days
-                storage_days = store_size * store_factor
-                # amount remaining in store at the end in days
-                store_last = store_hist.iat[-1] * store_factor
-                # percentage remaining
-                store_remaining = store_last / storage_days
-
-                #  rate of charge or discharge in a period
-                charge_rate=0.0
-                charge=0.0
-                #  TODO discharge needs splitting into hydrogen for boilers and
-                #  hydrogen for electricity to estimate generation capacity
-                discharge_rate=0.0
-                discharge=0.0
-                rate = store_hist.diff()
-                plus_rates = rate[rate>0]
-                if len(plus_rates)>0:
-                    charge_rate = plus_rates.max()
-                    charge = plus_rates.sum()
-                minus_rates = rate[rate<0]
-                if len(minus_rates)>0:
-                    discharge_rate = minus_rates.min() * -1.0
-                    discharge = minus_rates.sum() * -1.0
-                # store the results
-                results['f_pv'].append(f_pv)
-                results['f_wind'].append(f_wind)
-                results['storage'].append(storage_days)
-                results['last'].append(store_remaining)
-                results['charge_rate'].append(charge_rate)
-                results['discharge_rate'].append(discharge_rate)
-                results['charge'].append(charge)
-                results['discharge'].append(discharge)
-                results['wind_energy'].append(wind_energy.sum() / demand.sum())
-                results['pv_energy'].append(pv_energy.sum() / demand.sum())
-                results['variable_energy'].append(variable_total)
 
     print(" ")
     df = pd.DataFrame(data=results)
@@ -522,6 +531,8 @@ def min_point(storage_line, variable='energy', wind_var='f_wind', pv_var='f_pv')
       'variable' : min_points['variable'].mean(),
       'gw_wind' : min_points['gw_wind'].mean(),
       'gw_pv' : min_points['gw_pv'].mean(),
+      'yearly_store_min' : min_points['yearly_store_min'].mean(),
+      'yearly_store_max' : min_points['yearly_store_max'].mean(),
     }
     return values
 
@@ -933,11 +944,12 @@ def storage_all(demand, wind, pv, base, variable, eta, hydrogen, f_wind, f_pv, t
         while abs(store_max - store_min) > threshold:
             store_size = ( store_max + store_min ) / 2.0
             sys.stdout.write('\rCalculating f_pv {:.2f} f_wind {:.2f} days {:.2f} '.format(f_pv, f_wind, store_size) )
-            balanced, store_hist, variable_total = storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, store_size, constraints, variable, debug)
+            balanced, last_hist, variable_total = storage_balance(demand, wind, pv, eta, base, hydrogen, f_pv, f_wind, store_size, constraints, variable, debug)
             # store_max is the always the last one that balanced
             # store_min is the always the last one that didn't
             if balanced:
                 store_max = store_size
+                store_hist = last_hist
             else:
                 store_min = store_size
 

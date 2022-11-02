@@ -12,8 +12,33 @@ import numpy as np
 import stats
 import readers
 
+# plot net demand
+def plot_net_demand(wind, pv, fraction, demand):
+    supply = fraction * wind + (1-fraction) * pv
+    net = demand - supply
+    zero = net * 0.0
+    net.plot(color='blue')
+    zero.plot(color='red')
+    plt.title('Net demand for wind fraction {}'.format(fraction))
+    plt.xlabel('Day of the year', fontsize=15)
+    plt.ylabel('Normalised net demand', fontsize=15)
+#   plt.legend(loc='upper center')
+    plt.show()
+
+# normalize a series
+def normalize(s):
+    max_value = s.max()
+    min_value = s.min()
+    n = (s - min_value) / (max_value - min_value)
+    return n
+
+# area under curve
+def curve_area(s):
+    area = np.trapz(s.clip(0.0).values)
+    return area
+
+# Pearsons correlation coefficient
 def correlation(s1, s2):
-    # Pearsons correlation coefficient
     corr = s1.corr(s2)
     return corr
 
@@ -31,8 +56,10 @@ def read_demand(filename, ninja_start, ninja_end):
 
 # process command line
 parser = argparse.ArgumentParser(description='Compare demand profile with generation')
+parser.add_argument('--stats', action="store_true", dest="stats", help='Print out correlation between series' , default=False)
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--ngrid', action="store_true", dest="ngrid", help='Include national grid wind', default=False)
+parser.add_argument('--cardenas', action="store_true", dest="cardenas", help='Uses 9 years of Cardenas et. al.', default=False)
 parser.add_argument('--monthly', action="store_true", dest="monthly", help='Do monthly correlations', default=False)
 parser.add_argument('--step', action="store", dest="step", help='Step size for wind PV combinations', default=0, type=float)
 parser.add_argument('--base', action="store", dest="base", help='Proportion of base load', default=0, type=float)
@@ -45,6 +72,9 @@ ninja_end = '2013-12-31 23:00:00'
 if args.ngrid:
     ninja_start = '2011-01-01 00:00:00'
     ninja_end = '2013-12-31 23:00:00'
+if args.cardenas:
+    ninja_start = '2011-01-01 00:00:00'
+    ninja_end = '2019-12-31 23:00:00'
 print(ninja_start, ninja_end)
 # Ninja capacity factors for pv
 ninja_filename_pv = '/home/malcolm/uclan/data/ninja/ninja_pv_country_GB_merra-2_corrected.csv'
@@ -194,62 +224,67 @@ if args.plot:
     plt.legend(loc='upper right')
     plt.show()
 
-print('Comparison to baseline')
-stats.print_stats_header()
-stats.print_stats(norm_kf_pv, norm_baseline,     'KF PV   ')
-stats.print_stats(norm_kf_wind, norm_baseline,   'KF Wind ')
-stats.print_stats(norm_ninja_offshore, norm_baseline,   'Ninja offshore Wind ')
-stats.print_stats(norm_ninja_onshore, norm_baseline,   'Ninja onshore Wind ')
-stats.print_stats(norm_ninja_both, norm_baseline,   'Ninja combined Wind ')
-stats.print_stats(norm_ninja_future, norm_baseline,   'Ninja future Wind ')
-stats.print_stats(norm_ninja_current, norm_baseline,   'Ninja current Wind ')
-stats.print_stats(norm_ninja_pv, norm_baseline,   'Ninja PV ')
-if args.ngrid:
-    stats.print_stats(norm_ngrid_wind, norm_baseline,   'Nat grid wind ')
+if args.stats:
+    print('Comparison to baseline')
+    stats.print_stats_header()
+    stats.print_stats(norm_kf_pv, norm_baseline,     'KF PV   ')
+    stats.print_stats(norm_kf_wind, norm_baseline,   'KF Wind ')
+    stats.print_stats(norm_ninja_offshore, norm_baseline,   'Ninja offshore Wind ')
+    stats.print_stats(norm_ninja_onshore, norm_baseline,   'Ninja onshore Wind ')
+    stats.print_stats(norm_ninja_both, norm_baseline,   'Ninja combined Wind ')
+    stats.print_stats(norm_ninja_future, norm_baseline,   'Ninja future Wind ')
+    stats.print_stats(norm_ninja_current, norm_baseline,   'Ninja current Wind ')
+    stats.print_stats(norm_ninja_pv, norm_baseline,   'Ninja PV ')
+    if args.ngrid:
+        stats.print_stats(norm_ngrid_wind, norm_baseline,   'Nat grid wind ')
 
-print('Comparison to existing')
-stats.print_stats_header()
-stats.print_stats(norm_kf_pv, norm_existing,     'KF PV   ')
-stats.print_stats(norm_kf_wind, norm_existing,   'KF Wind ')
-stats.print_stats(norm_ninja_offshore, norm_existing,   'Ninja offshore Wind ')
-stats.print_stats(norm_ninja_onshore, norm_existing,   'Ninja onshore Wind ')
-stats.print_stats(norm_ninja_both, norm_existing,   'Ninja combined Wind ')
-stats.print_stats(norm_ninja_future, norm_existing,   'Ninja future Wind ')
-stats.print_stats(norm_ninja_current, norm_existing,   'Ninja current Wind ')
-stats.print_stats(norm_ninja_pv, norm_existing,   'Ninja PV ')
-if args.ngrid:
-    stats.print_stats(norm_ngrid_wind, norm_existing,   'Nat grid wind ')
+    print('Comparison to existing')
+    stats.print_stats_header()
+    stats.print_stats(norm_kf_pv, norm_existing,     'KF PV   ')
+    stats.print_stats(norm_kf_wind, norm_existing,   'KF Wind ')
+    stats.print_stats(norm_ninja_offshore, norm_existing,   'Ninja offshore Wind ')
+    stats.print_stats(norm_ninja_onshore, norm_existing,   'Ninja onshore Wind ')
+    stats.print_stats(norm_ninja_both, norm_existing,   'Ninja combined Wind ')
+    stats.print_stats(norm_ninja_future, norm_existing,   'Ninja future Wind ')
+    stats.print_stats(norm_ninja_current, norm_existing,   'Ninja current Wind ')
+    stats.print_stats(norm_ninja_pv, norm_existing,   'Ninja PV ')
+    if args.ngrid:
+        stats.print_stats(norm_ngrid_wind, norm_existing,   'Nat grid wind ')
 
-print('Comparison to 41% heat pumps')
-stats.print_stats_header()
-stats.print_stats(norm_kf_pv, norm_hp41,     'KF PV   ')
-stats.print_stats(norm_kf_wind, norm_hp41,   'KF Wind ')
-stats.print_stats(norm_ninja_offshore, norm_hp41,   'Ninja offshore Wind ')
-stats.print_stats(norm_ninja_onshore, norm_hp41,   'Ninja onshore Wind ')
-stats.print_stats(norm_ninja_both, norm_hp41,   'Ninja combined Wind ')
-stats.print_stats(norm_ninja_future, norm_hp41,   'Ninja future Wind ')
-stats.print_stats(norm_ninja_current, norm_hp41,   'Ninja current Wind ')
-stats.print_stats(norm_ninja_pv, norm_hp41,   'Ninja PV ')
-if args.ngrid:
-    stats.print_stats(norm_ngrid_wind, norm_hp41,   'Nat grid wind ')
-print('Comparison to all heat pumps')
-stats.print_stats_header()
-stats.print_stats(norm_kf_pv, norm_hp_all,     'KF PV   ')
-stats.print_stats(norm_kf_wind, norm_hp_all,   'KF Wind ')
-stats.print_stats(norm_ninja_offshore, norm_hp_all,   'Ninja offshore Wind ')
-stats.print_stats(norm_ninja_onshore, norm_hp_all,   'Ninja onshore Wind ')
-stats.print_stats(norm_ninja_both, norm_hp_all,   'Ninja combined Wind ')
-stats.print_stats(norm_ninja_future, norm_hp_all,   'Ninja future Wind ')
-stats.print_stats(norm_ninja_current, norm_hp_all,   'Ninja current Wind ')
-stats.print_stats(norm_ninja_pv, norm_hp_all,   'Ninja PV ')
-if args.ngrid:
-    stats.print_stats(norm_ngrid_wind, norm_hp_all,   'Nat grid wind ')
+    print('Comparison to 41% heat pumps')
+    stats.print_stats_header()
+    stats.print_stats(norm_kf_pv, norm_hp41,     'KF PV   ')
+    stats.print_stats(norm_kf_wind, norm_hp41,   'KF Wind ')
+    stats.print_stats(norm_ninja_offshore, norm_hp41,   'Ninja offshore Wind ')
+    stats.print_stats(norm_ninja_onshore, norm_hp41,   'Ninja onshore Wind ')
+    stats.print_stats(norm_ninja_both, norm_hp41,   'Ninja combined Wind ')
+    stats.print_stats(norm_ninja_future, norm_hp41,   'Ninja future Wind ')
+    stats.print_stats(norm_ninja_current, norm_hp41,   'Ninja current Wind ')
+    stats.print_stats(norm_ninja_pv, norm_hp41,   'Ninja PV ')
+    if args.ngrid:
+        stats.print_stats(norm_ngrid_wind, norm_hp41,   'Nat grid wind ')
+
+    print('Comparison to all heat pumps')
+    stats.print_stats_header()
+    stats.print_stats(norm_kf_pv, norm_hp_all,     'KF PV   ')
+    stats.print_stats(norm_kf_wind, norm_hp_all,   'KF Wind ')
+    stats.print_stats(norm_ninja_offshore, norm_hp_all,   'Ninja offshore Wind ')
+    stats.print_stats(norm_ninja_onshore, norm_hp_all,   'Ninja onshore Wind ')
+    stats.print_stats(norm_ninja_both, norm_hp_all,   'Ninja combined Wind ')
+    stats.print_stats(norm_ninja_future, norm_hp_all,   'Ninja future Wind ')
+    stats.print_stats(norm_ninja_current, norm_hp_all,   'Ninja current Wind ')
+    stats.print_stats(norm_ninja_pv, norm_hp_all,   'Ninja PV ')
+    if args.ngrid:
+        stats.print_stats(norm_ngrid_wind, norm_hp_all,   'Nat grid wind ')
 
 if args.step>0:
 
     ra = []
     re = []
     fs = []
+    area_e = []
+    area_f = []
+    
     for fraction in np.arange(0.0,1.0+args.step, args.step):
         fs.append(fraction)
         supply = fraction * norm_ninja_both + (1-fraction) * norm_ninja_pv
@@ -258,10 +293,13 @@ if args.step>0:
             supply = normalize(supply)
         re.append(correlation(supply, norm_existing))
         ra.append(correlation(supply, norm_hp_all))
-    data = { 'fraction' : fs, 're' : re, 'ra' : ra }
+        area_e.append(curve_area(norm_existing - supply))
+        area_f.append(curve_area(norm_hp_all - supply))
+    data = { 'fraction' : fs, 're' : re, 'ra' : ra, 'area_e' : area_e, 'area_f' : area_f }
     df = pd.DataFrame(data=data)
     print(df)
     if args.plot:
+        # Correlation
         plt.plot(df['fraction'], df['re'], label='existing heating')
         plt.plot(df['fraction'], df['ra'], label='all heat pumps')
         freq = 'Daily '
@@ -270,5 +308,20 @@ if args.step>0:
         plt.title('{}correlation of wind fraction in the supply to the demand'.format(freq))
         plt.xlabel('Wind Capacity Fraction', fontsize=15)
         plt.ylabel('Pearsons correlation coefficient (R)', fontsize=15)
-        plt.legend(loc='upper left')
+        plt.legend(loc='upper center')
         plt.show()
+
+        # normalize
+        df['area_e'] = normalize(df['area_e'])
+        df['area_f'] = normalize(df['area_f'])
+        # Area under the net demand curve
+        plt.plot(df['fraction'], df['area_e'], label='existing heating')
+        plt.plot(df['fraction'], df['area_f'], label='all heat pumps')
+        freq = 'Daily '
+        plt.title('Wind fraction vs area under the net demand curve')
+        plt.xlabel('Wind Capacity Fraction', fontsize=15)
+        plt.ylabel('Area under net demand curve', fontsize=15)
+        plt.legend(loc='upper center')
+        plt.show()
+
+        plot_net_demand(norm_ninja_both, norm_ninja_pv, 0.80, norm_existing)
