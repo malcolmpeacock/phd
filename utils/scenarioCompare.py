@@ -610,16 +610,25 @@ if args.scenario == 'cost_comp':
        {'file': 'ENM', 'dir' : 'cost', 'title': 'Scaled demand as Cardenas et. al.'}
     }
 if args.scenario == 'cost_comph':
-    scenario_title = ' cost model paper comparison (hourly)'
-    scenarios = {'baseline' :
-       {'file': 'ENS', 'dir' : 'cost_hourly', 'title': 'Synthetic Demand with baseline'},
-                 'cost' :
-       {'file': 'ENM', 'dir' : 'cost_hourly', 'title': 'Scaled demand as Cardenas et. al.'}
+    scenario_title = 'Comparison to Cardenas et. al. '
+    scenarios = {'ninja_baseline' :
+       {'file': 'ENS', 'dir' : 'cost_hourly', 'title': 'Synthetic Demand with baseline, Ninja Wind'},
+                 'ngrid_baseline' :
+       {'file': 'ENS', 'dir' : 'cost_ngrid', 'title': 'Synthetic Demand with baseline, National Grid Wind.'},
+                 'ngrid_scale' :
+       {'file': 'ENM', 'dir' : 'cost_ngrid', 'title': 'Scaled demand as Cardenas et. al., National Grid Wind.'},
+                 'ninja_scale' :
+       {'file': 'ENM', 'dir' : 'cost_hourly', 'title': 'Scaled demand as Cardenas et. al., Ninja Wind'}
     }
 if args.scenario == 'cost':
     scenario_title = ' cost model paper comparison'
     scenarios = {'cost' :
        {'file': 'ENM', 'dir' : 'cost', 'title': 'Nine years from cost paper with existing heat'},
+    }
+if args.scenario == 'cost_hydrogen':
+    scenario_title = ' Reproduction of Cardenas et. al. hydrogen cost'
+    scenarios = {'cost' :
+       {'file': 'ENM', 'dir' : 'cost_ngrid_hydrogen', 'title': 'Round trip 45% scaled as per Cardenas et. al. '},
     }
 #scenarios = {'NNS' :
 #   {'file': 'NNS', 'dir' : kf, 'title': 'No Added Electric Heating'},
