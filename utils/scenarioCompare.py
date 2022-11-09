@@ -7,6 +7,7 @@ import pandas as pd
 from datetime import datetime
 import pytz
 import matplotlib.pyplot as plt
+from mpl_toolkits import mplot3d
 import statsmodels.api as sm
 import argparse
 import calendar
@@ -74,6 +75,20 @@ def cf2gw(x):
 def gw2cf(x):
     return x / generation_capacity
 
+# 3d scatter
+def scatter3d(ax, df, variable, title, label):
+    ax.set_xlabel(args.sx)
+    ax.set_ylabel(args.sy)
+    ax.set_zlabel(variable)
+    ax.set_title(label)
+
+    # Data for three-dimensional scattered points
+    zdata = df[variable]
+    xdata = df[args.sx]
+    ydata = df[args.sy]
+#   ax.scatter3D(xdata, ydata, zdata, c=zdata, cmap='Greens');
+    ax.scatter3D(xdata, ydata, zdata, c=zdata, cmap='viridis');
+
 def scatterHeat(df, variable, title, label, annotate=False):
     ax = df.plot.scatter(x=args.sx, y=args.sy, c=variable, colormap='viridis')
     plt.xlabel(axis_labels[args.sx])
@@ -138,6 +153,7 @@ parser.add_argument('--shore', action="store", dest="shore", help='Wind to base 
 parser.add_argument('--excess', action="store", dest="excess", help='Excess value to find minimum storage against', type=float, default=0.5)
 parser.add_argument('--variable', action="store", dest="variable", help='Variable to plot from scenario', default=None)
 parser.add_argument('--heat', action="store", dest="heat", help='Variable to plot a heat map of', default=None)
+parser.add_argument('--surface', action="store", dest="surface", help='Variable to plot 3d surface with', default=None)
 parser.add_argument('--pwind', action="store", dest="pwind", help='Print points with this wind proportion', default=None, type=float)
 parser.add_argument('--ppv', action="store", dest="ppv", help='Print points with this PV proportion', default=None, type=float)
 parser.add_argument('--costmodel', action="store", dest="costmodel", help='Cost model A or B', default='B', choices=['A', 'B', 'C'])
@@ -224,7 +240,7 @@ if args.scenario == 'hydrogenfesh':
     scenarios = {'he' :
        {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 existing heating'},
                  'hfes' : 
-       {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 electrified heat FES Net Zero'} 
+       {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 electrified heat 41% heat pumps'} 
     }
 if args.scenario == 'zerowind':
     scenario_title = 'The impact of electrification of heating'
@@ -857,6 +873,19 @@ if args.heat:
         df = dfs[key]
         scatterHeat(df, args.heat, args.heat, label, args.annotate)
 
+# Plot surface
+if args.surface:
+    # set up a figure twice as wide as it is tall
+    fig = plt.figure(figsize=plt.figaspect(0.5))
+    pcount=0
+    for key, scenario in scenarios.items():
+        label = scenario['title']
+        df = dfs[key]
+        pcount+=1
+        ax = fig.add_subplot(1, 2, pcount, projection='3d')
+        scatter3d(ax, df, args.surface, scenario_title, label)
+    plt.show()
+
 if args.plot:
     # Plot viable solutions
     for key, scenario in scenarios.items():
@@ -972,6 +1001,7 @@ if not args.nolines:
             # Plot minimum point if requested
             last = dcount==len(day_list)-1 and scount==len(scenarios)-1
             for mvar in min_vars:
+#               print('VAR {} last {} label {} '.format(mvar, last, label))
                 min_ppoint = min_storage
                 if mvar == 'energy':
                     min_ppoint = min_energy
@@ -980,7 +1010,7 @@ if not args.nolines:
                 # only include the label on the last one so it comes last
                 # in the legend
                 if last:
-                    ax.plot(min_ppoint[args.sx], min_ppoint[args.sy], label='minimum {}'.format(mvar), marker=pmarkers[mvar], color='black', ms=14)
+                    ax.plot(min_ppoint[args.sx], min_ppoint[args.sy], label='minimum {}'.format(mvar), marker=pmarkers[mvar], color='black', ms=14, linestyle='None')
                 else:
                     ax.plot(min_ppoint[args.sx], min_ppoint[args.sy], marker=pmarkers[mvar], color='black', ms=14)
 
