@@ -495,15 +495,15 @@ if args.scenario == 'historic':
 if args.scenario == 'generation':
     scenario_title = 'for onshore wind from Ninja compared to Fragaik et. al.'
     scenarios = {'ninja' :
-       {'file': 'ENH', 'dir' : 'ninjaOnshore/', 'title': 'Wind Generation from Renewables Ninja (onshore)'},
+       {'file': 'ENS', 'dir' : 'ninjaOnshore/', 'title': 'Wind Generation from Renewables Ninja (onshore)'},
                  'kf' : 
-       {'file': 'ENH', 'dir' : 'kfwind/', 'title': 'Wind Generation from Fragaki et. al. '} }
+       {'file': 'ENS', 'dir' : 'kfwind/', 'title': 'Wind Generation from Fragaki et. al. '} }
 if args.scenario == 'ninjapv':
     scenario_title = 'PV MIDAS Stations vs Ninja'
     scenarios = {'ninja' :
-       {'file': 'ENH', 'dir' : 'ninjaOnshore/', 'title': 'PV Generation from Renewables Ninja'},
+       {'file': 'ENS', 'dir' : 'ninjaOnshore/', 'title': 'PV Generation from Renewables Ninja'},
                  'kfs' : 
-       {'file': 'ENH', 'dir' : 'kfpvs/', 'title': 'PV Generation from Fragaki et. al. scaled to Ninja CF'},
+       {'file': 'ENS', 'dir' : 'kfpvs/', 'title': 'PV Generation from Fragaki et. al. scaled to Ninja CF'},
                  'kf' : 
        {'file': 'ENH', 'dir' : 'kfpv/', 'title': 'PV Generation from Fragaki et. al. '} }
 if args.scenario == 'shore':
@@ -612,13 +612,13 @@ if args.scenario == 'cost_comp':
 if args.scenario == 'cost_comph':
     scenario_title = 'Comparison to Cardenas et. al. '
     scenarios = {'ninja_baseline' :
-       {'file': 'ENS', 'dir' : 'cost_hourly', 'title': 'Synthetic Demand with baseline, Ninja Wind'},
+       {'file': 'ENS', 'dir' : 'cost_hourly', 'title': 'Baseline Demand, Ninja Wind'},
                  'ngrid_baseline' :
-       {'file': 'ENS', 'dir' : 'cost_ngrid', 'title': 'Synthetic Demand with baseline, National Grid Wind.'},
+       {'file': 'ENS', 'dir' : 'cost_ngrid', 'title': 'Baseline Demand , National Grid Wind.'},
                  'ngrid_scale' :
-       {'file': 'ENM', 'dir' : 'cost_ngrid', 'title': 'Scaled demand as Cardenas et. al., National Grid Wind.'},
+       {'file': 'ENM', 'dir' : 'cost_ngrid', 'title': 'Scaled demand, National Grid Wind.'},
                  'ninja_scale' :
-       {'file': 'ENM', 'dir' : 'cost_hourly', 'title': 'Scaled demand as Cardenas et. al., Ninja Wind'}
+       {'file': 'ENM', 'dir' : 'cost_hourly', 'title': 'Scaled demand, Ninja Wind'}
     }
 if args.scenario == 'cost':
     scenario_title = ' cost model paper comparison'
@@ -919,14 +919,13 @@ markers = ['o', 'v', '+', '<', 'x', 'D', '*', 'X','o', 'v', '+', '<', 'x', 'D', 
 styles = ['solid', 'dotted', 'dashed', 'dashdot', 'solid', 'dotted', 'dashed', 'solid', 'dotted', 'dashed', 'dashdot', 'dashdot', 'solid', 'dotted', 'dashed' ]
 colours = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'grey', 'olive', 'cyan', 'yellow', 'black', 'salmon' ]
 scount=0
-points={}
 min_vars=[]
 if args.pmin:
     min_vars = args.pmin.split(',')
-    for mvar in min_vars:
-        points[mvar] = []
 
 if not args.nolines:
+    pmarkers = { 'energy' : '*', 'cost' : 'X', 'storage' : 'p' }
+    fig, ax = plt.subplots(constrained_layout=False)
     for key, scenario in scenarios.items():
         df = dfs[key].copy()
         filename = scenario['file']
@@ -968,21 +967,26 @@ if not args.nolines:
             # format the line label
             label_string = '{} {:.' + str(args.decimals) + 'f} ({}). {}'
             label_formated = label_string.format(args.cvariable, days, units[args.cvariable], label)
-            # save axis for the first one, and plot
-            if first:
-                ax = storage_line.plot(x=args.sx,y=args.sy,label=label_formated, marker=markers[scount], linestyle=styles[scount], color=line_colour)
-            else:
-                storage_line.plot(x=args.sx,y=args.sy,ax=ax,label=label_formated, marker=markers[scount], linestyle=styles[scount], color=line_colour)
-            first = False
+            # plot the storage line
+            ax.plot(storage_line[args.sx],storage_line[args.sy],label=label_formated, marker=markers[scount], linestyle=styles[scount], color=line_colour)
             # Plot minimum point if requested
+            last = dcount==len(day_list)-1 and scount==len(scenarios)-1
             for mvar in min_vars:
+                min_ppoint = min_storage
                 if mvar == 'energy':
-                    points[mvar].append(min_energy)
+                    min_ppoint = min_energy
                 if mvar == 'cost':
-                    points[mvar].append(min_cost)
-                if mvar == 'storage':
-                    points[mvar].append(min_storage)
+                    min_ppoint = min_cost
+                # only include the label on the last one so it comes last
+                # in the legend
+                if last:
+                    ax.plot(min_ppoint[args.sx], min_ppoint[args.sy], label='minimum {}'.format(mvar), marker=pmarkers[mvar], color='black', ms=14)
+                else:
+                    ax.plot(min_ppoint[args.sx], min_ppoint[args.sy], marker=pmarkers[mvar], color='black', ms=14)
+
+            # day counter
             dcount+=1
+        # scenario counter
         scount+=1
 
         # plot energy generation of 1.0 line 
@@ -993,12 +997,6 @@ if not args.nolines:
             scount+=1
             min_gen_line(ax, min_days, markers[scount])
             scount+=1
-
-    # plot the points ( here because otherwise is screws up the legend )
-    pmarkers = { 'energy' : '*', 'cost' : 'X', 'storage' : 'p' }
-    for v in points.keys():
-        for p in points[v]:
-            ax.plot(p[args.sx], p[args.sy], label='minimum {}'.format(args.pmin), marker=pmarkers[v], color='black', ms=15)
 
     plt.title('Constant {} lines {}'.format(args.cvariable, scenario_title) )
     plt.xlabel(axis_labels[args.sx])
@@ -1011,6 +1009,7 @@ if not args.nolines:
         axy.set_ylabel('Capacity GW')
 
 
+    plt.legend(loc='best', fontsize=10)
     plt.show()
 
 keys = scenarios.keys()

@@ -378,7 +378,7 @@ def configuration_cost(config):
 #  cost £/kWh
 
 def generation_cost(config,stype,one_day,n_years=1,hourly=False,shore='both', model='A'):
-    print(stype,one_day,n_years,hourly,shore,model)
+#   print(stype,one_day,n_years,hourly,shore,model)
     if model == 'A' :
         generation_cost_a(config,stype,one_day,n_years,hourly,shore)
     else:

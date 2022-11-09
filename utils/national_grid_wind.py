@@ -60,6 +60,7 @@ for year in range(start_year, end_year+1):
 #       print(heading)
         cap_quarter = capacity[heading]
 #       print(cap_quarter)
+#       Sum of the onshore and offshore capacity
         cap_wind = float(cap_quarter[0].replace(',','')) + float(cap_quarter[1].replace(',',''))
         #
         quarter_start = '{}-{:02d}-01 00:00:00+00:00'.format(year, 1+quarter*3)

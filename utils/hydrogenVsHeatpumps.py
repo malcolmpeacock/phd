@@ -458,6 +458,7 @@ parser.add_argument('--shore', action="store", dest="shore", default="all", help
 parser.add_argument('--ninja', action="store", dest="ninja", default="near", help='Which ninja to use: near, current, future', choices=['near', 'current', 'future'] )
 parser.add_argument('--kfpv', action="store_true", dest="kfpv", help='Use KF PV generation from matlab', default=False)
 parser.add_argument('--kfwind', action="store_true", dest="kfwind", help='Use KF wind generation from matlab', default=False)
+parser.add_argument('--ngwind', action="store_true", dest="ngwind", help='Use National grid wind generation scaled by capacity', default=False)
 parser.add_argument('--demand', action="store", dest="demand", help='Electricity demand source', choices=['espini', 'kf', 'ngrid'], default='espini')
 parser.add_argument('--shift', action="store_true", dest="shift", help='Shift the days to match weather calender', default=False)
 parser.add_argument('--wind', action="store", dest="wind", help='Wind value of store history to output', type=float, default=0)
@@ -785,27 +786,35 @@ else:
         wind = wind * kf_wcf / energy_per_day
 
     else:
-
-        # Ninja capacity factors for wind
-        if args.ninja == 'near' :
-            ninja_filename_wind = '/home/malcolm/uclan/data/ninja/ninja_wind_country_GB_near-termfuture-merra-2_corrected.csv'
+        # National grid wind
+        if args.ngwind:
+            print('Loading National Grid wind')
+            years = range(2011, 2020)
+            wind_filename = '/home/malcolm/uclan/data/electricity/wind_national_grid.csv'
+            wind = pd.read_csv(wind_filename, header=None, squeeze=True, parse_dates=[0], index_col=0, usecols=[0,1])
+            print(wind)
         else:
-            if args.ninja == 'future' :
-                ninja_filename_wind = '/home/malcolm/uclan/data/ninja/ninja_wind_country_GB_long-termfuture-merra-2_corrected.csv'
-            else:
-                ninja_filename_wind = '/home/malcolm/uclan/data/ninja/ninja_wind_country_GB_current-merra-2_corrected.csv'
 
-        ninja_wind = readers.read_ninja_country(ninja_filename_wind)
-
-        print('Extracting Wind ninja {} ...'.format(args.ninja))
-        ninja_wind = ninja_wind[ninja_start : ninja_end]
-        if args.shore == 'on':
-            wind = ninja_wind['onshore']
-        else:
-            if args.shore == 'off':
-                wind = ninja_wind['offshore']
+            # Ninja capacity factors for wind
+            if args.ninja == 'near' :
+                ninja_filename_wind = '/home/malcolm/uclan/data/ninja/ninja_wind_country_GB_near-termfuture-merra-2_corrected.csv'
             else:
-                wind = ninja_wind['national']
+                if args.ninja == 'future' :
+                    ninja_filename_wind = '/home/malcolm/uclan/data/ninja/ninja_wind_country_GB_long-termfuture-merra-2_corrected.csv'
+                else:
+                    ninja_filename_wind = '/home/malcolm/uclan/data/ninja/ninja_wind_country_GB_current-merra-2_corrected.csv'
+
+            ninja_wind = readers.read_ninja_country(ninja_filename_wind)
+
+            print('Extracting Wind ninja {} ...'.format(args.ninja))
+            ninja_wind = ninja_wind[ninja_start : ninja_end]
+            if args.shore == 'on':
+                wind = ninja_wind['onshore']
+            else:
+                if args.shore == 'off':
+                    wind = ninja_wind['offshore']
+                else:
+                    wind = ninja_wind['national']
 
     if args.kf:
         pcf = 0.1156

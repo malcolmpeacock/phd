@@ -71,7 +71,8 @@ ninja_start = '1984-01-01 00:00:00'
 ninja_end = '2013-12-31 23:00:00'
 if args.ngrid:
     ninja_start = '2011-01-01 00:00:00'
-    ninja_end = '2013-12-31 23:00:00'
+#   ninja_end = '2013-12-31 23:00:00'
+    ninja_end = '2019-12-31 23:00:00'
 if args.cardenas:
     ninja_start = '2011-01-01 00:00:00'
     ninja_end = '2019-12-31 23:00:00'
@@ -113,6 +114,17 @@ ninja_current_both = ninja_current['national']
 ninja_current_offshore = ninja_current['offshore']
 ninja_current_onshore = ninja_current['onshore']
 
+# load national grid wind
+if args.ngrid:
+    ngrid_wind_filename = '/home/malcolm/uclan/data/electricity/wind_national_grid.csv'
+    wind_ngrid_hourly = readers.read_ngrid_wind(ngrid_wind_filename)
+    wind_ngrid_hourly = wind_ngrid_hourly[ninja_start : ninja_end]
+    wind_ngrid_daily = wind_ngrid_hourly.resample('D').mean()
+    norm_ngrid_wind = normalize(wind_ngrid_daily)
+# monthly
+    if args.monthly:
+        norm_ngrid_wind = norm_ngrid_wind.resample('M').mean()
+
 print('#### Capacity Factors')
 print('Series                 mean    min     max    length')
 print('Ninja current offshore {:.4f}  {:.4f}  {:.4f}  {}'.format(ninja_current_offshore.mean(), ninja_current_offshore.min(), ninja_current_offshore.max(), len(ninja_current_offshore) ) )
@@ -123,6 +135,8 @@ print('Ninja near onshore     {:.4f}  {:.4f}  {:.4f}  {}'.format(ninja_onshore.m
 print('Ninja near combined    {:.4f}  {:.4f}  {:.4f}  {}'.format(ninja_both.mean(), ninja_both.min(), ninja_both.max(), len(ninja_both) ) )
 print('Ninja long combined    {:.4f}  {:.4f}  {:.4f}  {}'.format(ninja_future_both.mean(), ninja_future_both.min(), ninja_future_both.max(), len(ninja_future_both) ) )
 print('Ninja near PV          {:.4f}  {:.4f}  {:.4f}  {}'.format(ninja_pv.mean(), ninja_pv.min(), ninja_pv.max(), len(ninja_pv) ) )
+if args.ngrid:
+    print('National grid wind     {:.4f}  {:.4f}  {:.4f}  {}'.format(wind_ngrid_hourly.mean(), wind_ngrid_hourly.min(), wind_ngrid_hourly.max(), len(wind_ngrid_hourly) ) )
 print(' ---------------- ')
 
 ninja_offshore_daily = ninja_offshore.resample('D').mean()
@@ -179,16 +193,6 @@ norm_hp41 = normalize(hp_41)
 norm_hp_all = normalize(hp_all)
 norm_existing = normalize(existing)
 
-# load national grid wind
-if args.ngrid:
-    ngrid_wind_filename = '/home/malcolm/uclan/data/electricity/wind_national_grid.csv'
-    wind_ngrid_hourly = readers.read_ngrid_wind(ngrid_wind_filename)
-    wind_ngrid_hourly = wind_ngrid_hourly[ninja_start : ninja_end]
-    wind_ngrid_daily = wind_ngrid_hourly.resample('D').mean()
-    norm_ngrid_wind = normalize(wind_ngrid_daily)
-# monthly
-    if args.monthly:
-        norm_ngrid_wind = norm_ngrid_wind.resample('M').mean()
 
 if args.monthly:
     norm_ninja_pv = norm_ninja_pv.resample('M').mean()
