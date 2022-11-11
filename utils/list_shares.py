@@ -20,12 +20,6 @@ import stats
 import readers
 import storage
 
-# Functions to convert to and from actual capacity based on demandNNH.csv
-def cf2gw(x):
-    return x * generation_capacity
-def gw2cf(x):
-    return x / generation_capacity
-
 def days2twh(days):
     twh = days / 0.81838
     return twh
@@ -38,6 +32,8 @@ parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagn
 parser.add_argument('--pstore', action="store_true", dest="pstore", help='Plot the sample store history ', default=False)
 parser.add_argument('--pdemand', action="store_true", dest="pdemand", help='Plot the demand ', default=False)
 parser.add_argument('--dir', action="store", dest="dir", help='Directory', default='adhoc')
+parser.add_argument('--pv', action="store", dest="pv", help='A particular value of PV', default=None, type=float)
+parser.add_argument('--wind', action="store", dest="wind", help='A particular value of wind', default=None, type=float)
 args = parser.parse_args()
 
 # variables and axis labels
@@ -67,12 +63,19 @@ units = {
 }
 
 # loop round the files
-output_dir = '/home/malcolm/uclan/output/individuals/' + args.dir + '/'
+output_dir = '/home/malcolm/uclan/output/' + args.dir + '/'
 
-print('File f_pv f_wind storage    charge discharge cost  energy ')
+print('File f_pv f_wind storage    charge discharge cost  energy  discharge')
 print('                 days twh   rate   rate            wind pv   fraction total')
 for path in glob.glob(output_dir + 'shares*.csv'):
     df = pd.read_csv(path, header=0, index_col=0)
+    tolerence = 0.01
+    if args.pv:
+        print('Filtering to pv {} '.format(args.pv))
+        df = df[(df['f_pv'] > args.pv-tolerence) & (df['f_pv'] < args.pv+tolerence)]
+    if args.wind:
+        print('Filtering to wind {} '.format(args.wind))
+        df = df[(df['f_wind'] > args.wind-tolerence) & (df['f_wind'] < args.wind+tolerence)]
 
     filename = os.path.basename(path)
     scenario = filename[-7:]
@@ -92,6 +95,7 @@ for path in glob.glob(output_dir + 'shares*.csv'):
     for index, row in df.iterrows():
         charge_rate = ( row['charge_rate'] * 1000 ) / 24.0
         discharge_rate = ( row['discharge_rate'] * 1000 ) / 24.0
-        print('{}  {:.1f}  {:.1f}    {:.1f} {:.1f}  {:.2f}   {:.2f}      {:.3f} {:.2f} {:.2f} {:.2f}     {:.3f}  '.format(scenario[0:3], row['f_pv'], row['f_wind'], row['storage'], days2twh(row['storage']), charge_rate, discharge_rate, row['cost'], row['wind_energy'], row['pv_energy'], row['fraction'], row['energy'] ) )
+        discharge = row['discharge'] / 1000.0
+        print('{}  {:.1f}  {:.1f}    {:.1f} {:.1f}  {:.2f}   {:.2f}      {:.3f} {:.2f} {:.2f} {:.2f}     {:.3f} {:.3f} '.format(scenario[0:3], row['f_pv'], row['f_wind'], row['storage'], days2twh(row['storage']), charge_rate, discharge_rate, row['cost'], row['wind_energy'], row['pv_energy'], row['fraction'], row['energy'], discharge ) )
 
 

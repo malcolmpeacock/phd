@@ -228,6 +228,25 @@ if args.scenario == 'hydrogen30':
                  '30' : 
        {'file': 'ENS', 'dir' : 'hydrogen/hbase04eta30/', 'title': 'Base load 0.4 efficiency 30%'} 
     }
+if args.scenario == 'hydrogenfesb':
+    scenario_title = 'The impact of electrification of heating for difference base load'
+    scenarios = {'he7' :
+       {'file': 'ENS', 'dir' : 'hydrogen/gbase07/', 'title': 'Base load 0.7 existing heating'},
+                 'hfes7' : 
+       {'file': 'FNS', 'dir' : 'hydrogen/gbase07/', 'title': 'Base load 0.7 41% heat pumps'},
+                 'he5' : 
+       {'file': 'ENS', 'dir' : 'hydrogen/gbase05/', 'title': 'Base load 0.5 existing heating'},
+                 'hfes5' : 
+       {'file': 'FNS', 'dir' : 'hydrogen/gbase05/', 'title': 'Base load 0.5 41% heat pumps'},
+                 'he3' : 
+       {'file': 'ENS', 'dir' : 'hydrogen/gbase03/', 'title': 'Base load 0.3 existing heating'},
+                 'hfes3' : 
+       {'file': 'FNS', 'dir' : 'hydrogen/gbase03/', 'title': 'Base load 0.3 41% heat pumps'},
+                 'he0' : 
+       {'file': 'ENS', 'dir' : 'hydrogen/gbase00/', 'title': 'Base load 0.0 exsting heating'},
+                 'hfes0' : 
+       {'file': 'FNS', 'dir' : 'hydrogen/gbase00/', 'title': 'Base load 0.0 41% heat pumps'} 
+    }
 if args.scenario == 'hydrogenfes':
     scenario_title = 'The impact of electrification of heating'
     scenarios = {'he' :
