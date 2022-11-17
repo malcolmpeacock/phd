@@ -125,7 +125,9 @@ parser = argparse.ArgumentParser(description='Compare and plot scenarios')
 parser.add_argument('--rolling', action="store", dest="rolling", help='Rolling average window', default=0, type=int)
 parser.add_argument('--decimals', action="store", dest="decimals", help='Number of decimal places', default=2, type=int)
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--mblack', action="store_true", dest="mblack", help='Plot min point marker in black', default=False)
 parser.add_argument('--nolines', action="store_true", dest="nolines", help='Do not plot the contour lines', default=False)
+parser.add_argument('--markevery', action="store", dest="markevery", help='Marker frequency', default=1, type=int)
 parser.add_argument('--compare', action="store_true", dest="compare", help='Output comparison stats', default=False)
 parser.add_argument('--pstore', action="store_true", dest="pstore", help='Plot the sample store history ', default=False)
 parser.add_argument('--pdemand', action="store_true", dest="pdemand", help='Plot the demand ', default=False)
@@ -246,6 +248,17 @@ if args.scenario == 'hydrogenfesb':
        {'file': 'ENS', 'dir' : 'hydrogen/gbase00/', 'title': 'Base load 0.0 exsting heating'},
                  'hfes0' : 
        {'file': 'FNS', 'dir' : 'hydrogen/gbase00/', 'title': 'Base load 0.0 41% heat pumps'} 
+    }
+if args.scenario == 'hydrogencaes':
+    scenario_title = 'The impact of electrification of heating'
+    scenarios = {'he' :
+       {'file': 'ENS', 'dir' : 'hydrogen/gbase04/', 'title': 'Storage 50% efficient. Existing heating'},
+                 'hfes' : 
+       {'file': 'FNS', 'dir' : 'hydrogen/gbase04/', 'title': 'Storage 50% efficient. 41% heat pumps'},
+                 'ce' : 
+       {'file': 'ENS', 'dir' : 'caes/gbase04/', 'title': 'Storage 70% efficient. Existing heating'},
+                 'cfes' : 
+       {'file': 'FNS', 'dir' : 'caes/gbase04/', 'title': 'Storage 70% efficient. 41% Heat pumps'} 
     }
 if args.scenario == 'hydrogenfes':
     scenario_title = 'The impact of electrification of heating'
@@ -655,6 +668,11 @@ if args.scenario == 'cost_comph':
                  'ninja_scale' :
        {'file': 'ENM', 'dir' : 'cost_hourly', 'title': 'Scaled demand, Ninja Wind'}
     }
+if args.scenario == 'cardenas':
+    scenario_title = ' CAES 35 days storage'
+    scenarios = {'cost' :
+       {'file': 'ENM', 'dir' : 'individuals/cardenas_caes_storage', 'title': 'Nine years from cost paper with existing heat'},
+    }
 if args.scenario == 'cost':
     scenario_title = ' cost model paper comparison'
     scenarios = {'cost' :
@@ -967,6 +985,7 @@ markers = ['o', 'v', '+', '<', 'x', 'D', '*', 'X','o', 'v', '+', '<', 'x', 'D', 
 styles = ['solid', 'dotted', 'dashed', 'dashdot', 'solid', 'dotted', 'dashed', 'solid', 'dotted', 'dashed', 'dashdot', 'dashdot', 'solid', 'dotted', 'dashed' ]
 colours = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'grey', 'olive', 'cyan', 'yellow', 'black', 'salmon' ]
 scount=0
+odd=0
 min_vars=[]
 if args.pmin:
     min_vars = args.pmin.split(',')
@@ -989,6 +1008,10 @@ if not args.nolines:
         baseload = float(settings[key]['baseload'])
         dcount = 0
         for days in day_list:
+            if odd==1:
+              odd=0
+            else:
+              odd=1
             storage_line = get_storage_line(df, storage_model, days, args.cx, args.cy, args.cvariable)
             if len(storage_line) == 0:
                 print('Skipping line {: <12} {} {} '.format(key, days, len(storage_line) ))
@@ -1009,14 +1032,20 @@ if not args.nolines:
             # get the colour
             if args.dcolour:
                 line_colour = colours[dcount]
+                if len(day_list) ==1:
+                    line_colour = colours[odd]
+                line_style = linestyle=styles[scount]
+                marker_type = markers[scount]
             else:
                 line_colour = colours[scount]
+                line_style = linestyle=styles[dcount]
+                marker_type = markers[dcount]
 
             # format the line label
             label_string = '{} {:.' + str(args.decimals) + 'f} ({}). {}'
             label_formated = label_string.format(args.cvariable, days, units[args.cvariable], label)
             # plot the storage line
-            ax.plot(storage_line[args.sx],storage_line[args.sy],label=label_formated, marker=markers[scount], linestyle=styles[scount], color=line_colour)
+            ax.plot(storage_line[args.sx],storage_line[args.sy],label=label_formated, marker=marker_type, linestyle=line_style, color=line_colour, markevery=args.markevery)
             # Plot minimum point if requested
             last = dcount==len(day_list)-1 and scount==len(scenarios)-1
             for mvar in min_vars:
@@ -1026,12 +1055,17 @@ if not args.nolines:
                     min_ppoint = min_energy
                 if mvar == 'cost':
                     min_ppoint = min_cost
+                # determine the marker colour
+                if args.mblack:
+                    marker_colour = 'black'
+                else:
+                    marker_colour = line_colour
                 # only include the label on the last one so it comes last
                 # in the legend
                 if last:
-                    ax.plot(min_ppoint[args.sx], min_ppoint[args.sy], label='minimum {}'.format(mvar), marker=pmarkers[mvar], color='black', ms=14, linestyle='None')
+                    ax.plot(min_ppoint[args.sx], min_ppoint[args.sy], label='minimum {}'.format(mvar), marker=pmarkers[mvar], color=marker_colour, ms=14, linestyle='None')
                 else:
-                    ax.plot(min_ppoint[args.sx], min_ppoint[args.sy], marker=pmarkers[mvar], color='black', ms=14)
+                    ax.plot(min_ppoint[args.sx], min_ppoint[args.sy], marker=pmarkers[mvar], color=marker_colour, ms=14)
 
             # day counter
             dcount+=1

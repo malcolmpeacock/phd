@@ -617,7 +617,10 @@ def storage_grid_new(demand, wind, pv, eta, hourly=False, npv=14, nwind=14, step
         if contours == 'med':
             days = [3, 10, 25, 30, 40, 60]
         else:
-            days = [40, 60, 100]
+            if contours == 'large':
+                days = [40, 60, 100]
+            else:
+                days = [int(contours)]
     for store_days in days:
         # converts to hourly if needed.
         store_size = store_days / store_factor

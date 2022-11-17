@@ -65,16 +65,14 @@ units = {
 # loop round the files
 output_dir = '/home/malcolm/uclan/output/' + args.dir + '/'
 
-print('File f_pv f_wind storage    charge discharge cost  energy  discharge')
-print('                 days twh   rate   rate            wind pv   fraction total')
+print('File f_pv f_wind storage    charge discharge cost  energy  ')
+print('                 days twh   rate   rate            wind pv   fraction total discharged')
 for path in glob.glob(output_dir + 'shares*.csv'):
     df = pd.read_csv(path, header=0, index_col=0)
     tolerence = 0.01
     if args.pv:
-        print('Filtering to pv {} '.format(args.pv))
         df = df[(df['f_pv'] > args.pv-tolerence) & (df['f_pv'] < args.pv+tolerence)]
     if args.wind:
-        print('Filtering to wind {} '.format(args.wind))
         df = df[(df['f_wind'] > args.wind-tolerence) & (df['f_wind'] < args.wind+tolerence)]
 
     filename = os.path.basename(path)
