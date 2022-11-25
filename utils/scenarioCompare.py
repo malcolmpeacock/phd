@@ -12,13 +12,33 @@ import statsmodels.api as sm
 import argparse
 import calendar
 import numpy as np
+import operator
 from os.path import exists
 from skimage import measure
+import math
 
 # custom code
 import stats
 import readers
 import storage
+
+# feature correlation
+def correlation(df):
+#   print(input_df.index)
+#   print(output.index)
+    coef = {}
+    for column in df.columns:
+        for col_out in df.columns:
+            if column != col_out:
+                corr = df[column].corr(df[col_out])
+                if not math.isnan(corr):
+                    coef[(column,col_out)] = corr
+#           print('{:15} {:15}         {:.3f}'.format(column,col_out,corr))
+    sorted_x = sorted(coef.items(), key=lambda kv: kv[1])
+#   print(sorted_x)
+    for w in sorted_x:
+        if abs(w[1])>0.8:
+            print(w)
 
 def print_titles(sl=11):
     print('Scenario'.ljust(sl), 'Point             Wind  PV    Fraction-C/E NP Energy Storage Cost')
@@ -125,11 +145,12 @@ parser = argparse.ArgumentParser(description='Compare and plot scenarios')
 parser.add_argument('--rolling', action="store", dest="rolling", help='Rolling average window', default=0, type=int)
 parser.add_argument('--decimals', action="store", dest="decimals", help='Number of decimal places', default=2, type=int)
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
-parser.add_argument('--mblack', action="store_true", dest="mblack", help='Plot min point marker in black', default=False)
+parser.add_argument('--mcolour', action="store", dest="mcolour", help='Plot min point marker in black', default='black')
 parser.add_argument('--nolines', action="store_true", dest="nolines", help='Do not plot the contour lines', default=False)
 parser.add_argument('--markevery', action="store", dest="markevery", help='Marker frequency', default=1, type=int)
 parser.add_argument('--compare', action="store_true", dest="compare", help='Output comparison stats', default=False)
 parser.add_argument('--pstore', action="store_true", dest="pstore", help='Plot the sample store history ', default=False)
+parser.add_argument('--features', action="store_true", dest="features", help='Print feature correlarions ', default=False)
 parser.add_argument('--pdemand', action="store_true", dest="pdemand", help='Plot the demand ', default=False)
 parser.add_argument('--heatdiff', action="store_true", dest="heatdiff", help='Create a heat map as difference of 2 scenarios', default=False)
 parser.add_argument('--pfit', action="store_true", dest="pfit", help='Show 2d plots', default=False)
@@ -748,6 +769,10 @@ axis_labels = {
     'storage' : 'Amount of energy storage (days)',
     'cost' : 'cost ( £/Kwh )',
     'last' : 'store level % fill at end',
+    'lost' : 'lost energy',
+    'slost' : 'store lost energy',
+    'charge' : 'store charge',
+    'discharge' : 'store discharge'
 }
 
 # variables and axis labels
@@ -761,6 +786,10 @@ units = {
     'storage' : 'days',
     'cost' : '£/Kwh',
     'last' : '%',
+    'lost' : 'days',
+    'slost' : 'days',
+    'charge' : 'days',
+    'discharge' : 'days'
 }
 
 # load the demands
@@ -793,11 +822,11 @@ for key, scenario in scenarios.items():
         if not 'normalise' in setting:
             setting['normalise'] = 818387.7082191781
         if not 'hourly' in setting:
-            setting['hourly'] = False
+            setting['hourly'] = 'False'
         if not 'baseload' in setting:
             setting['baseload'] = 0.0
     else:
-        setting = {'storage' : 'kf', 'baseload' : '0.0', 'start' : 1980, 'end': 2019, 'hourly': False, 'normalise' : 818387.7082191781 }
+        setting = {'storage' : 'kf', 'baseload' : '0.0', 'start' : 1980, 'end': 2019, 'hourly': 'False', 'normalise' : 818387.7082191781 }
     settings[key] = setting
 
 # Load the shares dfs
@@ -827,15 +856,28 @@ for key, scenario in scenarios.items():
   
     # calculate cost and energy
     n_years = int(settings[key]['end']) - int(settings[key]['start']) + 1
+    hourly = settings[key]['hourly']=='True'
     if args.stype == 'none':
         df['cost'] = 0.0
     else:
-        storage.generation_cost(df, args.stype, float(settings[key]['normalise']), n_years, settings[key]['hourly']=='True', args.shore, args.costmodel  )
+        storage.generation_cost(df, args.stype, float(settings[key]['normalise']), n_years, hourly, args.shore, args.costmodel  )
 
     # calculate energy
     df['energy'] = df['wind_energy'] + df['pv_energy']
     # calculate wind energy fraction
     df['fraction'] = df['wind_energy'] / df['energy']
+    # calculate the 'lost' energy
+    factor = 1
+    if hourly:
+        factor = 24
+    eta = math.sqrt(float(settings[key]['eta']) / 100.0 )
+    charge = df['charge'] / ( n_years * 366.25 * factor )
+    discharge = df['discharge'] / ( n_years * 366.25 * factor )
+    battery_loss =  (1 - eta) * ( discharge + (charge/eta) )
+    generated = df['energy'] + df['base']
+    load = 1.0
+    df['lost'] = generated - load - battery_loss
+    df['slost'] = battery_loss
 
     if args.last == 'full':
         viable = df[df['last']==100.0]
@@ -983,7 +1025,8 @@ if args.rate:
 first = True
 markers = ['o', 'v', '+', '<', 'x', 'D', '*', 'X','o', 'v', '+', '<', 'x', 'D', '*', 'X']
 styles = ['solid', 'dotted', 'dashed', 'dashdot', 'solid', 'dotted', 'dashed', 'solid', 'dotted', 'dashed', 'dashdot', 'dashdot', 'solid', 'dotted', 'dashed' ]
-colours = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'grey', 'olive', 'cyan', 'yellow', 'black', 'salmon' ]
+colours = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'olive', 'cyan', 'yellow', 'salmon' ]
+mcolours = ['grey', 'black', 'white' ]
 scount=0
 odd=0
 min_vars=[]
@@ -1056,16 +1099,25 @@ if not args.nolines:
                 if mvar == 'cost':
                     min_ppoint = min_cost
                 # determine the marker colour
-                if args.mblack:
-                    marker_colour = 'black'
-                else:
-                    marker_colour = line_colour
                 # only include the label on the last one so it comes last
                 # in the legend
-                if last:
-                    ax.plot(min_ppoint[args.sx], min_ppoint[args.sy], label='minimum {}'.format(mvar), marker=pmarkers[mvar], color=marker_colour, ms=14, linestyle='None')
+                mlabel = None
+                if args.mcolour == 'black':
+                    marker_colour = 'black'
+                    if last:
+                        mlabel = 'minimum {}'.format(mvar)
                 else:
-                    ax.plot(min_ppoint[args.sx], min_ppoint[args.sy], marker=pmarkers[mvar], color=marker_colour, ms=14)
+                    if args.mcolour == 'scenario':
+                        marker_colour = mcolours[scount]
+                        if dcount==len(day_list)-1:
+                            mlabel = 'minimum {}. {}'.format(mvar, label)
+                    else:
+                        marker_colour = line_colour
+                        if last:
+                            mlabel = 'minimum {}'.format(mvar)
+                # plot the marker. The label determines if the marker appears
+                # in the legend or not - so usually set to None
+                ax.plot(min_ppoint[args.sx], min_ppoint[args.sy], label=mlabel, marker=pmarkers[mvar], color=marker_colour, ms=14)
 
             # day counter
             dcount+=1
@@ -1332,6 +1384,13 @@ if args.variable:
     plt.title('Base load vs Storage')
     plt.legend(loc='upper right', fontsize=12)
     plt.show()
+
+if args.features:
+    for key, scenario in scenarios.items():
+        df = dfs[key]
+        label = scenario['title']
+        print('Feature correlation {}'.format(label))
+        correlation(df)
 
 
 # output csv file
