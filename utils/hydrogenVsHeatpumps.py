@@ -376,7 +376,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         for i_base in range(0,10):
             base_load = i_base * 0.05
             print('Base load {}'.format(base_load))
-            df= storage.storage_grid(all_demand, wind, pv, eta, hourly, npv, nwind, step, base_load, variable, h_input, args.storage)
+            df= storage.storage_grid(all_demand, wind, pv, eta, etad, hourly, npv, nwind, step, base_load, variable, h_input, args.storage)
             df['base'] = df['storage'] * 0.0 + base_load
             df_list.append(df)
         df = pd.concat(df_list)
@@ -384,9 +384,9 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
     else:
         print('Base load Zero')
         if args.storage == 'new':
-            df, sample_hist, sample_durations = storage.storage_grid_new(all_demand, wind, pv, eta, hourly, npv, nwind, step, baseload, h_input, args.constraints, args.wind, args.pv, args.days, args.threshold, variable, args.contours, args.debug)
+            df, sample_hist, sample_durations = storage.storage_grid_new(all_demand, wind, pv, eta, etad, hourly, npv, nwind, step, baseload, h_input, args.constraints, args.wind, args.pv, args.days, args.threshold, variable, args.contours, args.debug)
         else:
-            df, sample_hist, sample_durations = storage.storage_grid(all_demand, wind, pv, eta, hourly, npv, nwind, step, baseload, variable, h_input, args.storage, args.wind, args.pv, args.threshold, args.constraints, args.debug, args.store_max)
+            df, sample_hist, sample_durations = storage.storage_grid(all_demand, wind, pv, eta, etad, hourly, npv, nwind, step, baseload, variable, h_input, args.storage, args.wind, args.pv, args.threshold, args.constraints, args.debug, args.store_max)
         df['base'] = df['storage'] * 0.0 + baseload
         df['variable'] = df['storage'] * 0.0 + variable
 
@@ -446,6 +446,7 @@ parser.add_argument('--scale', action="store", dest="scale", help='How to scale 
 parser.add_argument('--storage', action="store", dest="storage", help='Storage model kf , mp, new or all', default="kf")
 parser.add_argument('--constraints', action="store", dest="constraints", help='Constraints on new storage model: new or old', default="new")
 parser.add_argument('--eta', action="store", dest="eta", help='Round Trip Efficiency.', type=int, default=85)
+parser.add_argument('--etad', action="store", dest="etad", help='Discharge Efficiency. If this is specified non zero, then --eta is the charge efficiency', type=int, default=0)
 parser.add_argument('--npv', action="store", dest="npv", help='Number of points in pv grid.', type=int, default=60)
 parser.add_argument('--nwind', action="store", dest="nwind", help='Number of points in wind grid.', type=int, default=60)
 parser.add_argument('--baseload', action="store", dest="baseload", help='Base load capacity.', type=float, default=0.0)
@@ -509,8 +510,13 @@ if args.demand == 'kf' and hourly:
 print('Start year {} End Year {} Reference year {} plot {} hourly {} climate {} demand {} dmethod {} base {} ev {} genh {}'.format(args.start, args.end, args.reference, args.plot, args.hourly, args.climate, args.demand, args.dmethod, args.base, args.ev, args.genh) )
 
 # calculate charge and discharge efficiency from round trip efficiency
-eta = math.sqrt(args.eta / 100)
-print('Round trip efficiency {} Charge/Discharge {} '.format(args.eta / 100, eta) )
+if args.etad > 0:
+    etad = args.etad / 100
+    eta = args.eta / 100
+else:
+    eta = math.sqrt(args.eta / 100)
+    etad = eta
+print('Efficiency Charge {} Discharge {} '.format(eta, etad) )
 
 scotland_factor = 1.1    # ( Fragaki et. al )
 
@@ -939,6 +945,7 @@ settings = {
     'hist_pv'   : args.pv,
     'hist_wind' : args.wind,
     'eta'       : args.eta,
+    'etad'      : args.etad,
     'cfpv'      : args.cfpv,
     'cfwind'    : args.cfwind,
     'demand'    : args.demand,

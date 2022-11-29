@@ -689,6 +689,13 @@ if args.scenario == 'cost_comph':
                  'ninja_scale' :
        {'file': 'ENM', 'dir' : 'cost_hourly', 'title': 'Scaled demand, Ninja Wind'}
     }
+if args.scenario == 'cost_comph_eta':
+    scenario_title = 'Comparison to Cardenas et. al. '
+    scenarios = {'ngrid_eta' :
+       {'file': 'ENM', 'dir' : 'cost_ngrid_eta', 'title': 'Efficiency all on charge'},
+                 'ngrid_scale' :
+       {'file': 'ENM', 'dir' : 'cost_ngrid', 'title': 'Scaled demand, National Grid Wind.'},
+    }
 if args.scenario == 'cardenas':
     scenario_title = ' CAES 35 days storage'
     scenarios = {'cost' :

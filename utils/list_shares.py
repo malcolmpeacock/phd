@@ -66,7 +66,7 @@ units = {
 # loop round the files
 output_dir = '/home/malcolm/uclan/output/' + args.dir + '/'
 
-print('File f_pv f_wind storage    charge discharge cost  energy  ')
+print('File f_wind f_pv storage    charge discharge cost  energy  ')
 print('                 days twh   rate   rate            wind pv   fraction total discharged charged')
 for path in glob.glob(output_dir + 'shares*.csv'):
     df = pd.read_csv(path, header=0, index_col=0)
@@ -83,8 +83,10 @@ for path in glob.glob(output_dir + 'shares*.csv'):
 
     # calculate cost and energy
     n_years = int(setting['end']) - int(setting['start']) + 1
+    # for hourly this is one hours energy
     one_day = float(setting['normalise'])
-    storage.generation_cost(df, 'caes', one_day, n_years, setting['hourly']=='True', 'both', 'B'  )
+    hourly = setting['hourly']=='True'
+    storage.generation_cost(df, 'caes', one_day, n_years, hourly, 'both', 'B'  )
 
     # calculate energy
     df['energy'] = df['wind_energy'] + df['pv_energy']
@@ -95,18 +97,19 @@ for path in glob.glob(output_dir + 'shares*.csv'):
     for index, row in df.iterrows():
         if args.units == 'days':
             factor = 1
-            if setting['hourly']:
+            if hourly:
                 factor = factor / 24
-            charge_rate =  row['charge_rate'] * factor
-            discharge_rate = row['discharge_rate'] * factor
+            charge_rate =  row['charge_rate'] * factor * 1e3
+            discharge_rate = row['discharge_rate'] * factor * 1e3
             discharge = row['discharge']
             charge = row['charge']
         else:
             number_of_days = n_years * 365.25
-            charge_rate = storage.days2capacity(row['charge_rate'], one_day * 1e3, setting['hourly'])
-            discharge_rate = storage.days2capacity(row['discharge_rate'], one_day * 1e3, setting['hourly'])
+            # rates in GW
+            charge_rate = storage.days2capacity(row['charge_rate'], one_day * 1e-3, False)
+            discharge_rate = storage.days2capacity(row['discharge_rate'], one_day * 1e-3, False)
             discharge = storage.days2energy(row['discharge'], one_day , number_of_days, False)
             charge = storage.days2energy(row['charge'], one_day , number_of_days, False)
-        print('{}  {:.1f}  {:.1f}    {:.1f} {:.1f} {:.2f}  {:.2f}      {:.3f} {:.2f} {:.2f} {:.2f}     {:.3f} {:.3f}      {:.3f}'.format(scenario[0:3], row['f_pv'], row['f_wind'], row['storage'], days2twh(row['storage']), charge_rate, discharge_rate, row['cost'], row['wind_energy'], row['pv_energy'], row['fraction'], row['energy'], discharge, charge ) )
+        print('{}  {:.1f}  {:.1f}    {:.1f} {:.1f} {:.2f}  {:.2f}      {:.3f} {:.2f} {:.2f} {:.2f}     {:.3f} {:.3f}      {:.3f}'.format(scenario[0:3], row['f_wind'], row['f_pv'], row['storage'], days2twh(row['storage']), charge_rate, discharge_rate, row['cost'], row['wind_energy'], row['pv_energy'], row['fraction'], row['energy'], discharge, charge ) )
 
 
