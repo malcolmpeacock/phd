@@ -179,7 +179,7 @@ def storage_interpolate(value_lists, wind_parm, variable, df, storage_value, var
                     var_value = y_interp(storage_value)
                     value_lists[var].append(var_value.item())
 
-def storage_grid_config(demand, wind, pv, eta, etad, hourly,base, variable, hydrogen, method, f_wind, f_pv, threshold, constraints, store_max, debug, results):
+def storage_grid_config(demand, wind, pv, eta, etad, hourly, base, variable, hydrogen, method, f_wind, f_pv, threshold, constraints, store_max, debug, results):
 
     # For hourly the storage will be in hours, so divide by 24 to convert to 
     # days
@@ -251,15 +251,15 @@ def storage_grid_config(demand, wind, pv, eta, etad, hourly,base, variable, hydr
         results['discharge_rate'].append(discharge_rate)
         results['charge'].append(charge)
         results['discharge'].append(discharge)
-        results['wind_energy'].append(wind_energy.sum() / demand.sum())
-        results['pv_energy'].append(pv_energy.sum() / demand.sum())
+        results['wind_energy'].append(wind_energy.mean() )
+        results['pv_energy'].append(pv_energy.mean() )
         results['variable_energy'].append(variable_total)
         results['yearly_store_min'].append(year_store_min)
         results['yearly_store_max'].append(year_store_max)
 
     return store_hist
 
-def storage_grid(demand, wind, pv, eta, etad, hourly=False, npv=14, nwind=14, step=0.5, base=0.0, variable=0.0, hydrogen=None, method='kf', hist_wind=1.0, hist_pv=1.0, threshold=0.01, constraints='new', debug=False, store_max=60 ):
+def storage_grid(demand, wind, pv, eta, etad, hourly=False, npv=14, nwind=14, step=0.5, base=0.0, variable=0.0, hydrogen=None, method='kf', hist_wind=1.0, hist_pv=1.0, threshold=0.01, constraints='new', debug=False, store_max=60):
     print('storage_grid: demand max {} min {} mean {}'.format(demand.max(), demand.min(), demand.mean()) )
     # For hourly the storage will be in hours, so divide by 24 to convert to 
     # days
@@ -449,13 +449,13 @@ def generation_cost_b(config,stype,one_day,n_years=1,hourly=False,shore='both', 
     beta  = 300          # £/kW
     life_time = 30
     if stype=='hydrogen':
-        alpha = 0.67
-        betac  = 1100
-        betad  = 450
+        alpha = 0.67     # £/kWh
+        betac  = 1100    # £/kW   ( charge)
+        betad  = 450     # £/kW   ( discharge)
         life_time = 30
     if stype=='pumped':
-        alpha = 1188
-        beta  = 66.4
+        alpha = 66.4     # £/kWh  
+        beta = 1188      # £/kW
         life_time = 30
     # LCOE in £ per MWh
     gen_offshore = 57.5
@@ -509,8 +509,14 @@ def generation_cost_b(config,stype,one_day,n_years=1,hourly=False,shore='both', 
 # get the minimum energy point in a storage line
 def min_point(storage_line, variable='energy', wind_var='f_wind', pv_var='f_pv'):
 #   configuration_cost(storage_line)
+    # get minimum value
     min_value = storage_line[variable].min()
+    # get all points that have this value
     min_points = storage_line[storage_line[variable]==min_value]
+    # get all points with the minimum wind value
+#   min_wind = min_points[min_points['f_wind']==min_points['f_wind'].min()]
+    # get all points with the minimum pv value
+#   min_points = min_wind[min_wind['f_pv']==min_wind['f_pv'].min()]
     values = {
       'storage'        : min_points['storage'].mean(),
       'f_wind'         : min_points[wind_var].mean(),
@@ -565,6 +571,15 @@ def compare_lines(line1, line2):
     return wind_diff, ratio1, ratio2
 
 def get_point(df, wind_val, pv_val, wind_var, pv_var):
+    # get point if it exists exactly
+    winds = df[df[wind_var]==wind_val]
+    if len(winds)>0:
+        pvs = winds[winds[pv_var]==pv_val].copy()
+        if len(pvs)==1:
+            pvs['np'] = 1
+            row = pvs.to_dict('records')
+#           print('Got exact match for {} {} {} {} '.format(wind_var, wind_val, pv_var, pv_val))
+            return row[0]
     if df[wind_var].min() > wind_val or df[wind_var].max() < wind_val or df[pv_var].min() > pv_val or df[pv_var].max() < pv_val:
         print("WARNING: can't interpolat to {} {} , {} {}".format(wind_var, wind_val, pv_var, pv_val))
 
@@ -576,17 +591,15 @@ def get_point(df, wind_val, pv_val, wind_var, pv_var):
     new_row.loc[new_row_ind, wind_var] = wind_val
     new_row.loc[new_row_ind, pv_var] = pv_val
     df = df.append(new_row, ignore_index = True)
-#   print(df)
     df = df.sort_values([pv_var, wind_var], ascending=[True, True])
-    # fill in the NaNs by interpolation
     df = df.interpolate()
     # get the point
     winds = df[df[wind_var]==wind_val]
     pvs = winds[winds[pv_var]==pv_val].copy()
-#   pvs = pvs.rename(columns={pv_var: 'pv', wind_var: 'wind', 'storage': 'days'})
     pvs['np'] = 1
     row = pvs.to_dict('records')
 #   print(row[0])
+#   quit()
     return row[0]
 
 # new storage model which finds pv and wind combinations matching a set list
@@ -682,8 +695,8 @@ def storage_grid_new(demand, wind, pv, eta, etad, hourly=False, npv=14, nwind=14
                 results['discharge'].append(discharge)
                 wind_energy = wind * wind_max
                 pv_energy = pv * f_pv
-                results['wind_energy'].append(wind_energy.sum() / demand.sum())
-                results['pv_energy'].append(pv_energy.sum() / demand.sum())
+                results['wind_energy'].append(wind_energy.mean() )
+                results['pv_energy'].append(pv_energy.mean() )
 
     df = pd.DataFrame(data=results)
     return df, sample_hist, sample_durations

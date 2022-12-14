@@ -75,6 +75,7 @@ def get_storage_line(df, storage_model, days, wind_parm='f_wind', pv_parm='f_pv'
             storage_line = storage.storage_line(df, days, args.sline, wind_parm, pv_parm, variable)
     storage_line['energy'] = storage_line['wind_energy'] + storage_line['pv_energy']
     storage_line['fraction'] = storage_line['wind_energy'] / storage_line['energy']
+    storage_line['fraction'].fillna(0.0, inplace=True)
     storage_line['cfraction'] = storage_line['f_wind'] / (storage_line['f_pv'] + storage_line['f_wind'] )
     return storage_line
 
@@ -574,7 +575,7 @@ if args.scenario == 'ninjapv':
                  'kfs' : 
        {'file': 'ENS', 'dir' : 'kfpvs/', 'title': 'PV Generation from Fragaki et. al. scaled to Ninja CF'},
                  'kf' : 
-       {'file': 'ENH', 'dir' : 'kfpv/', 'title': 'PV Generation from Fragaki et. al. '} }
+       {'file': 'ENS', 'dir' : 'kfpv/', 'title': 'PV Generation from Fragaki et. al. '} }
 if args.scenario == 'shore':
     scenario_title = 'Onshore vs Offshore'
     scenarios = {'off' :
@@ -693,6 +694,8 @@ if args.scenario == 'cost_comph_eta':
     scenario_title = 'Comparison to Cardenas et. al. '
     scenarios = {'ngrid_eta' :
        {'file': 'ENM', 'dir' : 'cost_ngrid_eta', 'title': 'Efficiency all on charge'},
+                 'ngrid_etad' :
+       {'file': 'ENM', 'dir' : 'cost_ngrid_etad', 'title': 'Efficiency all on discharge'},
                  'ngrid_scale' :
        {'file': 'ENM', 'dir' : 'cost_ngrid', 'title': 'Scaled demand, National Grid Wind.'},
     }
@@ -832,6 +835,8 @@ for key, scenario in scenarios.items():
             setting['hourly'] = 'False'
         if not 'baseload' in setting:
             setting['baseload'] = 0.0
+        if not 'etad' in setting:
+            setting['etad'] = 0
     else:
         setting = {'storage' : 'kf', 'baseload' : '0.0', 'start' : 1980, 'end': 2019, 'hourly': 'False', 'normalise' : 818387.7082191781 }
     settings[key] = setting
@@ -873,14 +878,20 @@ for key, scenario in scenarios.items():
     df['energy'] = df['wind_energy'] + df['pv_energy']
     # calculate wind energy fraction
     df['fraction'] = df['wind_energy'] / df['energy']
+    df['fraction'].fillna(0.0, inplace=True)
     # calculate the 'lost' energy
     factor = 1
     if hourly:
         factor = 24
-    eta = math.sqrt(float(settings[key]['eta']) / 100.0 )
+    if float(settings[key]['etad']) > 0:
+        etad = float(settings[key]['etad']) / 100.0
+        eta = float(settings[key]['eta']) / 100.0
+    else:
+        eta = math.sqrt(float(settings[key]['eta']) / 100.0 )
+        etad = eta
     charge = df['charge'] / ( n_years * 366.25 * factor )
     discharge = df['discharge'] / ( n_years * 366.25 * factor )
-    battery_loss =  (1 - eta) * ( discharge + (charge/eta) )
+    battery_loss = charge * ( ( 1 - eta ) / eta) + (discharge*(1-etad))
     generated = df['energy'] + df['base']
     load = 1.0
     df['lost'] = generated - load - battery_loss
@@ -927,21 +938,37 @@ if args.compare:
     for key, scenario in scenarios.items():
         label = scenario['title']
         df = dfs[key]
+        baseload = float(settings[key]['baseload'])
         # Minimum storage point for 50% excess energy from first scenario
-        edf = df[df['energy']<1.0 + args.excess]
+        # find configurations having less energy than this
+        edf = df[df['energy']<1.0 + args.excess - baseload]
         if len(edf) == 0:
             print('ERROR: {} excess got no points for {}, try {}'.format(args.excess, label, df['energy'].min() + 1 ) )
             quit()
+        # find all points that have the minimum value of storage
+        # (there could be a lot having the same value
+        #  if there are a lot, then the min_excess will have average values
+        #  of variables such as f_wind )
         min_excess = storage.min_point(edf, 'storage', 'f_wind', 'f_pv')
-        output = print_min(min_excess, '{} excess this '.format(args.excess), label, max_sl)
-        outputs.append(output)
-        if not excess_wind:
-            excess_wind = min_excess['f_wind']
-            excess_pv = min_excess['f_pv']
+        # if very low storage, then can't find min storage that generates
+        # 50% excess
+        if min_excess['storage'] <= 0.01:
+            output = print_min(min_excess, '{} excess SMALL'.format(args.excess), label, max_sl)
+        else:
+            output = print_min(min_excess, '{} excess this '.format(args.excess), label, max_sl)
+            outputs.append(output)
+            if not excess_wind:
+                excess_wind = min_excess['f_wind']
+                excess_pv = min_excess['f_pv']
 #       print('EXCESS ENERGY compare point: wind {} pv {}'.format(excess_wind, excess_pv) )
-        excess_point = storage.get_point(df, excess_wind, excess_pv, 'f_wind', 'f_pv')
-        output = print_min(excess_point, '{} excess first'.format(args.excess), label, max_sl)
-        outputs.append(output)
+        # then find points having this wind and pv capacity. 
+        # It could be that if using an average wind/pv from multiple equal
+        # storage points, that this actually has more energy than the excess??
+        # (due to the interpolation )
+            excess_point = storage.get_point(df, excess_wind, excess_pv, 'f_wind', 'f_pv')
+            output = print_min(excess_point, '{} excess first'.format(args.excess), label, max_sl)
+            outputs.append(output)
+
         # print the minimum cost point of the scenario
         min_energy = storage.min_point(df, 'cost', 'f_wind', 'f_pv')
         output = print_min(min_energy, 'minimum cost    ', label, max_sl)
@@ -1144,7 +1171,8 @@ if not args.nolines:
     plt.xlabel(axis_labels[args.sx])
     plt.ylabel(axis_labels[args.sy])
     # 2nd axis#
-    if not first and args.sx == 'f_wind' and args.sy=='f_pv':
+#   if not first and args.sx == 'f_wind' and args.sy=='f_pv':
+    if args.sx == 'f_wind' and args.sy=='f_pv':
         axx = ax.secondary_xaxis('top', functions=(cf2gw, gw2cf))
         axx.set_xlabel('Capacity GW')
         axy = ax.secondary_yaxis('right', functions=(cf2gw, gw2cf))
