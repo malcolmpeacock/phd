@@ -146,6 +146,7 @@ parser = argparse.ArgumentParser(description='Compare and plot scenarios')
 parser.add_argument('--rolling', action="store", dest="rolling", help='Rolling average window', default=0, type=int)
 parser.add_argument('--decimals', action="store", dest="decimals", help='Number of decimal places', default=2, type=int)
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--debug', action="store_true", dest="debug", help='Print extra stuff', default=False)
 parser.add_argument('--mcolour', action="store", dest="mcolour", help='Plot min point marker in black', default='black')
 parser.add_argument('--nolines', action="store_true", dest="nolines", help='Do not plot the contour lines', default=False)
 parser.add_argument('--markevery', action="store", dest="markevery", help='Marker frequency', default=1, type=int)
@@ -295,6 +296,15 @@ if args.scenario == 'hydrogenfesh':
        {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 existing heating'},
                  'hfes' : 
        {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 electrified heat 41% heat pumps'} 
+    }
+if args.scenario == 'hourlyhpev':
+    scenario_title = 'Impact of electricifcation of heating and transport'
+    scenarios = {'he' :
+       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 existing heating'},
+                 'hfes' : 
+       {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 electrified heat 41% heat pumps'},
+                 'ev' : 
+       {'file': 'ENS', 'dir' : 'hourly/gbase04ev/', 'title': 'Base load 0.4 mostly electric vehicles'} 
     }
 if args.scenario == 'zerowind':
     scenario_title = 'The impact of electrification of heating'
@@ -943,7 +953,7 @@ if args.compare:
         # find configurations having less energy than this
         edf = df[df['energy']<1.0 + args.excess - baseload]
         if len(edf) == 0:
-            print('ERROR: {} excess got no points for {}, try {}'.format(args.excess, label, df['energy'].min() + 1 ) )
+            print('ERROR: {} excess got no points for {}, try {}'.format(args.excess, label, df['energy'].min() - baseload ) )
             quit()
         # find all points that have the minimum value of storage
         # (there could be a lot having the same value
@@ -968,11 +978,15 @@ if args.compare:
             excess_point = storage.get_point(df, excess_wind, excess_pv, 'f_wind', 'f_pv')
             output = print_min(excess_point, '{} excess first'.format(args.excess), label, max_sl)
             outputs.append(output)
+            if args.debug:
+                print('DEBUG cost_gen {} cost_store {} '.format(excess_point['cost_gen'], excess_point['cost_store']))
 
         # print the minimum cost point of the scenario
         min_energy = storage.min_point(df, 'cost', 'f_wind', 'f_pv')
         output = print_min(min_energy, 'minimum cost    ', label, max_sl)
         outputs.append(output)
+        if args.debug:
+            print('DEBUG cost_gen {} cost_store {} '.format(min_energy['cost_gen'], min_energy['cost_store']))
         # print the minimum storage point of the scenario
         min_storage = storage.min_point(df, 'storage', 'f_wind', 'f_pv')
         output = print_min(min_storage, 'min storage     ', label, max_sl)

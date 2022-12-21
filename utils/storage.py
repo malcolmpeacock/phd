@@ -99,7 +99,7 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
     # linearly interpolate along wind and then pv
     else:
 #       print('storage_line for {} days '.format(storage_value) )
-        variables = ['f_wind', 'f_pv', 'storage', 'last', 'wind_energy', 'pv_energy', 'discharge', 'base', 'cost', 'charge_rate', 'discharge_rate', 'charge', 'variable_energy', 'variable', 'gw_wind', 'gw_pv', 'fraction', 'energy', 'yearly_store_min', 'yearly_store_max', 'lost', 'slost']
+        variables = ['f_wind', 'f_pv', 'storage', 'last', 'wind_energy', 'pv_energy', 'discharge', 'base', 'cost', 'cost_gen', 'cost_store', 'charge_rate', 'discharge_rate', 'charge', 'variable_energy', 'variable', 'gw_wind', 'gw_pv', 'fraction', 'energy', 'yearly_store_min', 'yearly_store_max', 'lost', 'slost']
         if variable not in variables or wind_parm not in variables or pv_parm not in variables:
             print('ERROR variable : {} not in variables list'.format(variable) )
             quit()
@@ -505,6 +505,8 @@ def generation_cost_b(config,stype,one_day,n_years=1,hourly=False,shore='both', 
     # cost per kWh ( divide by the total demand )
     # ( note paper with the cost model has in MWh )
     config['cost'] = cost_value / ( one_day * number_of_days * 1e3 )
+    config['cost_gen'] = variable_cost / ( one_day * number_of_days * 1e3 )
+    config['cost_store'] = storage_cost / ( one_day * number_of_days * 1e3 )
 
 # get the minimum energy point in a storage line
 def min_point(storage_line, variable='energy', wind_var='f_wind', pv_var='f_pv'):
@@ -529,6 +531,8 @@ def min_point(storage_line, variable='energy', wind_var='f_wind', pv_var='f_pv')
       'discharge'      : min_points['discharge'].mean(),
       'charge'         : min_points['charge'].mean(),
       'cost'           : min_points['cost'].mean(),
+      'cost_gen'       : min_points['cost_gen'].mean(),
+      'cost_store'     : min_points['cost_store'].mean(),
       'charge_rate'    : min_points['charge_rate'].mean(),
       'discharge_rate' : min_points['discharge_rate'].mean(),
       'last'           : min_points['last'].mean(),
