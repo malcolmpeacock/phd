@@ -147,7 +147,8 @@ electric = get_demand(args.year, args.espini)
 
 
 # input assumptions for reference year
-heat_that_is_electric = 0.06     # my spreadsheet from DUKES
+# heat_that_is_electric = 0.06     # my spreadsheet from DUKES
+heat_that_is_electric = 0.11     # consistent with HvH
 # remove the existing heat
 if args.input == 'noheat':
     demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{0:}Weather{0:}I-Bbdew_resistive.csv'.format(args.year)

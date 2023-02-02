@@ -60,6 +60,7 @@ def ev_series(temperature, annual_energy):
         energy = daily_energy + increase
         ev[i] = ev[i] * energy
 #   print(ev)
+#   print('EV Series. Temp len {} max {} min {} annual_energy {}'.format(len(temperature), temperature.max(), temperature.min(), annual_energy) )
     return ev
 
 
@@ -200,6 +201,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         #  Need to create a new df with the index same as heat_weather
         #  then create a 29th of Feb by interpolation between 28th and
         #  1st March and then set the data values into empty DF
+        hourly_weather = demand['temperature']
         if not hourly:
             demand = demand.resample('D').sum()
         heat_weather = demand['heat']
@@ -274,8 +276,21 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
 
         # electric transport charging
         if args.ev:
-            ev = ev_series(demand['temperature'], ev_annual_energy)
+            hourly_ev = ev_series(hourly_weather, ev_annual_energy)
+            if args.hourly:
+                ev = hourly_ev
+            else:
+                ev = hourly_ev.resample('D').sum()
+#               electric_ref = electric_ref.resample('D').sum()
+#           electric_ref.plot(color='blue', label='Historic Electric without heating {}'.format(args.reference))
+#           plt.title('Reference year Daily Electricity with heat removed')
+#           plt.xlabel('Time', fontsize=15)
+#           plt.ylabel('Electricity (Mwh) per day', fontsize=15)
+#           ev.plot(color='red', label='Electric vehicles {}'.format(args.reference))
+#           plt.legend(loc='upper right')
+#           plt.show()
             electric_ref = electric_ref + ev
+#           quit()
 
         print('Demand for {} total {} heat {}'.format(year, electric_ref.sum(), heat_added ))
 
@@ -386,7 +401,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         if args.storage == 'new':
             df, sample_hist, sample_durations = storage.storage_grid_new(all_demand, wind, pv, eta, etad, hourly, npv, nwind, step, baseload, h_input, args.constraints, args.wind, args.pv, args.days, args.threshold, variable, args.contours, args.debug)
         else:
-            df, sample_hist, sample_durations = storage.storage_grid(all_demand, wind, pv, eta, etad, hourly, npv, nwind, step, baseload, variable, h_input, args.storage, args.wind, args.pv, args.threshold, args.constraints, args.debug, args.store_max)
+            df, sample_hist, sample_durations, sample_net = storage.storage_grid(all_demand, wind, pv, eta, etad, hourly, npv, nwind, step, baseload, variable, h_input, args.storage, args.wind, args.pv, args.threshold, args.constraints, args.debug, args.store_max)
         df['base'] = df['storage'] * 0.0 + baseload
         df['variable'] = df['storage'] * 0.0 + variable
 
@@ -410,7 +425,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
                     'dec31_pv'     :    dec31_pv.values(),
                     'dec31_demand' :    dec31_demand.values()  }
     yd = pd.DataFrame(yearly_data).set_index('year')
-    return df, yd, all_demand, all_hydrogen, sample_hist, sample_durations
+    return df, yd, all_demand, all_hydrogen, sample_hist, sample_durations, sample_net
 
 # main program
 
@@ -468,6 +483,7 @@ parser.add_argument('--days', action="store", dest="days", help='Example store s
 parser.add_argument('--threshold', action="store", dest="threshold", help='Threshold for considering 2 wind values the same in new storage model', type=float, default=0.01)
 parser.add_argument('--variable', action="store", dest="variable", help='Amount of variable generation, default-0.0', type=float, default=0.0)
 parser.add_argument('--store_max', action="store", dest="store_max", help='Maximum value of storage in days, default=80.0', type=float, default=80.0)
+parser.add_argument('--heat_electric', action="store", dest="heat_electric", help='Proportion of heat in electricity demand, default=0.11', type=float, default=0.11)
 parser.add_argument('--contours', action="store", dest="contours", help='Set of values to use for contour lines', default='med')
 
 args = parser.parse_args()
@@ -555,6 +571,7 @@ print('PEAK DEMAND {} Annual Demand {} Mean Daily Demand {} Normalise Factor {}'
 
 # input assumptions for reference year
 heat_that_is_electric = 0.06     # my spreadsheet from DUKES
+heat_that_is_electric = args.heat_electric
 #   heat_that_is_heat_pumps = 0.01   # greenmatch.co.uk, renewableenergyhub.co.uk
 
 total_energy = electric_ref.sum()
@@ -571,6 +588,7 @@ if args.dmethod == 'baseline':
 
     #  To remove existing space and water heating from the electricity demand time 
     #  series for the reference year - subtract the resistive heat series
+#   print('DEBUG: heat_that_is_electric {} electric_ref max {} min {} sum {} ref_resistive_heat max {} min {} sum {}'.format(heat_that_is_electric, electric_ref.max(), electric_ref.min(), electric_ref.sum(), ref_resistive_heat.max(), ref_resistive_heat.min(), ref_resistive_heat.sum() ) )
     mod_electric_ref = electric_ref - (ref_resistive_heat * heat_that_is_electric)
     daily_electric_ref = mod_electric_ref.resample('D').sum()
 
@@ -590,14 +608,15 @@ if args.dmethod == 'baseline':
         ref_electric_hp = readers.read_copheat(demand_filename, ['electricity'])
         electric2018_withhp = mod_electric_ref + ref_electric_hp
         fes_withhp = mod_electric_ref + ref_electric_hp * 0.41
-        daily_new_2018 = electric2018_withhp.resample('D').sum()
-        daily_fes = fes_withhp.resample('D').sum()
-        daily_original_electric_with_heat.plot(color='blue', label='Historic 2018 electricity demand')
+        daily_new_2018 = electric2018_withhp.resample('D').sum() * 1e-6
+        daily_fes = fes_withhp.resample('D').sum() * 1e-6
+        daily_original_electric_with_heat_twh = daily_original_electric_with_heat * 1e-6
+        daily_original_electric_with_heat_twh.plot(color='blue', label='Historic 2018 electricity demand')
         daily_new_2018.plot(color='red', label='2018 electricity demand with all heating as heat pumps')
         daily_fes.plot(color='green', label='2018 electricity demand with 41% heating as heat pumps')
         if args.scenario == 'R':
             existing_withhp = mod_electric_ref + ref_electric_hp * heat_that_is_electric
-            daily_existing_withhp = existing_withhp.resample('D').sum()
+            daily_existing_withhp = existing_withhp.resample('D').sum() * 1e-6
             daily_existing_withhp.plot(color='purple', label='2018 electricity demand with existing heating as heat pumps')
             print('Annual Demand for Existing heat with heat pumps {} Historic {} 41% {} All {}'.format(daily_existing_withhp.sum(), daily_original_electric_with_heat.sum(), daily_fes.sum(), daily_new_2018.sum()) )
             print('Peak Demand for Existing heat with heat pumps {} Historic {} 41% {} All {}'.format(existing_withhp.max(), electric_ref.max(), fes_withhp.max(), electric2018_withhp.max()) )
@@ -911,7 +930,7 @@ else:
 
 print('Generation PV: Number of values {} mean CF {} Total {} ,  Wind: number of values {} mean CF {} Total {} '.format(len(pv), pv.mean(), pv.sum(), len(wind), wind.mean(), wind.sum() ) )
 
-df, yd, all_demand, all_hydrogen, sample_hist, sample_durations = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, args.climate, args.dmethod == 'baseline', heat_that_is_electric, normalise_factor, args.base, args.baseload, args.variable)
+df, yd, all_demand, all_hydrogen, sample_hist, sample_durations, sample_net = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, args.climate, args.dmethod == 'baseline', heat_that_is_electric, normalise_factor, args.base, args.baseload, args.variable)
 print("Max storage {} Min Storage {}".format(df['storage'].max(), df['storage'].min()) )
 
 electricChar = 'S'
@@ -932,6 +951,7 @@ all_demand.to_csv('{}/demand{}{}{}.csv'.format(output_dir, scenarioChar, climate
 all_hydrogen.to_csv('{}/hydrogen{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
 sample_hist.to_csv('{}/store{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
 sample_durations.to_csv('{}/duration{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
+sample_net.to_csv('{}/net{}{}{}.csv'.format(output_dir, scenarioChar, climateChar, electricChar))
 
 # output settings
 settings = {

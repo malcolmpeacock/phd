@@ -335,6 +335,7 @@ daily_predicted17 = predicted17.resample('D').sum()
 
 demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/2018/GBRef2018Weather2018I-Bbdew_resistive.csv'
 heat_demand2018 = readers.read_copheat(demand_filename, ['electricity', 'temperature'])
+# electricity demand if all heating were electric
 resistive_heat_2018 = heat_demand2018['electricity'] * 1e-6
 temperature_2018 = heat_demand2018['temperature']
 demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/2017/GBRef2018Weather2017I-Bbdew_resistive.csv'
@@ -350,6 +351,7 @@ print('Heat electric 2018 {} 2017 {}'.format(heat_that_is_electric_2018, heat_th
 
 # get the portion of heat the is currently electric
 electric2018_heat = resistive_heat_2018 * heat_that_is_electric_2018
+print('resistive_heat_2018 min {} max {} sum {}'.format(resistive_heat_2018.min(), resistive_heat_2018.max(), resistive_heat_2018.sum() ) )
 electric2018_no_heat = electric_2018 - electric2018_heat
 
 
@@ -378,7 +380,7 @@ daily_electric2018_heat.plot(color='red', label='Electricty used for heating 201
 daily_electric2018_no_heat.plot(color='purple', label='Electricity 2018 with heating electricity removed')
 plt.title('Removing existing heating electricity from the daily electricty demand series')
 plt.xlabel('day of the year', fontsize=15)
-plt.ylabel('Energy (Twh) per day', fontsize=15)
+plt.ylabel('Daily Electricity Demand (Twh)', fontsize=15)
 plt.legend(loc='upper center')
 plt.show()
 

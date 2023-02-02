@@ -54,6 +54,7 @@ def regression(X, y):
 parser = argparse.ArgumentParser(description='User linear regression on HDD to derive non-heat gas')
 parser.add_argument('--year', action="store", dest="year", help='Year', default='2018' )
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--temp', action="store_true", dest="temp", help='Use temperature, instead of HDD', default=False)
 parser.add_argument('--basetemp', action="store", dest="basetemp", help='Base temp for HDD.', type=float, default=14.8)
 
 args = parser.parse_args()
@@ -75,7 +76,14 @@ daily_temperature = get_temperature(args.year)
 print(daily_temperature)
 
 # heating degree days
-hdd = (args.basetemp - daily_temperature).clip(0.0)
+if args.temp:
+    hdd = daily_temperature
+    var = 'temperature'
+    xlabel = 'Temperature ( degrees C)'
+else:
+    hdd = (args.basetemp - daily_temperature).clip(0.0)
+    var = 'HDD'
+    xlabel = 'Heating Degree Days ( degrees C)'
 
 coeffs = regression(hdd.values.reshape(-1,1), gas.values)
 c0 = coeffs[0]
@@ -97,18 +105,18 @@ print('{} Heat energy {}'.format(args.year, 0.8 * gas_hdh.sum() ) )
 if args.plot:
     ax = plt.scatter(hdd.values, gas.values, color='blue', label='Daily gas demand {}'.format(args.year))
     plt.plot(hdd, y, color='red')
-    plt.title('Relationship between daily gas consumption and HDD')
-    plt.xlabel('Heat Degree Days (degrees C)', fontsize=15)
+    plt.title('Relationship between daily gas consumption and {}'.format(var))
+    plt.xlabel(xlabel, fontsize=15)
     plt.ylabel('Gas Demand (Twh) per day', fontsize=15)
     legend_elements = [Line2D([0], [0], color='red', label='Ordinary Least Squares Regression (Rd)'),
                        Line2D([0], [0], marker='o', color='blue', label='Daily gas demand {} (Gd)'.format(args.year)) ]
     plt.legend(loc='upper left', handles=legend_elements)
     plt.show()
 
-    # plot regression with hdh
+    # plot gas with heating removed
     gas.plot(color='blue', label='Daily total gas demand {} (Gd)'.format(args.year))
     base.plot(color='green', label='Daily Gas demand with heating removed (Dd)')
-    plt.title('Daily gas demand {} base using HDD'.format(args.year))
+    plt.title('Daily gas demand {} base using {}'.format(args.year, var))
     plt.xlabel('day of the year', fontsize=15)
     plt.ylabel('Gas Demand (Twh) per day', fontsize=15)
     plt.legend(loc='upper center')

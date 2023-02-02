@@ -154,6 +154,7 @@ parser.add_argument('--compare', action="store_true", dest="compare", help='Outp
 parser.add_argument('--pstore', action="store_true", dest="pstore", help='Plot the sample store history ', default=False)
 parser.add_argument('--features', action="store_true", dest="features", help='Print feature correlarions ', default=False)
 parser.add_argument('--pdemand', action="store_true", dest="pdemand", help='Plot the demand ', default=False)
+parser.add_argument('--pnet', action="store_true", dest="pnet", help='Plot the net demand ', default=False)
 parser.add_argument('--heatdiff', action="store_true", dest="heatdiff", help='Create a heat map as difference of 2 scenarios', default=False)
 parser.add_argument('--pfit', action="store_true", dest="pfit", help='Show 2d plots', default=False)
 parser.add_argument('--pmin', action="store", dest="pmin", help='Plot minimum point of given variable', default=None)
@@ -273,7 +274,7 @@ if args.scenario == 'hydrogenfesb':
        {'file': 'FNS', 'dir' : 'hydrogen/gbase00/', 'title': 'Base load 0.0 41% heat pumps'} 
     }
 if args.scenario == 'hydrogencaes':
-    scenario_title = 'The impact of electrification of heating'
+    scenario_title = 'The impact of electrification of heating (daily)'
     scenarios = {'he' :
        {'file': 'ENS', 'dir' : 'hydrogen/gbase04/', 'title': 'Storage 50% efficient. Existing heating'},
                  'hfes' : 
@@ -283,12 +284,30 @@ if args.scenario == 'hydrogencaes':
                  'cfes' : 
        {'file': 'FNS', 'dir' : 'caes/gbase04/', 'title': 'Storage 70% efficient. 41% Heat pumps'} 
     }
+if args.scenario == 'hydrogencaesh':
+    scenario_title = 'The impact of electrification of heating'
+    scenarios = {'he' :
+       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Storage 50% efficient. Existing heating'},
+                 'hfes' : 
+       {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': 'Storage 50% efficient. 41% heat pumps'},
+                 'ce' : 
+       {'file': 'ENS', 'dir' : 'caes/hbase04/', 'title': 'Storage 70% efficient. Existing heating'},
+                 'cfes' : 
+       {'file': 'FNS', 'dir' : 'caes/hbase04/', 'title': 'Storage 70% efficient. 41% Heat pumps'} 
+    }
 if args.scenario == 'hydrogenfes':
     scenario_title = 'The impact of electrification of heating'
     scenarios = {'he' :
        {'file': 'ENS', 'dir' : 'hydrogen/gbase04/', 'title': 'Base load 0.4 existing heating'},
                  'hfes' : 
-       {'file': 'FNS', 'dir' : 'hydrogen/gbase04/', 'title': 'Base load 0.4 electrified heat FES Net Zero'} 
+       {'file': 'FNS', 'dir' : 'hydrogen/gbase04/', 'title': 'Base load 0.4 41% heat pumps'} 
+    }
+if args.scenario == 'hydrogendvh':
+    scenario_title = 'Existing heating hourly vs daily'
+    scenarios = {'daily' :
+       {'file': 'ENS', 'dir' : 'hydrogen/gbase04/', 'title': 'Base load 0.4 existing heating. Daily'},
+                 'hourly' : 
+       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 existing heating. Hourly'} 
     }
 if args.scenario == 'hydrogenfesh':
     scenario_title = 'The impact of electrification of heating'
@@ -393,6 +412,11 @@ if args.scenario == 'hydrogen':
 if args.scenario == 'todayc':
     scenarios = {'var11base020' :
        {'file': 'ENS', 'dir' : 'today/var11base020/', 'title': 'Base 020 Variable generation 1.1'},
+    }
+if args.scenario == 'todayh':
+    scenario_title = 'Generation capacities of today'
+    scenarios = {'today' :
+       {'file': 'ENS', 'dir' : 'individuals/today/', 'title': 'Todays generation 2.0'},
     }
 if args.scenario == 'today':
     scenarios = {'var12base020' :
@@ -614,6 +638,17 @@ if args.scenario == 'patternh':
 #                'kf' : 
 #      {'file': 'ENS', 'dir' : 'kfwindScaled/', 'title': 'Fragaki. et. al. (onshore scaled to ninja offshore cf )'},
     }
+if args.scenario == 'patternw':
+    scenario_title = 'Wind capacity 4.0 and 8 - efficiency 80%'
+    scenarios = {'off' :
+       {'file': 'ENS', 'dir' : 'individuals/windpattern/low_off/', 'title': 'Offshore, wind=4.0 )'},
+                 'ons' : 
+       {'file': 'ENS', 'dir' : 'individuals/windpattern/low_ons/', 'title': 'Onshore scaled to offshore cf, wind=4.0'},
+                 'off2' : 
+       {'file': 'ENS', 'dir' : 'individuals/windpattern/high_off/', 'title': 'Offshore, wind=8.0'},
+                 'ons2' : 
+       {'file': 'ENS', 'dir' : 'individuals/windpattern/high_ons/', 'title': 'Onshore scaled to offshore cf, wind=8.0'},
+    }
 if args.scenario == 'shores':
     scenario_title = 'Onshore vs Offshore'
     scenarios = {'off' :
@@ -660,6 +695,18 @@ if args.scenario == 'eheat2':
        {'file': 'GNS', 'dir' : 'heatpaper', 'title': '41% heating is provided by heat pumps'},
                  'AAA' :
        {'file': 'ENS', 'dir' : 'heatpaper', 'title': '2018 with existing heating electricity'}
+    }
+if args.scenario == 'eheat3':
+    scenarios = {'BBB' :
+       {'file': 'FNS', 'dir' : 'heatpaper', 'title': '41% heating is provided by heat pumps'},
+                 'AAA' :
+       {'file': 'ENS', 'dir' : 'heatpaper', 'title': 'The heating technology of 2018'}
+    }
+if args.scenario == 'eheatev':
+    scenarios = {'BBB' :
+       {'file': 'ENS', 'dir' : 'heatpaper', 'title': '2018 Heating Technology'},
+                 'AAA' :
+       {'file': 'ENS', 'dir' : 'thesis/evs', 'title': '2018 Heating Technology with EVs'}
     }
 if args.scenario == 'hp':
     scenarios = {'GNS' :
@@ -830,6 +877,7 @@ for key, scenario in scenarios.items():
     demand.index = pd.DatetimeIndex(pd.to_datetime(demand.index).date)
 #   print(demand)
     demands[key] = demand
+
     ndays = len(demand)
     annual_energy = demand.sum() * 365 / ndays
 #   capacity = annual_energy * 1000.0 / 8760
@@ -1268,20 +1316,69 @@ if args.yearly:
     plt.legend(loc='upper left', fontsize=15)
     plt.show()
 
+if args.pnet:
+    # plot the electricity demand
+    dcolours = ['purple', 'orange', 'blue', 'green', 'red', 'brown', 'pink', 'olive', 'cyan', 'yellow', 'salmon' ]
+    count=0
+    for key, scenario in scenarios.items():
+        label = scenario['title']
+        filename = scenario['file']
+        path = '{}/{}/net{}.csv'.format(output_dir, folder, filename)
+        net = pd.read_csv(path, header=0, index_col=0, squeeze=True)
+        net.index = pd.DatetimeIndex(pd.to_datetime(net.index).date)
+        normalise_factor = float(settings[key]['normalise'])
+        demand = net * normalise_factor * 1e-6
+#   print(demand)
+
+        demand.plot(label='Net Electricity Demand {}'.format(label), color=dcolours[count] )
+        count+=1
+
+    plt.title('Daily Net Electricity demand')
+    plt.xlabel('weather year', fontsize=15)
+    plt.ylabel(' Net Electricity Demand (TWh)', fontsize=15)
+    plt.legend(loc='upper center', fontsize=15)
+    plt.show()
 
 if args.pdemand:
     # plot the electricity demand
+    dcolours = ['purple', 'orange', 'blue', 'green', 'red', 'brown', 'pink', 'olive', 'cyan', 'yellow', 'salmon' ]
+    count=0
     for key, scenario in scenarios.items():
         label = scenario['title']
         demand = demands[key]
+        normalise_factor = float(settings[key]['normalise'])
+        demand = demand * normalise_factor * 1e-6
 #   print(demand)
 
-        demand.plot(label='Electricity Demand {}'.format(label) )
+        demand.plot(label='Electricity Demand {}'.format(label), color=dcolours[count] )
+        count+=1
 
     plt.title('Daily Electricity demand')
     plt.xlabel('weather year', fontsize=15)
-    plt.ylabel('Eelectricity Demand (MWh)', fontsize=15)
+    plt.ylabel('Electricity Demand (TWh)', fontsize=15)
     plt.legend(loc='upper center', fontsize=15)
+    plt.ylim(0,2.5)
+    plt.show()
+
+if args.pdemand:
+    # plot the electricity demand
+    dcolours = ['purple', 'orange', 'blue', 'green', 'red', 'brown', 'pink', 'olive', 'cyan', 'yellow', 'salmon' ]
+    count=0
+    for key, scenario in scenarios.items():
+        label = scenario['title']
+        demand = demands[key]
+        normalise_factor = float(settings[key]['normalise'])
+        demand = demand * normalise_factor * 1e-6
+#   print(demand)
+
+        demand.plot(label='Electricity Demand {}'.format(label), color=dcolours[count] )
+        count+=1
+
+    plt.title('Daily Electricity demand')
+    plt.xlabel('weather year', fontsize=15)
+    plt.ylabel('Electricity Demand (TWh)', fontsize=15)
+    plt.legend(loc='upper center', fontsize=15)
+    plt.ylim(0,2.5)
     plt.show()
 
 # plot the hydrogen demand

@@ -236,6 +236,9 @@ def storage_grid_config(demand, wind, pv, eta, etad, hourly, base, variable, hyd
         if len(minus_rates)>0:
             discharge_rate = minus_rates.min() * -1.0
             discharge = minus_rates.sum() * -1.0
+        # NOTE - should the charge and discharge be divided by the number of 
+        #        days so they are in the same units as other energy things?
+        # no because the energy is already in days.
 
         # store at the start of the year
         yearly_store = store_hist.resample('Y').first()
@@ -257,7 +260,7 @@ def storage_grid_config(demand, wind, pv, eta, etad, hourly, base, variable, hyd
         results['yearly_store_min'].append(year_store_min)
         results['yearly_store_max'].append(year_store_max)
 
-    return store_hist
+    return store_hist, net
 
 def storage_grid(demand, wind, pv, eta, etad, hourly=False, npv=14, nwind=14, step=0.5, base=0.0, variable=0.0, hydrogen=None, method='kf', hist_wind=1.0, hist_pv=1.0, threshold=0.01, constraints='new', debug=False, store_max=60):
     print('storage_grid: demand max {} min {} mean {}'.format(demand.max(), demand.min(), demand.mean()) )
@@ -272,7 +275,7 @@ def storage_grid(demand, wind, pv, eta, etad, hourly=False, npv=14, nwind=14, st
 
     # do one example for a store history
     if hist_wind>0 or hist_pv>0:
-        sample_hist = storage_grid_config(demand, wind, pv, eta, etad, hourly, base, variable, hydrogen, method, hist_wind, hist_pv, threshold, constraints, store_max, debug, results)
+        sample_hist, sample_net = storage_grid_config(demand, wind, pv, eta, etad, hourly, base, variable, hydrogen, method, hist_wind, hist_pv, threshold, constraints, store_max, debug, results)
         if len(results['storage']) == 0:
             print('Sample wind {} pv {} no solution found'.format(hist_wind, hist_pv) )
         else:
@@ -287,14 +290,14 @@ def storage_grid(demand, wind, pv, eta, etad, hourly=False, npv=14, nwind=14, st
                 f_wind = i_wind * step
                 sys.stdout.write('\rCalculating f_pv {:.2f} f_wind {:.2f} '.format(f_pv, f_wind) )
 
-                sample_hist = storage_grid_config(demand, wind, pv, eta, etad, hourly, base, variable, hydrogen, method, f_wind, f_pv, threshold, constraints, store_max, debug, results)
+                sample_hist, sample_net = storage_grid_config(demand, wind, pv, eta, etad, hourly, base, variable, hydrogen, method, f_wind, f_pv, threshold, constraints, store_max, debug, results)
 
     # get durations for sample store history
     sample_durations = storage_duration(sample_hist)
 
     print(" ")
     df = pd.DataFrame(data=results)
-    return df, sample_hist, sample_durations
+    return df, sample_hist, sample_durations, sample_net
 
 # Shift days so that days of the week pattern is continued
 #   values         - original baseline demand.

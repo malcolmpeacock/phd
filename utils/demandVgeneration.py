@@ -1,4 +1,5 @@
 # python script to compare KFs renewable generation with Ninja and the demand
+# looks at area under the net demand curve
 
 # library stuff
 import sys

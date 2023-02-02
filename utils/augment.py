@@ -33,8 +33,8 @@ def augment(df, timed=True):
 
     # cooling degree hours ( 22 is Bloomfield et. al. )
     df['cdh'] = (df['temp'] - 22.0).clip(0.0)
-    # heating degree hours ( Bloomfield et. al. use ? )
-    df['hdh'] = (14.8 - df['temp']).clip(0.0)
+    # heating degree hours ( Bloomfield et. al. use 15.5 )
+    df['hdh'] = (15.5 - df['temp']).clip(0.0)
 
     # solar zenith at population centre of GB in Leicestershire 
     # 2011 census. ( could work this out )
