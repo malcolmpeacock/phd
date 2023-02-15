@@ -742,27 +742,29 @@ def storage_balance(demand, wind, pv, eta, etad, base, hydrogen, f_pv, f_wind, c
 
     for index, net_value in net_demand.items():
         value = net_value
-        # variable capacity generation eg biomass, gas:
-        #  if demand exceeds supply add up to a maximum of 'variable'
-        variable_supplied = 0
-        if value > 0.0:
-            variable_supplied = variable
-            value -= variable
-            if value < 0.0: 
-                variable_supplied = variable + value
-                value = 0.0
-            variable_total += variable_supplied
 
         if debug:
             print('Count {} net_value {} variable_supplied {} store {}'.format(count, net_value, variable_supplied, store))
-        # Note: both subtract because value is negative in the 2nd one!
-        if value > 0.0:        # demand exceeds supply : take from store
-                               # discharge, so divide by eta - take more out
-            store = store - value / eta_discharge
-            # stop because we don't have enough storage
-            if store<0:
-                balanced=False
-                return balanced, history, variable_total
+        # demand exceeds supply
+        if value > 0.0:   
+            # variable capacity generation eg biomass, gas:
+            #  if demand exceeds supply add up to a maximum of 'variable'
+            if variable>0:
+                variable_supplied = 0
+                variable_supplied = variable
+                value -= variable
+                if value < 0.0: 
+                    variable_supplied = variable + value
+                    value = 0.0
+                variable_total += variable_supplied
+            # Note: both subtract because value is negative in the 2nd one!
+            if value > 0.0:   # demand exceeds supply : take from store
+                              # discharge, so divide by eta - take more out
+                store = store - value / eta_discharge
+                # stop because we don't have enough storage
+                if store<0:
+                    balanced=False
+                    return balanced, history, variable_total
         else:                  # supply exceeds demand : add to store
                                # charge, so multiply by eta - put less in
             store = store - value * eta_charge
