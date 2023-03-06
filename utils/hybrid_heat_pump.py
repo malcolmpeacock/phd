@@ -54,6 +54,8 @@ for index, row in demand.iterrows():
     if heat_so_far > total_heat * percent_gas:
         break
     irow+=1
+# output the temperature - this is the threshold temperature.
+print('threshold temperature {}'.format(threshold_temperature))
 
 # gas = heat * 0.85
 # electric = 0
@@ -62,8 +64,8 @@ gas = gas.sort_index()
 print(demand)
 print(gas)
 
-# output the temperature - this is the threshold temperature.
-print('threshold temperature {}'.format(threshold_temperature))
+# reset for the thesis plot
+# threshold_temperature = 5
 
 # plot of daily
 
@@ -98,9 +100,9 @@ plt.show()
 days4_electric_hybrid = demand['electricity']
 start_time = '{}-03-14 00:00:00'.format(year)
 end_time = '{}-03-17 23:00:00'.format(year)
-days4_electric_hybrid = days4_electric_hybrid[start_time : end_time ]
-days4_electric_original = original_electric[start_time : end_time ]
-days4_gas = gas[start_time : end_time ]
+days4_electric_hybrid = days4_electric_hybrid[start_time : end_time ] * 1e-3
+days4_electric_original = original_electric[start_time : end_time ] * 1e-3
+days4_gas = gas[start_time : end_time ] * 1e-3
 days4_temperature = demand['temperature']
 days4_temperature = days4_temperature[start_time : end_time ]
 # plot:
@@ -112,13 +114,13 @@ days4_threshold = days4_temperature * 0.0 + threshold_temperature
 days4_threshold.plot(color='red',label='threshold temperature')
 # 2nd axis
 ax2 = ax1.twinx()
-ax2.set_ylabel('Demand (MWh)',color='black', fontsize=15)
+ax2.set_ylabel('Energy Demand (GWh)',color='black', fontsize=15)
 #  -the hybrid heat pump electric series
-days4_electric_hybrid.plot(ax=ax2,color='blue',label='Hybrid heat pump electricity')
+days4_electric_hybrid.plot(ax=ax2,color='blue',label='Hybrid heat pump electricity demand')
 #  -the original electric series
-days4_electric_original.plot(ax=ax2,color='green',label='Ordinary heat pump electricity')
+days4_electric_original.plot(ax=ax2,color='green',label='Ordinary heat pump electricity demand')
 #  -the hybrid heat pump gas series
-days4_gas.plot(ax=ax2,color='yellow',label='Hybrid heat pump gas')
+days4_gas.plot(ax=ax2,color='yellow',label='Hybrid heat pump gas demand')
 plt.title('{} weather hybrid heat pumps'.format(year))
 plt.xlabel('Hour of the year')
 plt.legend(loc='upper center')

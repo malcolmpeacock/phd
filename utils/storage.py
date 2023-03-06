@@ -16,6 +16,9 @@ import stats
 import readers
 #from misc import upsample_df
 
+def series_value(s):
+    return s.head().values[0]
+
 # check that the store returns to zero at least once per year
 
 def check_zero(store_hist):
@@ -464,6 +467,7 @@ def generation_cost_b(config,stype,one_day,n_years=1,hourly=False,shore='both', 
     gen_offshore = 57.5
     gen_onshore = 46
     gen_fraction = 0.5
+#   gen_fraction = 0.467
     if model == 'C':
         gen_offshore = 40.0
         gen_onshore = 44.0
@@ -482,34 +486,45 @@ def generation_cost_b(config,stype,one_day,n_years=1,hourly=False,shore='both', 
         gen_solar = 33
         gen_variable = 120
 
-    storage_kwh = days2capacity(config['storage'], one_day * 1e3, False)
+    storage_kwh = days2capacity(config['storage'], one_day * 1e3, True)
     storage_cap = storage_kwh * alpha
     if stype=='hydrogen':
-        ratec_kw = days2capacity(config['charge_rate'], one_day * 1e3, True)
-        rated_kw = days2capacity(config['discharge_rate'], one_day * 1e3, True)
+        ratec_kw = days2capacity(config['charge_rate'], one_day * 1e3, False)
+        rated_kw = days2capacity(config['discharge_rate'], one_day * 1e3, False)
         storage_pow = ratec_kw * betac + rated_kw * betad
     else:
-        rate_kw = days2capacity(config[['discharge_rate','charge_rate']].max(axis=1), one_day * 1e3, True)
-        storage_pow = rate_kw * beta
+#       rate_kw = days2capacity(config[['discharge_rate','charge_rate']].max(axis=1), one_day * 1e3, False)
+        ratec_kw = days2capacity(config['charge_rate'], one_day * 1e3, False)
+        rated_kw = days2capacity(config['discharge_rate'], one_day * 1e3, False)
+#       storage_pow = rate_kw * beta
+        storage_pow = ratec_kw * beta + rated_kw * beta
     c_store = storage_cap + storage_pow
     storage_cost = c_store * (n_years /life_time)
 
     #  variable generation costs. 
     #  base load is assumed always on so we just use the capacity
-    pv_mwh = days2energy(config['pv_energy'], one_day, number_of_days, False)
-    wind_mwh = days2energy(config['wind_energy'] , one_day , number_of_days, False)
-    base_mwh = days2energy(config['base'] , one_day , number_of_days, False)
-    variable_mwh = days2energy(config['variable'] , one_day , number_of_days, False)
+    pv_mwh = days2energy(config['pv_energy'], one_day, number_of_days, True)
+    wind_mwh = days2energy(config['wind_energy'] , one_day , number_of_days, True)
+    base_mwh = days2energy(config['base'] , one_day , number_of_days, True)
+    variable_mwh = days2energy(config['variable'] , one_day , number_of_days, True)
 
     variable_cost = (wind_mwh * gen_wind) + (pv_mwh * gen_solar) + (base_mwh * gen_base) + ( variable_mwh * gen_variable )
 
     # overall cost in £
     cost_value = variable_cost + storage_cost
+    # total energy
+    energy_per_day = one_day
+    if hourly:
+        energy_per_day = one_day * 24
+    total_energy = energy_per_day * number_of_days * 1e3
+
     # cost per kWh ( divide by the total demand )
     # ( note paper with the cost model has in MWh )
-    config['cost'] = cost_value / ( one_day * number_of_days * 1e3 )
-    config['cost_gen'] = variable_cost / ( one_day * number_of_days * 1e3 )
-    config['cost_store'] = storage_cost / ( one_day * number_of_days * 1e3 )
+    config['cost'] = cost_value / total_energy
+    config['cost_gen'] = variable_cost / total_energy
+    config['cost_store'] = storage_cost / total_energy
+    # debug
+#   print('DEBUG energy_per_day {} total_energy {} rated_kw {} ratec_kw {} storage_kwh {} pv_mwh {} wind_mwh {} base_mwh {} variable_mwh {} variable_cost {} storage_cost {} cost_value {} gen_wind {} gen_solar {} COST {} '.format(energy_per_day, total_energy, series_value(rated_kw), series_value(ratec_kw), series_value(storage_kwh), series_value(pv_mwh), series_value(wind_mwh), series_value(base_mwh), series_value(variable_mwh), series_value(variable_cost), series_value(storage_cost), series_value(cost_value), gen_wind, gen_solar, series_value(config['cost'])) )
 
 # get the minimum energy point in a storage line
 def min_point(storage_line, variable='energy', wind_var='f_wind', pv_var='f_pv'):
@@ -999,15 +1014,17 @@ def capacity2days(energy, mean_daily_energy, hourly=False):
 def days2capacity(days, mean_daily_energy, hourly=False):
     normalise_factor = mean_daily_energy
     if hourly:
-        normalise_factor = normalise_factor / 24.0
+        normalise_factor = normalise_factor * 24.0
     energy = days * normalise_factor
+#   print('DDD days2capacity normalise_factor {}'.format(normalise_factor))
     return energy
     
 def days2energy(days, mean_daily_energy, number_of_days, hourly=False):
     normalise_factor = mean_daily_energy
     if hourly:
-        normalise_factor = normalise_factor / 24.0
+        normalise_factor = normalise_factor * 24.0
     energy = days * normalise_factor * number_of_days
+#   print('DDD days2energy normalise_factor {} number_of_days {} '.format(normalise_factor, number_of_days))
     return energy
     
 # convert energy to days

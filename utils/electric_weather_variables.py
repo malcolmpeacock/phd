@@ -134,27 +134,40 @@ freqs = {'H' : 'Hourly', 'D' : 'Daily', 'W' : 'Weekly' }
 
 print('Year {} Frequency {} Input {}'.format(args.year, freqs[args.frequency], args.input) )
 
-weather_file = '/home/malcolm/uclan/output/wparms/weather_parms{}.csv'.format(args.year)
-weather = pd.read_csv(weather_file, header=0, parse_dates=[0], index_col=0) 
-weather.index = pd.DatetimeIndex(weather.index).tz_localize('UTC')
+if args.year == 'all':
+    years = ['2017', '2018', '2019']
+else:
+    years = [args.year]
+
+weather_years = []
+electric_years = []
+for year in years:
+    weather_file = '/home/malcolm/uclan/output/wparms/weather_parms{}.csv'.format(year)
+    weather = pd.read_csv(weather_file, header=0, parse_dates=[0], index_col=0) 
+    weather.index = pd.DatetimeIndex(weather.index).tz_localize('UTC')
+    weather_years.append(weather)
+
+    # Get electricity demand
+    electric = get_demand(year, args.espini)
+    electric_years.append(electric)
+
+weather = pd.concat(weather_years[year] for year in range(len(years)) )
+electric = pd.concat(electric_years[year] for year in range(len(years)) )
 
 augment.augment(weather, False)
-#weather.to_csv('/home/malcolm/uclan/output/temp/weather_ref.csv', float_format='%g')
-
-# Get electricity demand
-
-electric = get_demand(args.year, args.espini)
-
 
 # input assumptions for reference year
 # heat_that_is_electric = 0.06     # my spreadsheet from DUKES
 heat_that_is_electric = 0.11     # consistent with HvH
 # remove the existing heat
+heat_years = []
 if args.input == 'noheat':
-    demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{0:}Weather{0:}I-Bbdew_resistive.csv'.format(args.year)
-    ref_resistive = readers.read_copheat(demand_filename, ['electricity', 'temperature'])
-    ref_resistive_heat = ref_resistive['electricity'] * heat_that_is_electric
-#   ref_temperature = ref_resistive['temperature']
+    for year in years:
+        demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef2018Weather{0:}I-Bbdew_resistive.csv'.format(year)
+        ref_resistive = readers.read_copheat(demand_filename, ['electricity', 'temperature'])
+        ref_resistive_heat = ref_resistive['electricity'] * heat_that_is_electric
+        heat_years.append(ref_resistive_heat)
+    ref_resistive_heat = pd.concat(heat_years[year] for year in range(len(years)) )
 
 # Resamble to required frequency Hourly or Daily
 
@@ -189,8 +202,8 @@ if args.frequency != 'H':
             label = 'baseline'
         plt.scatter(weather[args.vplot]/1000.0, electric)
         plt.title('Relationship between {} and {} electricity demand'.format(args.vplot, label))
-        plt.xlabel('{}'.format(args.vplot), fontsize=15)
-        plt.ylabel('Energy', fontsize=15)
+        plt.xlabel('{} per day'.format(args.vplot), fontsize=15)
+        plt.ylabel('Daily Electricity Demand (TWh)', fontsize=15)
         plt.show()
 
 # correlation of the various forecasting parameters with the demand

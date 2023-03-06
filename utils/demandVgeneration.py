@@ -330,3 +330,7 @@ if args.step>0:
         plt.show()
 
         plot_net_demand(norm_ninja_both, norm_ninja_pv, 0.80, norm_existing)
+        min_e = df[df['area_e'] == df['area_e'].min() ]
+        print(min_e)
+        min_f = df[df['area_f'] == df['area_f'].min() ]
+        print(min_f)

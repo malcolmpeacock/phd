@@ -18,11 +18,12 @@ y_label = data.columns[0]
 y = data[y_label]
 print(y)
 
+markers = ['o', 'v', '+', '<', 'x', 'D', '*', 'X','o', 'v', '+', '<', 'x', 'D', '*', 'X']
 for col in range(len(data.columns)-1):
     x_label = data.columns[col+1]
     x = data[x_label]
     print(x)
-    plt.plot(x, y, label = x_label)
+    plt.plot(x, y, label = x_label, marker=markers[col+1])
 
 plt.title(args.title)
 plt.xlabel(args.xlabel, fontsize=15)
