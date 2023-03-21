@@ -602,6 +602,8 @@ if args.dmethod == 'baseline':
         plt.legend(loc='upper right')
         plt.show()
 
+
+
     # plot the 2018 series with all heat pumps vs the historic 2018
     if args.plot:
         demand_filename = '/home/malcolm/uclan/tools/python/scripts/heat/output/{0:}/GBRef{0:}Weather{0:}I-Bbdew.csv'.format(args.reference) 
@@ -627,6 +629,18 @@ if args.dmethod == 'baseline':
         plt.show()
     
         print('Historic Electric {} With all Heat Pumps added {} with 41% heat pumps {}'.format(daily_original_electric_with_heat.sum(), daily_new_2018.sum(), daily_fes.sum() ) )
+
+        if args.ev:
+            daily_original_electric_with_heat_twh.plot(color='blue', label='Historic 2018 electricity demand')
+            plt.title('Daily Electricity with existing heating and EVs')
+            plt.xlabel('Year', fontsize=15)
+            plt.ylabel('Electricity (Twh) per day', fontsize=15)
+            ev = ev_series(ref_temperature, ev_annual_energy)
+            daily_ev = ev.resample('D').sum()
+            daily_ev_twh = daily_ev * 1e-6
+            daily_ev_twh.plot(color='red', label='Electric vehicles {}'.format(args.reference))
+            plt.legend(loc='upper right')
+            plt.show()
 
 # output time series for KF
 #   timeseries_dir = '/home/malcolm/uclan/output/timeseries/'
@@ -696,10 +710,10 @@ else:
 
 if args.plot:
 
-    daily_electric_ref.plot(color='blue', label='Historic Electric without heating {}'.format(args.reference))
-    plt.title('Reference year Daily Electricity with heat removed')
+    daily_electric_ref.plot(color='blue', label='Electricty demand with heating technology of {}'.format(args.reference))
+    plt.title('Daily Electricity with existing heating and EVs')
     plt.xlabel('Year', fontsize=15)
-    plt.ylabel('Electricity (Mwh) per day', fontsize=15)
+    plt.ylabel('Electricity (Twh) per day', fontsize=15)
 #plt.legend(loc='upper right')
     if args.ev:
         ev = ev_series(ref_temperature, ev_annual_energy)

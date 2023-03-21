@@ -383,12 +383,12 @@ def configuration_cost(config):
 # Output:
 #  cost £/kWh
 
-def generation_cost(config,stype,one_day,n_years=1,hourly=False,shore='both', model='A'):
+def generation_cost(config,stype,one_day,total_energy,n_years=1,hourly=False,shore='both', model='A'):
 #   print(stype,one_day,n_years,hourly,shore,model)
     if model == 'A' :
         generation_cost_a(config,stype,one_day,n_years,hourly,shore)
     else:
-        generation_cost_b(config,stype,one_day,n_years,hourly,shore,model)
+        generation_cost_b(config,stype,one_day,total_energy,n_years,hourly,shore,model)
 
 def generation_cost_a(config,stype,one_day,n_years=1,hourly=False,shore='both', model='A'):
     # number of days
@@ -447,7 +447,7 @@ def generation_cost_a(config,stype,one_day,n_years=1,hourly=False,shore='both', 
 
 # Calculate generation cost based on [capacity v renewable gen UK]
 
-def generation_cost_b(config,stype,one_day,n_years=1,hourly=False,shore='both', model='A' ):
+def generation_cost_b(config,stype,one_day,total_energy,n_years=1,hourly=False,shore='both', model='A' ):
     # number of days
     number_of_days = n_years * 365.25
     # Fixed of storage capacity
@@ -513,10 +513,11 @@ def generation_cost_b(config,stype,one_day,n_years=1,hourly=False,shore='both', 
     # overall cost in £
     cost_value = variable_cost + storage_cost
     # total energy
-    energy_per_day = one_day
-    if hourly:
-        energy_per_day = one_day * 24
-    total_energy = energy_per_day * number_of_days * 1e3
+#   energy_per_day = one_day
+#   if hourly:
+#       energy_per_day = one_day * 24
+#   old_energy = energy_per_day * number_of_days * 1e3
+#   print('DEBUG old_energy {} total_energy {}'.format(old_energy, total_energy))
 
     # cost per kWh ( divide by the total demand )
     # ( note paper with the cost model has in MWh )
@@ -557,6 +558,7 @@ def min_point(storage_line, variable='energy', wind_var='f_wind', pv_var='f_pv')
       'wind_energy'    : min_points['wind_energy'].mean(),
       'pv_energy'      : min_points['pv_energy'].mean(),
       'variable_energy' : min_points['variable_energy'].mean(),
+      'all_energy'      : min_points['all_energy'].mean(),
       'base' : min_points['base'].mean(),
       'variable' : min_points['variable'].mean(),
       'gw_wind' : min_points['gw_wind'].mean(),

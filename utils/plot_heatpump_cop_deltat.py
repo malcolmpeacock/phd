@@ -19,8 +19,8 @@ data = pd.read_csv(filename, header=0, sep=',', index_col=0)
 
 # output plots
 
-data['ASHP_S'].plot(label='ASHP Staffel', color='blue')
-data['GSHP_S'].plot(label='GSHP Staffel', color='blue', linestyle='dotted')
+data['ASHP_S'].plot(label='ASHP Staffell', color='blue')
+data['GSHP_S'].plot(label='GSHP Staffell', color='blue', linestyle='dotted')
 data['ASHP_R'].plot(label='ASHP Ruhnau', color='red')
 data['GSHP_R'].plot(label='GSHP Ruhnau', color='red', linestyle='dotted')
 data['ASHP_F'].plot(label='ASHP Fischer', color='green')

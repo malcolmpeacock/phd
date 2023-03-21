@@ -77,6 +77,9 @@ def get_storage_line(df, storage_model, days, wind_parm='f_wind', pv_parm='f_pv'
     storage_line['fraction'] = storage_line['wind_energy'] / storage_line['energy']
     storage_line['fraction'].fillna(0.0, inplace=True)
     storage_line['cfraction'] = storage_line['f_wind'] / (storage_line['f_pv'] + storage_line['f_wind'] )
+    # NOTE: variable_energy really should be normalised in hydrogenVheatpumps
+    #       but I don't want to rerun everything!
+    storage_line['all_energy'] = storage_line['energy'] + (storage_line['variable_energy'] / 818387.7082191781) + storage_line['base']
     return storage_line
 
 def get_viable(df, last, days):
@@ -278,6 +281,13 @@ if args.scenario == 'hydrogenfesb':
                  'hfes0' : 
        {'file': 'FNS', 'dir' : 'hydrogen/gbase00/', 'title': 'Base load 0.0 41% heat pumps'} 
     }
+if args.scenario == 'hydrogenfesb03':
+    scenario_title = 'The impact of electrification of heating for difference base load'
+    scenarios = {'he3' :
+       {'file': 'ENS', 'dir' : 'hydrogen/gbase03/', 'title': 'Base load 0.3 existing heating'},
+                 'hfes3' : 
+       {'file': 'FNS', 'dir' : 'hydrogen/gbase03/', 'title': 'Base load 0.3 41% heat pumps'}
+    }
 if args.scenario == 'hydrogencaes':
     scenario_title = 'The impact of electrification of heating (daily)'
     scenarios = {'he' :
@@ -435,6 +445,7 @@ if args.scenario == 'todayh':
        {'file': 'ENS', 'dir' : 'individuals/today/', 'title': 'Todays generation 2.0'},
     }
 if args.scenario == 'today':
+    scenario_title = 'Mirgration towards higher wind and solar'
     scenarios = {'var12base020' :
        {'file': 'ENS', 'dir' : 'today/var12base020/', 'title': 'Base 020 Variable generation 1.2'},
                  'var11base020' : 
@@ -867,7 +878,8 @@ output_dir = "/home/malcolm/uclan/output"
 axis_labels = {
     'f_pv': 'Solar PV ( generation capacity in proportion to normalised demand)',
     'f_wind': 'Wind ( generation capacity in proportion to normalised demand)',
-    'energy' : 'Energy generated ( normalised to demand )',
+    'energy' : 'Renewable energy generated ( normalised to demand )',
+    'all_energy' : 'Total energy generated ( normalised to demand )',
     'fraction' : 'Wind energy fraction',
     'wind_energy' : 'Wind energy ( normalised to demand )',
     'pv_energy' : 'PV energy ( normalised to demand )',
@@ -899,6 +911,7 @@ units = {
 
 # load the demands
 demands = {}
+total_demands = {}
 capacities = {}
 settings = {}
 max_sl = 0
@@ -940,6 +953,15 @@ for key, scenario in scenarios.items():
         setting['normalise'] = args.normalise
 
     settings[key] = setting
+
+    # set total demand
+    normalise_factor = float(settings[key]['normalise'])
+    demand = demand * normalise_factor
+    hourly = settings[key]['hourly']=='True'
+    if hourly:
+        total_demands[key] = demand.sum() * 1e3
+    else:
+        total_demands[key] = demand.sum() * 1e3 * 24
 
 # Load the shares dfs
 
@@ -986,10 +1008,11 @@ for key, scenario in scenarios.items():
     if args.stype == 'none':
         df['cost'] = 0.0
     else:
-        storage.generation_cost(df, args.stype, float(settings[key]['normalise']), n_years, hourly, args.shore, args.costmodel  )
+        storage.generation_cost(df, args.stype, float(settings[key]['normalise']), total_demands[key], n_years, hourly, args.shore, args.costmodel  )
 
     # calculate energy
     df['energy'] = df['wind_energy'] + df['pv_energy']
+    df['all_energy'] = df['energy'] + (df['variable_energy'] / 818387.7082191781) + df['base']
     # calculate wind energy fraction
     df['fraction'] = df['wind_energy'] / df['energy']
     df['fraction'].fillna(0.0, inplace=True)
@@ -1390,6 +1413,7 @@ if args.pnet:
     plt.show()
 
 if args.pdemand:
+    hourly = settings[key]['hourly']=='True'
     # plot the electricity demand
     dcolours = ['purple', 'orange', 'blue', 'green', 'red', 'brown', 'pink', 'olive', 'cyan', 'yellow', 'salmon' ]
     count=0
@@ -1397,8 +1421,9 @@ if args.pdemand:
         label = scenario['title']
         demand = demands[key]
         normalise_factor = float(settings[key]['normalise'])
+        if hourly:
+            demand = demand.resample('D').sum()
         demand = demand * normalise_factor * 1e-6
-#   print(demand)
 
         demand.plot(label='Daily Electricity Demand {}'.format(label), color=dcolours[count] )
         count+=1
@@ -1407,7 +1432,7 @@ if args.pdemand:
     plt.xlabel('weather year', fontsize=15)
     plt.ylabel('Daily Electricity Demand (TWh)', fontsize=15)
     plt.legend(loc='upper center', fontsize=15)
-    plt.ylim(0,2.5)
+#   plt.ylim(0,2.5)
     plt.show()
 
 # plot the hydrogen demand
@@ -1419,14 +1444,17 @@ if args.pdemand:
         path = '{}/{}/hydrogen{}.csv'.format(output_dir, folder, filename)
         demand = pd.read_csv(path, header=0, index_col=0, squeeze=True)
         demand.index = pd.DatetimeIndex(pd.to_datetime(demand.index).date)
+        if hourly:
+            demand = demand.resample('D').sum()
         ndays = len(demand)
         print('Hydrogen demand {} for {}'.format(demand.sum() * 365 / ndays, label))
+        demand = demand * normalise_factor * 1e-6
 
         demand.plot(label='Hydrogen Demand {}'.format(label) )
 
     plt.title('Daily Hydrogen demand')
     plt.xlabel('weather year', fontsize=15)
-    plt.ylabel('Hydrogen Demand (MWh)', fontsize=15)
+    plt.ylabel('Hydrogen Demand (TWh per day)', fontsize=15)
     plt.legend(loc='upper left', fontsize=15)
     plt.show()
 

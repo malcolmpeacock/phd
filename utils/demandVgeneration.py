@@ -38,6 +38,16 @@ def curve_area(s):
     area = np.trapz(s.clip(0.0).values)
     return area
 
+# variance
+def variance(s):
+    var = s.var()
+    return var
+
+# standard deviation
+def sd(s):
+    sd = s.std()
+    return sd
+
 # Pearsons correlation coefficient
 def correlation(s1, s2):
     corr = s1.corr(s2)
@@ -289,6 +299,10 @@ if args.step>0:
     fs = []
     area_e = []
     area_f = []
+    variance_e = []
+    variance_f = []
+    sd_e = []
+    sd_f = []
     
     for fraction in np.arange(0.0,1.0+args.step, args.step):
         fs.append(fraction)
@@ -300,7 +314,11 @@ if args.step>0:
         ra.append(correlation(supply, norm_hp_all))
         area_e.append(curve_area(norm_existing - supply))
         area_f.append(curve_area(norm_hp_all - supply))
-    data = { 'fraction' : fs, 're' : re, 'ra' : ra, 'area_e' : area_e, 'area_f' : area_f }
+        variance_e.append(variance(norm_existing - supply))
+        variance_f.append(variance(norm_hp_all - supply))
+        sd_e.append(sd(norm_existing - supply))
+        sd_f.append(sd(norm_hp_all - supply))
+    data = { 'fraction' : fs, 're' : re, 'ra' : ra, 'area_e' : area_e, 'area_f' : area_f, 'variance_e': variance_e, 'variance_f': variance_f, 'sd_e' : sd_e, 'sd_f' : sd_f }
     df = pd.DataFrame(data=data)
     print(df)
     if args.plot:
@@ -329,8 +347,48 @@ if args.step>0:
         plt.legend(loc='upper center')
         plt.show()
 
+        # normalize
+        df['variance_e'] = normalize(df['variance_e'])
+        df['variance_f'] = normalize(df['variance_f'])
+        # Area under the net demand curve
+        plt.plot(df['fraction'], df['variance_e'], label='existing heating')
+        plt.plot(df['fraction'], df['variance_f'], label='all heat pumps')
+        freq = 'Daily '
+        plt.title('Wind fraction vs variance of the net demand curve')
+        plt.xlabel('Wind Capacity Fraction', fontsize=15)
+        plt.ylabel('variance of net demand curve', fontsize=15)
+        plt.legend(loc='upper center')
+        plt.show()
+
+        # normalize
+        df['sd_e'] = normalize(df['sd_e'])
+        df['sd_f'] = normalize(df['sd_f'])
+        # Area under the net demand curve
+        plt.plot(df['fraction'], df['sd_e'], label='existing heating')
+        plt.plot(df['fraction'], df['sd_f'], label='all heat pumps')
+        freq = 'Daily '
+        plt.title('Wind fraction vs standard deviation of the net demand curve')
+        plt.xlabel('Wind Capacity Fraction', fontsize=15)
+        plt.ylabel('standard deviation of net demand curve', fontsize=15)
+        plt.legend(loc='upper center')
+        plt.show()
+
         plot_net_demand(norm_ninja_both, norm_ninja_pv, 0.80, norm_existing)
+
+        print(df)
+
         min_e = df[df['area_e'] == df['area_e'].min() ]
-        print(min_e)
         min_f = df[df['area_f'] == df['area_f'].min() ]
+        print('Area under the net demand curve: ')
+        print(min_e)
+        print(min_f)
+        min_e = df[df['variance_e'] == df['variance_e'].min() ]
+        min_f = df[df['variance_f'] == df['variance_f'].min() ]
+        print('Varince of the net demand curve: ')
+        print(min_e)
+        print(min_f)
+        min_e = df[df['sd_e'] == df['sd_e'].min() ]
+        min_f = df[df['sd_f'] == df['sd_f'].min() ]
+        print('Standard deviation of the net demand curve: ')
+        print(min_e)
         print(min_f)
