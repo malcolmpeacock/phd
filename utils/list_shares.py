@@ -79,8 +79,9 @@ units = {
 
 stores={}
 durations={}
-demands={}
 hydrogens={}
+labels={}
+
 # loop round the files
 output_dir = '/home/malcolm/uclan/output/' + args.dir + '/'
 
@@ -120,6 +121,26 @@ for path in glob.glob(output_dir + 'shares*.csv'):
     if args.normalise > 0.0:
         setting['normalise'] = args.normalise
 
+    # get labels file if it is present
+    label = scenario[0:3]
+    path = output_dir + 'labels' + label + '.txt'
+    if exists(path):
+        label_file = open(path, 'r')
+        labels[label] = label_file.readline().rstrip()
+        label_file.close()
+    else:
+        labels[label] = label
+
+    # get demand
+    path = output_dir + 'demand' + scenario
+    demand = pd.read_csv(path, header=0, index_col=0, squeeze=True)
+    demand.index = pd.DatetimeIndex(pd.to_datetime(demand.index).date)
+    # set total demand
+    normalise_factor = float(setting['normalise'])
+    demand = demand * normalise_factor
+    total_demand = demand.sum() * 1e3
+    print('DEBUG {} factor {} total_demand {}'.format(scenario, normalise_factor, total_demand))
+
     # calculate efficiencies
     if float(setting['etad']) > 0:
         etad = float(setting['etad']) / 100.0
@@ -141,7 +162,7 @@ for path in glob.glob(output_dir + 'shares*.csv'):
     # for hourly this is one hours energy
     one_day = float(setting['normalise'])
     hourly = setting['hourly']=='True'
-    storage.generation_cost(df, 'caes', one_day, n_years, hourly, 'both', 'B'  )
+    storage.generation_cost(df, 'caes', one_day, total_demand, n_years, hourly, 'both', 'B'  )
 
     # calculate energy
     df['energy'] = df['wind_energy'] + df['pv_energy']
@@ -191,7 +212,7 @@ if args.pstore:
     for label,store in stores.items():
         if args.rolling >0:
             store = store.rolling(args.rolling, min_periods=1).mean()
-        store.plot(label='Store size: {}'.format(label) )
+        store.plot(label='Store size: {}'.format(labels[label]) )
 
     plt.xlabel('Time')
     plt.ylabel('Storage days')
@@ -203,7 +224,7 @@ if args.pstore:
         store_sorted = store.sort_values(ascending=False)
         if args.rolling >0:
             store_sorted = store_sorted.rolling(args.rolling, min_periods=1).mean()
-        store_sorted.plot(label='Store size: {}'.format(label), use_index=False )
+        store_sorted.plot(label='Store size: {}'.format(labels[label]), use_index=False )
 
     plt.xlabel('Time sorted by state of charge')
     plt.ylabel('State of charge (days)')
@@ -214,7 +235,7 @@ if args.pstore:
     for label,store in durations.items():
         if args.rolling >0:
             store = store.rolling(args.rolling, min_periods=1).mean()
-        store.plot(label='Store duration: {}'.format(label) )
+        store.plot(label='Store duration: {}'.format(labels[label]) )
 
     plt.xlabel('State of Charge (stored energy) in days')
     plt.ylabel('Time in days store contained this amount of energy')

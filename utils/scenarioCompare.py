@@ -185,6 +185,7 @@ parser.add_argument('--last', action="store", dest="last", help='Only include co
 parser.add_argument('--shore', action="store", dest="shore", help='Wind to base cost on both, on, off . default = both ', default='both')
 parser.add_argument('--excess', action="store", dest="excess", help='Excess value to find minimum storage against', type=float, default=0.5)
 parser.add_argument('--normalise', action="store", dest="normalise", help='Normalise factor to override the one from settings', type=float, default=0.0)
+parser.add_argument('--tenergy', action="store", dest="tenergy", help='Total energy to pass to cost calculation instead of total electricity demand', type=float, default=0.0)
 parser.add_argument('--variable', action="store", dest="variable", help='Variable to plot from scenario', default=None)
 parser.add_argument('--heat', action="store", dest="heat", help='Variable to plot a heat map of', default=None)
 parser.add_argument('--surface', action="store", dest="surface", help='Variable to plot 3d surface with', default=None)
@@ -263,7 +264,7 @@ if args.scenario == 'hydrogen30':
        {'file': 'ENS', 'dir' : 'hydrogen/hbase04eta30/', 'title': 'Base load 0.4 efficiency 30%'} 
     }
 if args.scenario == 'hydrogenfesb':
-    scenario_title = 'The impact of electrification of heating for difference base load'
+    scenario_title = 'The impact of electrification of heating for different base loads'
     scenarios = {'he7' :
        {'file': 'ENS', 'dir' : 'hydrogen/gbase07/', 'title': 'Base load 0.7 existing heating'},
                  'hfes7' : 
@@ -282,7 +283,7 @@ if args.scenario == 'hydrogenfesb':
        {'file': 'FNS', 'dir' : 'hydrogen/gbase00/', 'title': 'Base load 0.0 41% heat pumps'} 
     }
 if args.scenario == 'hydrogenfesb03':
-    scenario_title = 'The impact of electrification of heating for difference base load'
+    scenario_title = 'The impact of electrification of heating for different base loads'
     scenarios = {'he3' :
        {'file': 'ENS', 'dir' : 'hydrogen/gbase03/', 'title': 'Base load 0.3 existing heating'},
                  'hfes3' : 
@@ -298,6 +299,23 @@ if args.scenario == 'hydrogencaes':
        {'file': 'ENS', 'dir' : 'caes/gbase04/', 'title': 'Storage 70% efficient. Existing heating'},
                  'cfes' : 
        {'file': 'FNS', 'dir' : 'caes/gbase04/', 'title': 'Storage 70% efficient. 41% Heat pumps'} 
+    }
+if args.scenario == 'storagemodel50':
+    scenario_title = 'Base load 0.4 (50% round trip efficiency)'
+    scenarios = {'he' :
+       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Storage 50% efficient'}
+    }
+if args.scenario == 'storagemodel70':
+    scenario_title = 'Base load 0.4 (70% round trip efficiency)'
+    scenarios = {'ce' :
+       {'file': 'ENS', 'dir' : 'caes/hbase04/', 'title': 'Storage 70% efficient'} 
+    }
+if args.scenario == 'storagemodel':
+    scenario_title = 'Base load 0.4'
+    scenarios = {'he' :
+       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Storage 50% efficient'},
+                 'ce' : 
+       {'file': 'ENS', 'dir' : 'caes/hbase04/', 'title': 'Storage 70% efficient'} 
     }
 if args.scenario == 'hydrogencaesh':
     scenario_title = 'The impact of electrification of heating'
@@ -323,6 +341,13 @@ if args.scenario == 'hydrogendvh':
        {'file': 'ENS', 'dir' : 'hydrogen/gbase04/', 'title': 'Base load 0.4 existing heating. Daily'},
                  'hourly' : 
        {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 existing heating. Hourly'} 
+    }
+if args.scenario == 'mystorage':
+    scenario_title = 'Required UK Energy storage'
+    scenarios = {'he' :
+       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 existing heating'},
+                 'hfes' : 
+       {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 electrified heat 41% heat pumps'} 
     }
 if args.scenario == 'hydrogenfesh':
     scenario_title = 'The impact of electrification of heating'
@@ -576,6 +601,36 @@ if args.scenario == 'halfhp':
        {'file': 'ENS', 'dir' : 'allS75/', 'title': 'Existing heating 0.75'},
                  'allS85' : 
        {'file': 'HNS', 'dir' : 'allS75/', 'title': 'Half Heat Pumps 0.75'}    }
+if args.scenario == 'model_comp':
+    scenario_title = 'Compare model from this thesis with Fragaki et. al.'
+    scenarios = {'kf' :
+       {'file': 'ENS', 'dir' : 'allS85/', 'title': 'Storage model Fragaki'},
+                 'new' : 
+       {'file': 'ENS', 'dir' : 'new_fig8S85/', 'title': 'Storage model this theis'}    }
+if args.scenario == 'time_comp':
+    scenario_title = 'Compare time period from this thesis with Fragaki et. al.'
+    scenarios = {'kf' :
+       {'file': 'ENS', 'dir' : 'short_allS85/', 'title': 'Years 1984 - 2013'},
+                 'new' : 
+       {'file': 'ENS', 'dir' : 'new_fig8S85/', 'title': 'Years 1980 - 2019'}    }
+if args.scenario == 'all_comp':
+    scenario_title = 'Compare all differences from this thesis with Fragaki et. al.'
+    scenarios = {'new' :
+       {'file': 'ENS', 'dir' : 'new_fig8S85/', 'title': 'This Study Model and data'},
+                 'pv' : 
+       {'file': 'ENS', 'dir' : 'pvCompare/kf/', 'title': 'Fragaki PV'},
+                 'pvs' : 
+       {'file': 'ENS', 'dir' : 'pvCompare/kfs/', 'title': 'Fragaki PV scaled to ninja cf'},
+                 'wind' : 
+       {'file': 'ENS', 'dir' : 'kfwind/', 'title': 'Fragaki onshore wind'},
+                 'winds' : 
+       {'file': 'ENS', 'dir' : 'kfwindScaled/', 'title': 'Fragaki onshore wind scaled'},
+                 'scale' : 
+       {'file': 'ENH', 'dir' : 'dmethod/', 'title': 'Scaled historic demand'},
+                 'model' : 
+       {'file': 'ENS', 'dir' : 'allS85/', 'title': 'Method of finding Storage'},
+                 'time' : 
+       {'file': 'ENS', 'dir' : 'short_allS85/', 'title': 'Years 1984 - 2013'} }
 if args.scenario == 'mfig8':
     scenario_title = 'using this model from this study.'
     scenarios = {'allS75' :
@@ -620,15 +675,21 @@ if args.scenario == 'decadesnew':
 if args.scenario == 'historic':
     scenario_title = 'for different methods of generating electricity demand time series'
     scenarios = {'historic' :
-       {'file': 'ENH', 'dir' : ninja85, 'title': 'Historic time series'},
+       {'file': 'ENH', 'dir' : ninja85, 'title': 'Add constant to historic demand'},
                  'synthetic' : 
-       {'file': 'ENS', 'dir' : ninja85, 'title': 'Synthetic time series'}    }
+       {'file': 'ENS', 'dir' : ninja85, 'title': 'Baseline method 2018 heating technology'}    }
 if args.scenario == 'generation':
-    scenario_title = 'for onshore wind from Ninja compared to Fragaik et. al.'
+    scenario_title = 'for onshore wind : Ninja compared to Fragaik et. al.'
     scenarios = {'ninja' :
-       {'file': 'ENS', 'dir' : 'ninjaOnshore/', 'title': 'Wind Generation from Renewables Ninja (onshore)'},
+       {'file': 'ENS', 'dir' : 'ninjaOnshore/', 'title': 'Ninja (onshore)'},
                  'kf' : 
-       {'file': 'ENS', 'dir' : 'kfwind/', 'title': 'Wind Generation from Fragaki et. al. '} }
+       {'file': 'ENS', 'dir' : 'kfwind/', 'title': 'MIDAS stations (onshore)'} }
+if args.scenario == 'ninjawind':
+    scenario_title = 'Wind MIDAS Stations (onshore) vs Ninja (onshore and offshore) '
+    scenarios = {'ninja' :
+       {'file': 'ENS', 'dir' : 'ninja85/', 'title': 'Ninja'},
+                 'kf' : 
+       {'file': 'ENS', 'dir' : 'kfwind/', 'title': 'MIDAS stations'} }
 if args.scenario == 'ninjapv':
     scenario_title = 'PV MIDAS Stations vs Ninja'
     scenarios = {'ninja' :
@@ -677,13 +738,13 @@ if args.scenario == 'patternw':
        {'file': 'ENS', 'dir' : 'individuals/windpattern/high_ons/', 'title': 'Onshore scaled to offshore cf, wind=8.0'},
     }
 if args.scenario == 'shores':
-    scenario_title = 'Onshore vs Offshore'
+    scenario_title = 'Ninja Onshore vs Offshore'
     scenarios = {'off' :
-       {'file': 'ENS', 'dir' : 'ninjaOffshore/', 'title': 'Ninja (offshore)'},
+       {'file': 'ENS', 'dir' : 'ninjaOffshore/', 'title': 'Offshore'},
                  'on' : 
-       {'file': 'ENS', 'dir' : 'ninjaOnshore/', 'title': 'Ninja (onshore)'},
+       {'file': 'ENS', 'dir' : 'ninjaOnshore/', 'title': 'Onshore'},
                  'ons' : 
-       {'file': 'ENS', 'dir' : 'ninjaOnShoreScaled/', 'title': 'Ninja (onshore scaled to offshore cf)'}    }
+       {'file': 'ENS', 'dir' : 'ninjaOnShoreScaled/', 'title': 'Onshore scaled to offshore cf)'}    }
 if args.scenario == 'soc':
     scenario_title = 'Onshore vs Offshore'
     scenarios = {'off' :
@@ -706,6 +767,12 @@ if args.scenario == 'kfig8':
        {'file': 'NNH', 'dir' : 'kfig8S75/', 'title': 'Efficiency 75%'},
                  'S85' : 
        {'file': 'NNH', 'dir' : 'kfig8S85/', 'title': 'Efficiency 85%'}    }
+if args.scenario == 'kfvmp':
+    scenario_title = 'Comparison of methods from this theis with Fragaki et. al.'
+    scenarios = {'mp' :
+       {'file': 'ENS', 'dir' : 'new_fig8S85/', 'title': 'Model from this thesis'},
+                 'kf' : 
+       {'file': 'NNH', 'dir' : 'kfig8S85/', 'title': 'Model from Fragaki et. al.'}    }
 if args.scenario == 'models':
     scenarios = {'HNSh' :
        {'file': 'PNS', 'dir' : sm, 'title': 'All heat pumps, mp storage model'},
@@ -753,8 +820,8 @@ if args.scenario == 'hp1':
     }
 if args.scenario == 'zero':
     scenario_title = ' baseload 0.4 maximum and minimum storage'
-    scenarios = {'FNS' :
-       {'file': 'FNS', 'dir' : 'fouryears/zero', 'title': 'Four years with existing heat'},
+    scenarios = {'ENS' :
+       {'file': 'ENS', 'dir' : 'fouryears/zero', 'title': 'Four years with existing heating technology'},
     }
 if args.scenario == 'cost_comp':
     scenario_title = ' cost model paper comparison'
@@ -784,6 +851,17 @@ if args.scenario == 'cost_comph2':
        {'file': 'ENM', 'dir' : 'cost_ngrid2', 'title': 'Scaled demand, National Grid Wind.'},
                  'ninja_scale' :
        {'file': 'ENM', 'dir' : 'cost_hourly2', 'title': 'Scaled demand, Ninja Wind'}
+    }
+if args.scenario == 'cardenas2':
+    scenario_title = 'Comparison to Cardenas et. al. '
+    scenarios = {'thesis' :
+       {'file': 'ENS', 'dir' : 'new_fig8S85/', 'title': 'Thesis Model: 1980 - 2019 '},
+                 'years' :
+       {'file': 'ENS', 'dir' : 'cost_hourly', 'title': 'Thesis Model: 2011 - 2019'},
+                 'ngrid_wind' :
+       {'file': 'ENS', 'dir' : 'cost_ngrid', 'title': 'National Grid Wind.'},
+                 'demand_scale' :
+       {'file': 'ENM', 'dir' : 'cost_hourly2', 'title': 'Scaled demand '}
     }
 if args.scenario == 'cardenas19':
     scenario_title = 'Reproduction of Cardenas '
@@ -924,7 +1002,8 @@ for key, scenario in scenarios.items():
         max_sl = len(label)
     filename = scenario['file']
     path = '{}/{}/demand{}.csv'.format(output_dir, folder, filename)
-    demand = pd.read_csv(path, header=0, index_col=0, squeeze=True)
+#   demand = pd.read_csv(path, header=0, index_col=0, squeeze=True)
+    demand = pd.read_csv(path, header=0, index_col=0).squeeze()
     demand.index = pd.DatetimeIndex(pd.to_datetime(demand.index).date)
 #   print(demand)
     demands[key] = demand
@@ -962,6 +1041,9 @@ for key, scenario in scenarios.items():
         total_demands[key] = demand.sum() * 1e3
     else:
         total_demands[key] = demand.sum() * 1e3 * 24
+    if args.tenergy > 0.0:
+        total_demands[key] = args.tenergy
+    print('DEBUG total_demand {}'.format(total_demands[key]) )
 
 # Load the shares dfs
 
@@ -1442,7 +1524,8 @@ if args.pdemand:
         label = scenario['title']
         filename = scenario['file']
         path = '{}/{}/hydrogen{}.csv'.format(output_dir, folder, filename)
-        demand = pd.read_csv(path, header=0, index_col=0, squeeze=True)
+#       demand = pd.read_csv(path, header=0, index_col=0, squeeze=True)
+        demand = pd.read_csv(path, header=0, index_col=0)
         demand.index = pd.DatetimeIndex(pd.to_datetime(demand.index).date)
         if hourly:
             demand = demand.resample('D').sum()

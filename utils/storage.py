@@ -215,7 +215,7 @@ def storage_grid_config(demand, wind, pv, eta, etad, hourly, base, variable, hyd
     # kf  model is always viable.
     # mp  model not viable unless more energy at the end.
     # all model returns None if didn't find valid balance
-    if method == 'kf' or (method == 'mp' and store_hist.iat[-1] > 0) or (method == 'all' and store_size):
+    if method == 'kf' or (method == 'mp' and store_hist.iat[-1] > 0) or (method == 'all' and store_size) or (method == 'alld' and store_size):
         # storage size in days
         storage_days = store_size * store_factor
         # amount remaining in store at the end in days

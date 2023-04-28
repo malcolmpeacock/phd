@@ -138,10 +138,10 @@ stats.print_stats(ninja['national'], national_grid_cf, 'ninja')
 
 print("Annual Capacity factors")
 annual_cf_era = era_total.sum() / 365
-print("ERA            {0:.2f}".format(annual_cf_era))
+print("ERA            {0:.4f}".format(annual_cf_era))
 annual_cf_midas = midas_total.sum() / 365
-print("MIDAS          {0:.2f}".format(annual_cf_midas))
+print("MIDAS          {0:.4f}".format(annual_cf_midas))
 annual_cf_ninja_nat = ninja['national'].sum() / 365
-print("Ninja combined {0:.2f}".format(annual_cf_ninja_nat))
+print("Ninja combined {0:.4f}".format(annual_cf_ninja_nat))
 annual_cf_ng = national_grid_cf.sum() / 365
-print("National Grid  {0:.2f}".format(annual_cf_ng))
+print("National Grid  {0:.4f}".format(annual_cf_ng))

@@ -292,7 +292,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
             electric_ref = electric_ref + ev
 #           quit()
 
-        print('Demand for {} total {} heat {}'.format(year, electric_ref.sum(), heat_added ))
+        print('Demand for {} total {} heat added {} weather heat {}'.format(year, electric_ref.sum(), heat_added, heat_weather.sum() ))
 
         # normalise and add to the list
         demand_years.append( electric_ref / normalise_factor)
@@ -300,9 +300,14 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
 
         # December 31st values
         dec31_date = '{}-12-31'.format(year)
-        dec31_wind[year] = wind[dec31_date]
-        dec31_pv[year] = pv[dec31_date]
-        dec31_demand[year] = electric_ref[dec31_date] / normalise_factor
+        if hourly:
+            dec31_wind[year] = wind[dec31_date].sum()
+            dec31_pv[year] = pv[dec31_date].sum()
+            dec31_demand[year] = electric_ref[dec31_date].sum() / normalise_factor
+        else:
+            dec31_wind[year] = wind[dec31_date]
+            dec31_pv[year] = pv[dec31_date]
+            dec31_demand[year] = electric_ref[dec31_date] / normalise_factor
         
 
     # concantonate the demand series
@@ -946,6 +951,11 @@ print('Generation PV: Number of values {} mean CF {} Total {} ,  Wind: number of
 
 df, yd, all_demand, all_hydrogen, sample_hist, sample_durations, sample_net = supply_and_storage(mod_electric_ref, wind, pv, args.scenario, years, args.plot, hourly, args.climate, args.dmethod == 'baseline', heat_that_is_electric, normalise_factor, args.base, args.baseload, args.variable)
 print("Max storage {} Min Storage {}".format(df['storage'].max(), df['storage'].min()) )
+if hourly:
+    total_e_sum = all_demand.sum() / 24
+else:
+    total_e_sum = all_demand.sum()
+print("Total heat {:.2f} total electric {:.2f} total hydrogen {:.2f} ".format(yd['heat'].sum(), total_e_sum, all_hydrogen.sum() ) )
 
 electricChar = 'S'
 if args.dmethod == 'add':

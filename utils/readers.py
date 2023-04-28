@@ -64,7 +64,7 @@ def read_demand(filename, parm='electricity'):
     return demand
 
 def read_copheat(filename, parms=['electricity']):
-    demand = pd.read_csv(filename, header=0, parse_dates=[0], index_col=0, usecols=['time']+parms, squeeze=True )
+    demand = pd.read_csv(filename, header=0, parse_dates=[0], index_col=0, usecols=['time']+parms ).squeeze()
     return demand
 
 # Renewables ninja individual generation file
@@ -260,7 +260,7 @@ def read_advm(filename, location):
     return advm, analysis
 
 def read_espeni(filename, year=None, cols=['ELEXM_utc', 'POWER_ESPENI_MW']):
-    espini = pd.read_csv(filename, header=0, parse_dates=[0], index_col=0, usecols=cols, squeeze=True)
+    espini = pd.read_csv(filename, header=0, parse_dates=[0], index_col=0, usecols=cols).squeeze()
     # convert from half hourly to hourly
     hourly = espini.resample('H').sum() * 0.5
     hourly.index = pd.DatetimeIndex(pd.to_datetime(hourly.index.strftime("%Y-%m-%d %H") )).tz_localize('UTC')

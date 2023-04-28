@@ -28,6 +28,7 @@ args = parser.parse_args()
 
 output_dir = '/home/malcolm/uclan/output/experiments/zeropveta/'
 cases = ['offshore', 'onshores']
+case_labels = ['Offshore wind', 'Onshore scaled to offshore CF']
 etas = [30, 50, 80]
 
 markers = ['o', 'v', '+', '<', 'x', 'D', '*', 'X','o', 'v', '+', '<', 'x', 'D', '*', 'X']
@@ -50,6 +51,23 @@ plt.xlabel('Storage (days)')
 plt.ylabel('Wind capacity (days)')
 plt.legend(loc='upper right')
 plt.show()
+
+# 85% round-trip only
+
+count_case=0
+for case in cases:
+    share_file = '{}{}2/e{}/sharesENS.csv'.format(output_dir,case,str(85))
+    df = pd.read_csv(share_file, header=0, index_col=0)
+    plt.plot(df['storage'], df['f_wind'],label=case_labels[count_case], linestyle=styles[count_case], marker=markers[count_eta], color=colours[count_case])
+    count_case+=1
+
+plt.title('Wind capacity vs Storage (zero PV, 85% round-trip efficiency)')
+plt.xlabel('Storage (days)')
+plt.ylabel('Wind capacity (days)')
+plt.legend(loc='upper right')
+plt.show()
+
+#
 
 etas = [30, 40, 50, 60, 70, 80]
 results = { 'eta' : etas }
@@ -76,8 +94,8 @@ print(df)
 
 if args.plot:
     # Wind capacity for 10 days storage
-    df['offshore'].plot(label='Offshore wind, 10 days storage')
-    df['onshores'].plot(label='Onshore wind scaled, 10 days storage')
+    df['offshore'].plot(label='Offshore wind, 10 days storage', marker='o')
+    df['onshores'].plot(label='Onshore wind scaled, 10 days storage', marker='x')
 
     plt.title('Wind generation only')
     plt.xlabel('round trip efficiency')
@@ -86,8 +104,8 @@ if args.plot:
     plt.show()
 
     # Storage capacity for 7.5 days wind
-    df['offshore2'].plot(label='Offshore wind, 7.5 days wind capacity')
-    df['onshores2'].plot(label='Onshore wind scaled, 7.5 days wind capacity')
+    df['offshore2'].plot(label='Offshore wind, 7.5 days wind capacity', marker='o')
+    df['onshores2'].plot(label='Onshore wind scaled, 7.5 days wind capacity', marker='x')
 
     plt.title('Wind generation only')
     plt.xlabel('round trip efficiency')
