@@ -242,8 +242,9 @@ if args.plot:
 if args.stats:
     print('Comparison to baseline')
     stats.print_stats_header()
-    stats.print_stats(norm_kf_pv, norm_baseline,     'KF PV   ')
-    stats.print_stats(norm_kf_wind, norm_baseline,   'KF Wind ')
+    if not args.cardenas:
+        stats.print_stats(norm_kf_pv, norm_baseline,     'KF PV   ')
+        stats.print_stats(norm_kf_wind, norm_baseline,   'KF Wind ')
     stats.print_stats(norm_ninja_offshore, norm_baseline,   'Ninja offshore Wind ')
     stats.print_stats(norm_ninja_onshore, norm_baseline,   'Ninja onshore Wind ')
     stats.print_stats(norm_ninja_both, norm_baseline,   'Ninja combined Wind ')
@@ -255,8 +256,9 @@ if args.stats:
 
     print('Comparison to existing')
     stats.print_stats_header()
-    stats.print_stats(norm_kf_pv, norm_existing,     'KF PV   ')
-    stats.print_stats(norm_kf_wind, norm_existing,   'KF Wind ')
+    if not args.cardenas:
+        stats.print_stats(norm_kf_pv, norm_existing,     'KF PV   ')
+        stats.print_stats(norm_kf_wind, norm_existing,   'KF Wind ')
     stats.print_stats(norm_ninja_offshore, norm_existing,   'Ninja offshore Wind ')
     stats.print_stats(norm_ninja_onshore, norm_existing,   'Ninja onshore Wind ')
     stats.print_stats(norm_ninja_both, norm_existing,   'Ninja combined Wind ')
@@ -268,8 +270,9 @@ if args.stats:
 
     print('Comparison to 41% heat pumps')
     stats.print_stats_header()
-    stats.print_stats(norm_kf_pv, norm_hp41,     'KF PV   ')
-    stats.print_stats(norm_kf_wind, norm_hp41,   'KF Wind ')
+    if not args.cardenas:
+        stats.print_stats(norm_kf_pv, norm_hp41,     'KF PV   ')
+        stats.print_stats(norm_kf_wind, norm_hp41,   'KF Wind ')
     stats.print_stats(norm_ninja_offshore, norm_hp41,   'Ninja offshore Wind ')
     stats.print_stats(norm_ninja_onshore, norm_hp41,   'Ninja onshore Wind ')
     stats.print_stats(norm_ninja_both, norm_hp41,   'Ninja combined Wind ')
@@ -281,8 +284,9 @@ if args.stats:
 
     print('Comparison to all heat pumps')
     stats.print_stats_header()
-    stats.print_stats(norm_kf_pv, norm_hp_all,     'KF PV   ')
-    stats.print_stats(norm_kf_wind, norm_hp_all,   'KF Wind ')
+    if not args.cardenas:
+        stats.print_stats(norm_kf_pv, norm_hp_all,     'KF PV   ')
+        stats.print_stats(norm_kf_wind, norm_hp_all,   'KF Wind ')
     stats.print_stats(norm_ninja_offshore, norm_hp_all,   'Ninja offshore Wind ')
     stats.print_stats(norm_ninja_onshore, norm_hp_all,   'Ninja onshore Wind ')
     stats.print_stats(norm_ninja_both, norm_hp_all,   'Ninja combined Wind ')
