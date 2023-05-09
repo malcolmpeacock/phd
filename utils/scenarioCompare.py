@@ -94,10 +94,31 @@ def get_viable(df, last, days):
 
 #
 # Functions to convert to and from actual capacity based on demandNNH.csv
-def cf2gw(x):
-    return x * generation_capacity
-def gw2cf(x):
-    return x / generation_capacity
+def top_cf2gw(x):
+    return x * top_factor
+def top_gw2cf(x):
+    return x / top_factor
+def right_cf2gw(x):
+    return x * right_factor
+def right_gw2cf(x):
+    return x / right_factor
+
+# Functions for capacity fraction
+def top_ef2cf(x):
+    print('top_ef2cf')
+    L=[]
+    for z in x:
+        print(z)
+        y=top_ef[top_cf==z].index[0]
+        print(y)
+        L.append(y)
+    return np.array(L)
+def top_cf2ef(x):
+    print('top_cf2ef')
+    print(x)
+    y=top_cf[top_cf==x].index[0]
+    print(y)
+    return top_ef[y]
 
 # 3d scatter
 def scatter3d(ax, df, variable, title, label):
@@ -464,6 +485,11 @@ if args.scenario == 'todayc':
     scenarios = {'var11base020' :
        {'file': 'ENS', 'dir' : 'today/var11base020/', 'title': 'Base 020 Variable generation 1.1'},
     }
+if args.scenario == 'test':
+    scenario_title = 'Area under curve as a method of finding wind energy fraction'
+    scenarios = {'test' :
+       {'file': 'ENS', 'dir' : 'test/', 'title': 'Existing heating 2.0'},
+    }
 if args.scenario == 'todayh':
     scenario_title = 'Generation capacities of today'
     scenarios = {'today' :
@@ -566,9 +592,9 @@ if args.scenario == 'newold':
 if args.scenario == 'newfig8':
     scenario_title = 'Fig (8) Fragaki et. al. with model and data changes'
     scenarios = {'old' :
-       {'file': 'ENS', 'dir' : 'new_fig8S75/', 'title': 'Existing heating 0.75 Store 70% at start'},
+       {'file': 'ENS', 'dir' : 'new_fig8S75/', 'title': 'Efficiency 75%'},
                  'new' : 
-       {'file': 'ENS', 'dir' : 'new_fig8S85/', 'title': 'Existing heating 0.85 Store 70% at start'}    }
+       {'file': 'ENS', 'dir' : 'new_fig8S85/', 'title': 'Efficiency 85%'}    }
 if args.scenario == 'newfig8min':
     scenario_title = 'Fig (8) Fragaki et. al. with model and data changes'
     scenarios = {'old' :
@@ -959,6 +985,7 @@ axis_labels = {
     'energy' : 'Renewable energy generated ( normalised to demand )',
     'all_energy' : 'Total energy generated ( normalised to demand )',
     'fraction' : 'Wind energy fraction',
+    'cfraction' : 'Wind capacity fraction',
     'wind_energy' : 'Wind energy ( normalised to demand )',
     'pv_energy' : 'PV energy ( normalised to demand )',
     'storage' : 'Amount of energy storage (days)',
@@ -967,6 +994,7 @@ axis_labels = {
     'lost' : 'Lost (curtailed) energy',
     'slost' : 'Lost energy due to storage efficiency',
     'charge' : 'store charge',
+    'area' : 'Area under net demand curve',
     'discharge' : 'store discharge'
 }
 
@@ -976,6 +1004,7 @@ units = {
     'f_wind': 'days',
     'energy' : 'days',
     'fraction' : '%',
+    'cfraction' : '%',
     'wind_energy' : 'days',
     'pv_energy' : 'days',
     'storage' : 'days',
@@ -983,6 +1012,7 @@ units = {
     'last' : '%',
     'lost' : 'days',
     'slost' : 'days',
+    'area' : 'days2',
     'charge' : 'days',
     'discharge' : 'days'
 }
@@ -1049,7 +1079,8 @@ for key, scenario in scenarios.items():
 
 print('Scenario   zero  viable  total  max storage min')
 dfs={}
-gen_cap={}
+top_convert={}
+right_convert={}
 stats={}
 last_viable = pd.DataFrame()
 for key, scenario in scenarios.items():
@@ -1058,18 +1089,22 @@ for key, scenario in scenarios.items():
     filename = scenario['file']
     path = '{}/{}/shares{}.csv'.format(output_dir, folder, filename)
     df = pd.read_csv(path, header=0, index_col=0)
-    for col in ['base', 'variable', 'wind_energy', 'pv_energy', 'charge_rate', 'discharge_rate', 'variable_energy', 'yearly_store_min', 'yearly_store_max']:
+    for col in ['base', 'variable', 'wind_energy', 'pv_energy', 'charge_rate', 'discharge_rate', 'variable_energy', 'yearly_store_min', 'yearly_store_max', 'area']:
         if col not in df.columns:
             print('Warning {} missing, setting to zero'.format(col))
             df[col] = 0.0
 
 #   print(df)
 
-    wind_at_1 = df[df['f_wind']==1.0]
-    if len(wind_at_1.index) == 0 or 'gw_wind' not in wind_at_1.columns:
-        gen_cap[key] = 30
-    else:
-        gen_cap[key] = wind_at_1['gw_wind'].values[0]
+    norm_factor = float(settings[key]['normalise']) / ( 24 * 1000 )
+    top_convert[key] = norm_factor
+    right_convert[key] = norm_factor
+    if args.sx == 'wind_energy':
+        wind_cf = 0.3878
+        top_convert[key] = norm_factor / wind_cf
+    if args.sy == 'pv_energy':
+        pv_cf = 0.1085
+        right_convert[key] = norm_factor / pv_cf
 
     # calculate efficiencies
     if float(settings[key]['etad']) > 0:
@@ -1098,6 +1133,11 @@ for key, scenario in scenarios.items():
     # calculate wind energy fraction
     df['fraction'] = df['wind_energy'] / df['energy']
     df['fraction'].fillna(0.0, inplace=True)
+
+    # calculate wind capacity fraction
+    df['cfraction'] = df['f_wind'] / (df['f_pv'] + df['f_wind'] )
+    df['cfraction'].fillna(0.0, inplace=True)
+
     # calculate the 'lost' energy
     factor = 1
     if hourly:
@@ -1125,7 +1165,7 @@ for key, scenario in scenarios.items():
 
     # TODO this merges two together and then the 3rd into it so it gets a wierd result!
     if len(last_viable)>0:
-        last_viable = pd.merge(last_viable, viable, how='inner', on=['f_pv', 'f_wind'])
+        last_viable = pd.merge(last_viable, viable, how='inner', on=['f_pv', 'f_wind'], suffixes=('_x' + key, '_y' + key))
         if args.heatdiff:
             diff_variable = 'storage'
             if args.heat:
@@ -1193,6 +1233,10 @@ if args.compare:
         # print the minimum storage point of the scenario
         min_storage = storage.min_point(df, 'storage', 'f_wind', 'f_pv')
         output = print_min(min_storage, 'min storage     ', label, max_sl)
+        outputs.append(output)
+        # print the minimum area point of the scenario
+        min_area = storage.min_point(df, 'area', 'f_wind', 'f_pv')
+        output = print_min(min_area, 'min area        ', label, max_sl)
         outputs.append(output)
 
 # Plot storage heat maps
@@ -1292,7 +1336,8 @@ if not args.nolines:
         filename = scenario['file']
         label = scenario['title']
         # get the generation capacity
-        generation_capacity = gen_cap[key]
+        top_factor = top_convert[key]
+        right_factor = right_convert[key]
     #   testx = wind2gw(2)
     #   wind_parm = 'f_wind'
     #   pv_parm = 'f_pv'
@@ -1390,11 +1435,20 @@ if not args.nolines:
     # 2nd axis#
 #   if not first and args.sx == 'f_wind' and args.sy=='f_pv':
     if args.sx == 'f_wind' and args.sy=='f_pv':
-        axx = ax.secondary_xaxis('top', functions=(cf2gw, gw2cf))
+        axx = ax.secondary_xaxis('top', functions=(top_cf2gw, top_gw2cf))
         axx.set_xlabel('Capacity GW')
-        axy = ax.secondary_yaxis('right', functions=(cf2gw, gw2cf))
+        axy = ax.secondary_yaxis('right', functions=(right_cf2gw, right_gw2cf))
         axy.set_ylabel('Capacity GW')
-
+#   if args.sx == 'fraction':
+#       top_cf = storage_line['cfraction']
+#       top_ef = storage_line['fraction']
+#       axx = ax.secondary_xaxis('top', functions=(top_ef2cf, top_cf2ef))
+#       axx.set_xlabel('Capacity Fraction')
+    if args.sx == 'wind_energy' and args.sy=='pv_energy':
+        axx = ax.secondary_xaxis('top', functions=(top_cf2gw, top_gw2cf))
+        axx.set_xlabel('Capacity GW')
+        axy = ax.secondary_yaxis('right', functions=(right_cf2gw, right_gw2cf))
+        axy.set_ylabel('Capacity GW')
 
     plt.legend(loc='best', fontsize=10)
     plt.show()

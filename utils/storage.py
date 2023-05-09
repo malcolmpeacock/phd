@@ -19,6 +19,10 @@ import readers
 def series_value(s):
     return s.head().values[0]
 
+def normalise(s):
+    v = (s - s.min() ) / (s.max() - s.min() )
+    return v
+
 # check that the store returns to zero at least once per year
 
 def check_zero(store_hist):
@@ -102,7 +106,7 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
     # linearly interpolate along wind and then pv
     else:
 #       print('storage_line for {} days '.format(storage_value) )
-        variables = ['f_wind', 'f_pv', 'storage', 'last', 'wind_energy', 'pv_energy', 'discharge', 'base', 'cost', 'cost_gen', 'cost_store', 'charge_rate', 'discharge_rate', 'charge', 'variable_energy', 'variable', 'gw_wind', 'gw_pv', 'fraction', 'energy', 'yearly_store_min', 'yearly_store_max', 'lost', 'slost']
+        variables = ['f_wind', 'f_pv', 'storage', 'last', 'wind_energy', 'pv_energy', 'discharge', 'base', 'cost', 'cost_gen', 'cost_store', 'charge_rate', 'discharge_rate', 'charge', 'variable_energy', 'variable', 'gw_wind', 'gw_pv', 'fraction', 'energy', 'yearly_store_min', 'yearly_store_max', 'lost', 'slost', 'area']
         if variable not in variables or wind_parm not in variables or pv_parm not in variables:
             print('ERROR variable : {} not in variables list'.format(variable) )
             quit()
@@ -262,6 +266,8 @@ def storage_grid_config(demand, wind, pv, eta, etad, hourly, base, variable, hyd
         results['variable_energy'].append(variable_total)
         results['yearly_store_min'].append(year_store_min)
         results['yearly_store_max'].append(year_store_max)
+        norm_net = normalise(demand) - normalise(supply + base)
+        results['area'].append(np.trapz(norm_net.clip(0.0).values))
 
     return store_hist, net
 
@@ -274,7 +280,7 @@ def storage_grid(demand, wind, pv, eta, etad, hourly=False, npv=14, nwind=14, st
     else:
         store_factor = 1
 
-    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge_rate' : [], 'discharge_rate' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [], 'variable_energy' : [], 'yearly_store_min' : [], 'yearly_store_max' : [] }
+    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge_rate' : [], 'discharge_rate' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [], 'variable_energy' : [], 'yearly_store_min' : [], 'yearly_store_max' : [], 'area' : [] }
 
     # do one example for a store history
     if hist_wind>0 or hist_pv>0:
@@ -555,6 +561,7 @@ def min_point(storage_line, variable='energy', wind_var='f_wind', pv_var='f_pv')
       'charge_rate'    : min_points['charge_rate'].mean(),
       'discharge_rate' : min_points['discharge_rate'].mean(),
       'last'           : min_points['last'].mean(),
+      'area'           : min_points['area'].mean(),
       'wind_energy'    : min_points['wind_energy'].mean(),
       'pv_energy'      : min_points['pv_energy'].mean(),
       'variable_energy' : min_points['variable_energy'].mean(),
@@ -614,7 +621,9 @@ def get_point(df, wind_val, pv_val, wind_var, pv_var):
         
     new_row.loc[new_row_ind, wind_var] = wind_val
     new_row.loc[new_row_ind, pv_var] = pv_val
-    df = df.append(new_row, ignore_index = True)
+#   df = df.append(new_row, ignore_index = True)
+#   df = pd.concat([df, pd.Series([new_row])], ignore_index = True)
+    df = pd.concat([df, new_row], ignore_index = True)
     df = df.sort_values([pv_var, wind_var], ascending=[True, True])
     df = df.interpolate()
     # get the point

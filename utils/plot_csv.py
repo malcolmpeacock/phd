@@ -10,7 +10,7 @@ parser.add_argument('--xlabel', action="store", dest="xlabel", help='xlabel ', d
 args = parser.parse_args()
 
 dir = '/home/malcolm/uclan/output/csv/'
-data = pd.read_csv(dir+args.filename, header=0, squeeze=True)
+data = pd.read_csv(dir+args.filename, header=0).squeeze()
 
 print(data)
 
