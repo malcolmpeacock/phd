@@ -1,6 +1,5 @@
-# Look at the impact of 50% heat pumps on the electricity demand
-# using 40 years weather
-# and justify using the 2018 electricity series 
+# Program to simulate energy storage required for different proportions of wind
+# and solar generation and base load, using various different modelling methods.
 
 # library stuff
 import sys
@@ -131,7 +130,6 @@ def hybrid_heat_pump(heat, efficiency, threshold):
 #                      If doing daily is the max daily demand so that storage
 #                      is relative to peak daily demand energy.
 def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly, climate, use_baseline, heat_that_is_electric, normalise_factor, base, baseload, variable):
-    total_demand = 0
 
     # create the synthetic years
     if use_baseline:
@@ -174,6 +172,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
     dec31_wind={}
     dec31_pv={}
     dec31_demand={}
+    total_demand = 0
 
     # for each weather year ...
     for year in years:
@@ -294,6 +293,8 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
 
         print('Demand for {} total {} heat added {} weather heat {}'.format(year, electric_ref.sum(), heat_added, heat_weather.sum() ))
 
+        total_demand += electric_ref.sum()
+
         # normalise and add to the list
         demand_years.append( electric_ref / normalise_factor)
         hydrogen_years.append( hydrogen / normalise_factor )
@@ -309,7 +310,6 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
             dec31_pv[year] = pv[dec31_date]
             dec31_demand[year] = electric_ref[dec31_date] / normalise_factor
         
-
     # concantonate the demand series
     all_demand = pd.concat(demand_years[year] for year in range(len(years)) )
     all_hydrogen = pd.concat(hydrogen_years[year] for year in range(len(years)) )
@@ -324,12 +324,11 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         plt.legend(loc='upper right')
         plt.show()
     #
-    print('Thing    mean     total')
-    print('demand   {}       {}   '.format(all_demand.mean(), all_demand.sum()))
-    print('pv   {}       {}   '.format(pv.mean(), pv.sum()))
-    print('wind   {}       {}   '.format(wind.mean(), wind.sum()))
-#   print(total_heat_demand_years)
-#   print(mean_temp_years)
+    print('Quantity           mean     total')
+    print('Normalised demand  {:.2f}   {:.2f}'.format(all_demand.mean(), all_demand.sum() ))
+    print('Original demand    {:.2f}   {:.2f}'.format(total_demand/(len(years)*365.25), total_demand ))
+    print('pv                 {:.2f}   {:.2f}'.format(pv.mean(), pv.sum()))
+    print('wind               {:.2f}   {:.2f}'.format(wind.mean(), wind.sum()))
    
     if args.cplot:
         x=total_heat_demand_years.keys()
@@ -406,7 +405,10 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
         if args.storage == 'new':
             df, sample_hist, sample_durations = storage.storage_grid_new(all_demand, wind, pv, eta, etad, hourly, npv, nwind, step, baseload, h_input, args.constraints, args.wind, args.pv, args.days, args.threshold, variable, args.contours, args.debug)
         else:
-            df, sample_hist, sample_durations, sample_net = storage.storage_grid(all_demand, wind, pv, eta, etad, hourly, npv, nwind, step, baseload, variable, h_input, args.storage, args.wind, args.pv, args.threshold, args.constraints, args.debug, args.store_max)
+            if args.storage == 'cardenas':
+                df, sample_hist, sample_durations, sample_net = storage.storage_cardenas(all_demand, wind, pv, eta, etad, hourly, npv, nwind, step, baseload, h_input, args.constraints, args.wind, args.pv, args.days, args.threshold, variable, args.contours, args.debug)
+            else:
+                df, sample_hist, sample_durations, sample_net = storage.storage_grid(all_demand, wind, pv, eta, etad, hourly, npv, nwind, step, baseload, variable, h_input, args.storage, args.wind, args.pv, args.threshold, args.constraints, args.debug, args.store_max)
         df['base'] = df['storage'] * 0.0 + baseload
         df['variable'] = df['storage'] * 0.0 + variable
 
@@ -463,7 +465,7 @@ parser.add_argument('--ev', action="store_true", dest="ev", help='Include Electr
 parser.add_argument('--genh', action="store_true", dest="genh", help='Assume hydrogen made from electricity and stored in the same store', default=False)
 parser.add_argument('--normalise', action="store", dest="normalise", help='Method of normalise by (ie converting to days): annual, peak, kf.', default='annual', choices=['annual', 'peak', 'kf', 'scale'])
 parser.add_argument('--scale', action="store", dest="scale", help='How to scale : average (energy over the period), reference (by the reference year) or a value passed in.', default="reference")
-parser.add_argument('--storage', action="store", dest="storage", help='Storage model kf , mp, new or all', default="kf")
+parser.add_argument('--storage', action="store", dest="storage", help='Storage model kf , mp, cardenas, new or all', default="kf")
 parser.add_argument('--constraints', action="store", dest="constraints", help='Constraints on new storage model: new or old', default="new")
 parser.add_argument('--eta', action="store", dest="eta", help='Round Trip Efficiency.', type=int, default=85)
 parser.add_argument('--etad', action="store", dest="etad", help='Discharge Efficiency. If this is specified non zero, then --eta is the charge efficiency', type=int, default=0)

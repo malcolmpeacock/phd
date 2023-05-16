@@ -635,6 +635,126 @@ def get_point(df, wind_val, pv_val, wind_var, pv_var):
 #   quit()
     return row[0]
 
+# implementation of storage model from cardenas et. al. 
+
+def storage_cardenas(demand, wind, pv, eta, etad, hourly=False, npv=14, nwind=14, step=0.5, base=0.0, hydrogen=None, constraints='new', hist_wind=1.0, hist_pv=1.0, hist_days=30, threshold=0.01, variable=0.0, contours='med', debug=False):
+    
+    # For hourly the storage will be in hours, so divide by 24 to convert to 
+    # days
+    if hourly:
+        store_factor = 1 / 24
+    else:
+        store_factor = 1
+    results = { 'f_pv' : [], 'f_wind' : [], 'storage' : [], 'charge_rate' : [], 'discharge_rate' : [], 'charge' : [], 'discharge' : [], 'last' : [], 'wind_energy' : [], 'pv_energy' : [], 'dispatchable' : [] }
+
+    store_hist = pd.Series()
+    sample_net = pd.Series()
+    # For each over generation amount ...
+    for omega in [1.05, 1.1, 1.15, 1.20, 1.25]:
+        for Xw in np.arange(0, 1, 0.1):
+            check = 0
+            Xr = 1
+            Xs = 1 - Xw
+            Ed = demand.sum()
+            Eneed = ( Ed * Xr ) * ( 1 + omega )
+            while check<1:
+                Ew = wind.sum()
+                Wmod = wind * (Eneed * Xw) / Ew
+                Es = pv.sum()
+                Smod = pv * (Eneed * Xs) / Es
+                Dnet = demand - ( Wmod + Smod )
+                DnetNeg = Dnet.clip(0.0)
+                Eneg = DnetNeg.sum() * -1.0
+                Epos = Dnet.sum() - Eneg
+                Elost = (Epos / eta ) - Epos
+                Eomega = (Ed * Xr) * omega
+                check = ( (Wmod.sum() + Smod.sum() ) - Elost - Eomega ) / Ed * Xr
+                Eneed = Eneed*1.1
+                print(" omega {} Xw {} Xs {} Ew {} Es {} Epos {} Eneg {} Elost {} Eomega {} check {} Eneed {} ".format( omega, Xw , Xs , Ew , Es , Epos , Eneg , Elost , Eomega , check , Eneed) )
+            print('Profile of net demand created!')
+            # modify net demand to account for efficiency
+            DnetPos = Dnet - DnetNeg
+            DnetMod = DnetNeg + DnetPos/eta
+            store_size = 0
+            dispatchable = 0
+            K = omega * 9
+            while K>omega:
+                S = []
+                SoC = 0
+                excess = 0
+                store_size += 0.5
+                for index, net_value in DnetMod.items():
+                    value = net_value
+                    if value <0:
+                        add_amount = min(-value, store_size - SoC)
+                        SoC = SoC + add_amount
+                        excess += - ( add_amount + value )
+                    else:
+                        # Fossil fuels
+                        if value > SoC:
+                            dispatchable += (value - SoC)
+                        # Not enough to supply the demand
+                        # This can never work because the store starts 
+                        # empty
+#                       if value > SoC + dispatchable:
+#                           K=0
+#                           break;
+                        add_amount = min(value, SoC)
+                        SoC = SoC - add_amount
+                    S.append(SoC)
+#                   print('value {} SoC {} add_amount {} K {} '.format(value, SoC, add_amount, K) )
+                energy = Wmod.sum() + Smod.sum()
+                K = (energy + excess) / energy
+                sys.stdout.write('\rXw {:.2f} K {:.3f} omega {:.3f} store_size {} dispatchable {}'.format(Xw, K, omega, store_size, dispatchable) )
+#               print('K {} omega {} store_size {} dispatchable {}'.format(K, omega, store_size, dispatchable) )
+
+            print(' ')
+            print(' Capacity found: store_size {} for wind {} omega {}'.format( store_size, Xw, omega ) )
+
+            if len(store_hist)==0 or hist_wind == Xw:
+                store_hist = pd.Series(data=S, name='store_hist', index=demand.index)
+            if len(sample_net)==0 or hist_wind == Xw:
+                sample_net = Dnet
+            store_last = store_hist.iat[-1] * store_factor
+            store_remaining = store_size - store_last * -1.0
+
+            #  rate of charge or discharge in a period
+            charge=0.0
+            charge_rate=0.0
+            #  TODO discharge needs splitting into hydrogen for boilers and
+            #  hydrogen for electricity to estimate generation capacity
+            discharge=0.0
+            discharge_rate=0.0
+            rate = store_hist.diff()
+            plus_rates = rate[rate>0]
+            if len(plus_rates)>0:
+                charge_rate = plus_rates.max()
+                charge = plus_rates.sum()
+            minus_rates = rate[rate<0]
+            if len(minus_rates)>0:
+                discharge_rate = minus_rates.min() * -1.0
+                discharge = minus_rates.sum() * -1.0
+            # store the results
+            results['storage'].append(store_size * store_factor)
+            results['last'].append(store_last)
+            results['charge_rate'].append(charge_rate)
+            results['discharge_rate'].append(discharge_rate)
+            results['charge'].append(charge)
+            results['discharge'].append(discharge)
+            results['wind_energy'].append(Wmod.mean() )
+            results['pv_energy'].append(Smod.mean() )
+            f_wind = Wmod.mean() / wind.mean()
+            f_pv = Smod.mean() / pv.mean()
+            results['f_pv'].append(f_pv)
+            results['f_wind'].append(f_wind)
+            results['dispatchable'].append(dispatchable)
+
+    df = pd.DataFrame(data=results)
+    # get durations for sample store history TODO should be determiend by hist_wind, hist_pv
+    sample_hist = store_hist
+    sample_durations = storage_duration(sample_hist)
+    return df, sample_hist, sample_durations, sample_net
+
 # new storage model which finds pv and wind combinations matching a set list
 # of storage values
 
