@@ -14,13 +14,14 @@ import stats
 def read_series(name):
     dir = "/home/malcolm/uclan/output/timeseries/"
     filename = dir + name + '.csv'
-    series = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+    series = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], index_col=0).squeeze()
     return series
 
 def plot_series(series, title, xlab, ylab):
     for name, data in series.items():
-        print(name)
-        print(data)
+#       print(name)
+#       print(data)
+        print('{} total {:.2f} mean {:.2f}'.format(name, data.sum(), data.mean() ) )
         data.plot(label=name)
 
     plt.title(title)

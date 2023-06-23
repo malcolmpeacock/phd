@@ -19,9 +19,9 @@ parser.add_argument('--rolling', action="store", dest="rolling", help='Rolling a
 args = parser.parse_args()
 
 wind_filename = '/home/malcolm/uclan/data/kf/wind.txt'
-kf_wind = pd.read_csv(wind_filename, header=None, squeeze=True)
+kf_wind = pd.read_csv(wind_filename, header=None).squeeze()
 pv_filename = '/home/malcolm/uclan/data/kf/pv.txt'
-kf_pv = pd.read_csv(pv_filename, header=None, squeeze=True)
+kf_pv = pd.read_csv(pv_filename, header=None).squeeze()
 
 ninja_start = '1984-01-01 00:00:00'
 ninja_end = '2013-12-31 23:00:00'
@@ -126,7 +126,7 @@ if args.rolling >0:
 
 kf_pv_p.plot(color='blue', label='PV Generation from Fragaki et. al')
 ninja_pv_p.plot(color='red', label='PV Generation from ninja')
-plt.title('Comparison of daily UK PV genreation')
+plt.title('Comparison of daily UK PV generation')
 plt.xlabel('Time', fontsize=15)
 plt.ylabel('Energy', fontsize=15)
 plt.legend(loc='upper right')
@@ -140,7 +140,7 @@ if args.rolling >0:
 
 kf_wind_p.plot(color='blue', label='Wind Generation from Fragaki et. al ')
 ninja_wind_p.plot(color='red', label='Wind Generation from ninja')
-plt.title('Comparison of daily UK Wind genreation')
+plt.title('Comparison of daily UK Wind generation')
 plt.xlabel('Time', fontsize=15)
 plt.ylabel('Energy', fontsize=15)
 plt.legend(loc='upper right')
@@ -173,10 +173,20 @@ plt.show()
 
 # Onshore vs Offshore hourly
 
-
 stats.print_stats_header('Ninja Wind          ')
 stats.print_stats(ninja_offshore, ninja_onshore, 'offshore to onshore hourly', predr2=False)
 stats.print_stats(ninja_offshore_daily, ninja_onshore_daily, 'offshore to onshore daily')
+window = 10
+offshore = ninja_offshore_daily.rolling(10, min_periods=1).mean()
+onshore = ninja_onshore_daily.rolling(10, min_periods=1).mean()
+
+offshore.plot(color='blue', label='Offshore Wind Generation')
+onshore.plot(color='green', label='Onshore Wind Generation')
+plt.title('Daily UK Wind generation from Renewables Ninja')
+plt.xlabel('Time', fontsize=15)
+plt.ylabel('Energy', fontsize=15)
+plt.legend(loc='upper right')
+plt.show()
 
 # ninja wind monthly
 ninja_start = '1980-01-01 00:00:00'

@@ -15,6 +15,8 @@ import numpy as np
 import math
 from os.path import exists
 from skimage import measure
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures
 
 # custom code
 import stats
@@ -30,10 +32,22 @@ def days2twh(days, one_day, hourly):
 
 def get_series(name, hourly, doIndex):
     path = output_dir + name + scenario
-    store = pd.read_csv(path, header=0, index_col=0, squeeze=True)
+    store = pd.read_csv(path, header=0, index_col=0).squeeze()
     if doIndex:
         store.index = pd.DatetimeIndex(pd.to_datetime(store.index).date)
     return store
+
+def regression(X, y):
+    estimator = LinearRegression()
+#   model = make_pipeline(PolynomialFeatures(1),estimator)
+#   fit = model.fit(X, y)
+    poly = PolynomialFeatures(1)
+    pf = poly.fit_transform(X)
+    fit = estimator.fit(pf, y)
+    coeffs = estimator.coef_
+    print('Fit {} Intercept {}'.format(fit.score(pf,y), estimator.intercept_))
+#   p = fit.predict(Xp)
+    return coeffs
 
 # main program
 
@@ -42,6 +56,8 @@ parser = argparse.ArgumentParser(description='List shares files by directory')
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
 parser.add_argument('--pstore', action="store_true", dest="pstore", help='Plot the sample store history ', default=False)
 parser.add_argument('--pdemand', action="store_true", dest="pdemand", help='Plot the demand ', default=False)
+parser.add_argument('--fit', action="store_true", dest="fit", help='Try fiting a curve', default=False)
+parser.add_argument('--nolist', action="store_true", dest="nolist", help='Do not list values', default=False)
 parser.add_argument('--rolling', action="store", dest="rolling", help='Rolling average window', default=0, type=int)
 parser.add_argument('--dir', action="store", dest="dir", help='Directory', default='adhoc')
 parser.add_argument('--units', action="store", dest="units", help='Units', default='days')
@@ -85,8 +101,9 @@ labels={}
 # loop round the files
 output_dir = '/home/malcolm/uclan/output/' + args.dir + '/'
 
-print('File f_wind f_pv storage    charge discharge cost  energy  ')
-print('                 days twh   rate   rate            wind pv   fraction total discharged charged')
+if not args.nolist:
+    print('File f_wind f_pv storage    charge discharge cost  energy                                       last ')
+    print('                 days twh   rate   rate            wind pv   fraction total discharged charged')
 for path in glob.glob(output_dir + 'shares*.csv'):
     df = pd.read_csv(path, header=0, index_col=0)
     for col in ['base', 'variable', 'wind_energy', 'pv_energy', 'charge_rate', 'discharge_rate', 'variable_energy', 'yearly_store_min', 'yearly_store_max']:
@@ -133,13 +150,13 @@ for path in glob.glob(output_dir + 'shares*.csv'):
 
     # get demand
     path = output_dir + 'demand' + scenario
-    demand = pd.read_csv(path, header=0, index_col=0, squeeze=True)
+    demand = pd.read_csv(path, header=0, index_col=0).squeeze()
     demand.index = pd.DatetimeIndex(pd.to_datetime(demand.index).date)
     # set total demand
     normalise_factor = float(setting['normalise'])
     demand = demand * normalise_factor
     total_demand = demand.sum() * 1e3
-    print('DEBUG {} factor {} total_demand {}'.format(scenario, normalise_factor, total_demand))
+#   print('DEBUG {} factor {} total_demand {}'.format(scenario, normalise_factor, total_demand))
 
     # calculate efficiencies
     if float(setting['etad']) > 0:
@@ -169,8 +186,6 @@ for path in glob.glob(output_dir + 'shares*.csv'):
     # calculate wind energy fraction
     df['fraction'] = df['wind_energy'] / df['energy']
 
-
-
     # each row of dataframe
     for index, row in df.iterrows():
         # rates in days per day or days per hour
@@ -189,7 +204,13 @@ for path in glob.glob(output_dir + 'shares*.csv'):
             discharge_rate = storage.days2capacity(row['discharge_rate'], one_day * 1e-3, False)
             discharge = storage.days2energy(row['discharge'], one_day , number_of_days, True)
             charge = storage.days2energy(row['charge'], one_day , number_of_days, True)
-        print('{}  {:.1f}    {:.1f}  {:4.1f} {:4.1f} {:5.2f}  {:5.2f}      {:.3f} {:.2f} {:.2f} {:.2f}     {:.3f} {:.3f}      {:.3f}'.format(scenario[0:3], row['f_wind'], row['f_pv'], row['storage'], days2twh(row['storage'], one_day, hourly), charge_rate, discharge_rate, row['cost'], row['wind_energy'], row['pv_energy'], row['fraction'], row['energy'], discharge, charge ) )
+        if not args.nolist:
+            print('{}  {:.1f}    {:.1f}  {:4.1f} {:4.1f} {:5.2f}  {:5.2f}      {:.3f} {:.2f} {:.2f} {:.2f}     {:.3f} {:.3f}      {:.3f}  {:.2f}'.format(scenario[0:3], row['f_wind'], row['f_pv'], row['storage'], days2twh(row['storage'], one_day, hourly), charge_rate, discharge_rate, row['cost'], row['wind_energy'], row['pv_energy'], row['fraction'], row['energy'], discharge, charge, row['last'] ) )
+
+    if args.fit:
+        print('Doing regression {} '.format(scenario[0:3] ))
+        coeffs = regression(df[['wind_energy', 'pv_energy']].values, df[['storage']].values)
+        print('FIT', coeffs)
 
     if args.pstore:
 #       path = output_dir + 'store' + scenario

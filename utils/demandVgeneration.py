@@ -60,7 +60,7 @@ def normalize(df):
 
 def read_demand(filename, ninja_start, ninja_end):
     demand_dir = '/home/malcolm/uclan/output/timeseries_kf/'
-    demand = pd.read_csv(demand_dir+filename, header=0, squeeze=True)
+    demand = pd.read_csv(demand_dir+filename, header=0).squeeze()
     demand.index = pd.DatetimeIndex(demand['time'])
     demand = demand[ninja_start : ninja_end]
     return demand['demand']
@@ -69,6 +69,7 @@ def read_demand(filename, ninja_start, ninja_end):
 parser = argparse.ArgumentParser(description='Compare demand profile with generation')
 parser.add_argument('--stats', action="store_true", dest="stats", help='Print out correlation between series' , default=False)
 parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagnostic plots', default=False)
+parser.add_argument('--energy', action="store_true", dest="energy", help='Do energy frfaction, not capacity', default=False)
 parser.add_argument('--ngrid', action="store_true", dest="ngrid", help='Include national grid wind', default=False)
 parser.add_argument('--cardenas', action="store_true", dest="cardenas", help='Uses 9 years of Cardenas et. al.', default=False)
 parser.add_argument('--monthly', action="store_true", dest="monthly", help='Do monthly correlations', default=False)
@@ -169,9 +170,9 @@ print('Ninja PV daily min {} Wind daily min {}'.format(ninja_pv_daily.min(), nin
 print('Loading kf generation ...')
 
 wind_filename = '/home/malcolm/uclan/data/kf/wind.txt'
-kf_wind = pd.read_csv(wind_filename, header=None, squeeze=True)
+kf_wind = pd.read_csv(wind_filename, header=None).squeeze()
 pv_filename = '/home/malcolm/uclan/data/kf/pv.txt'
-kf_pv = pd.read_csv(pv_filename, header=None, squeeze=True)
+kf_pv = pd.read_csv(pv_filename, header=None).squeeze()
 
 kf_start = '1984-01-01'
 kf_end = '2013-12-31'
@@ -307,10 +308,20 @@ if args.step>0:
     variance_f = []
     sd_e = []
     sd_f = []
+    cf_pv = 1
+    cf_wind = 1
+    clabel = 'Wind Capacity Fraction'
+    if args.energy:
+        cf_pv = 0.1085
+        cf_wind = 0.3878
+        clabel = 'Wind Energy Fraction'
     
     for fraction in np.arange(0.0,1.0+args.step, args.step):
-        fs.append(fraction)
         supply = fraction * norm_ninja_both + (1-fraction) * norm_ninja_pv
+        ewind = fraction * cf_wind
+        epv   = (1-fraction) * cf_pv
+        efraction = ewind / ( ewind + epv )
+        fs.append(efraction)
         if args.base>0:
             supply = supply + args.base
             supply = normalize(supply)
@@ -333,7 +344,7 @@ if args.step>0:
         if args.monthly:
             freq = 'Monthly '
         plt.title('{}correlation of wind fraction in the supply to the demand'.format(freq))
-        plt.xlabel('Wind Capacity Fraction', fontsize=15)
+        plt.xlabel(clabel, fontsize=15)
         plt.ylabel('Pearsons correlation coefficient (R)', fontsize=15)
         plt.legend(loc='upper center')
         plt.show()
@@ -346,7 +357,7 @@ if args.step>0:
         plt.plot(df['fraction'], df['area_f'], label='all heat pumps')
         freq = 'Daily '
         plt.title('Wind fraction vs area under the net demand curve')
-        plt.xlabel('Wind Capacity Fraction', fontsize=15)
+        plt.xlabel(clabel, fontsize=15)
         plt.ylabel('Area under net demand curve', fontsize=15)
         plt.legend(loc='upper center')
         plt.show()
@@ -359,7 +370,7 @@ if args.step>0:
         plt.plot(df['fraction'], df['variance_f'], label='all heat pumps')
         freq = 'Daily '
         plt.title('Wind fraction vs variance of the net demand curve')
-        plt.xlabel('Wind Capacity Fraction', fontsize=15)
+        plt.xlabel(clabel, fontsize=15)
         plt.ylabel('variance of net demand curve', fontsize=15)
         plt.legend(loc='upper center')
         plt.show()
@@ -372,7 +383,7 @@ if args.step>0:
         plt.plot(df['fraction'], df['sd_f'], label='all heat pumps')
         freq = 'Daily '
         plt.title('Wind fraction vs standard deviation of the net demand curve')
-        plt.xlabel('Wind Capacity Fraction', fontsize=15)
+        plt.xlabel(clabel, fontsize=15)
         plt.ylabel('standard deviation of net demand curve', fontsize=15)
         plt.legend(loc='upper center')
         plt.show()

@@ -7,6 +7,7 @@ parser = argparse.ArgumentParser(description='Compare demand profile with genera
 parser.add_argument('--filename', action="store", dest="filename", help='Filename ' )
 parser.add_argument('--title', action="store", dest="title", help='title ', default='Title' )
 parser.add_argument('--xlabel', action="store", dest="xlabel", help='xlabel ', default='xlabel' )
+parser.add_argument('--scatter', action="store_true", dest="scatter", help='scatter ', default=False )
 args = parser.parse_args()
 
 dir = '/home/malcolm/uclan/output/csv/'
@@ -23,11 +24,15 @@ for col in range(len(data.columns)-1):
     x_label = data.columns[col+1]
     x = data[x_label]
     print(x)
-    plt.plot(x, y, label = x_label, marker=markers[col+1])
+    if args.scatter:
+        plt.scatter(x, y, label = x_label, marker=markers[col+1])
+    else:
+        plt.plot(x, y, label = x_label, marker=markers[col+1])
 
 plt.title(args.title)
 plt.xlabel(args.xlabel, fontsize=15)
 plt.ylabel(y_label, fontsize=15)
-plt.legend(loc='best')
+if not args.scatter:
+    plt.legend(loc='best')
 plt.show()
 

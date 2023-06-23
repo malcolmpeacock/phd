@@ -488,7 +488,7 @@ if args.scenario == 'todayc':
 if args.scenario == 'test':
     scenario_title = 'Area under curve as a method of finding wind energy fraction'
     scenarios = {'test' :
-       {'file': 'ENS', 'dir' : 'test/', 'title': 'Existing heating 2.0'},
+       {'file': 'ENS', 'dir' : 'test/', 'title': 'Existing heating'},
     }
 if args.scenario == 'todayh':
     scenario_title = 'Generation capacities of today'
@@ -849,6 +849,13 @@ if args.scenario == 'zero':
     scenarios = {'ENS' :
        {'file': 'ENS', 'dir' : 'fouryears/zero', 'title': 'Four years with existing heating technology'},
     }
+if args.scenario == 'zerof':
+    scenario_title = ' baseload 0.4 maximum and minimum storage'
+    scenarios = {'ENS' :
+       {'file': 'ENS', 'dir' : 'fouryears/zero', 'title': 'Four years with existing heating technology'},
+                 'FNS' :
+       {'file': 'FNS', 'dir' : 'fouryears/zero', 'title': 'Four years with 41% heat pumps'},
+    }
 if args.scenario == 'cost_comp':
     scenario_title = ' cost model paper comparison'
     scenarios = {'baseline' :
@@ -893,6 +900,11 @@ if args.scenario == 'cardenas19':
     scenario_title = 'Reproduction of Cardenas '
     scenarios = {'cost' :
        {'file': 'ENM', 'dir' : 'cost_ngrid2', 'title': 'Cardenas Reproduction'},
+    }
+if args.scenario == 'cardenasa':
+    scenario_title = 'Reproduction of Cardenas Algorithm'
+    scenarios = {'cost' :
+       {'file': 'ENM', 'dir' : 'cardenas', 'title': 'Cardenas Reproduction'},
     }
 if args.scenario == 'cost_comph_eta':
     scenario_title = 'Comparison to Cardenas et. al. '
@@ -1073,12 +1085,13 @@ for key, scenario in scenarios.items():
         total_demands[key] = demand.sum() * 1e3 * 24
     if args.tenergy > 0.0:
         total_demands[key] = args.tenergy
-    print('DEBUG total_demand {}'.format(total_demands[key]) )
 
 # Load the shares dfs
 
-print('Scenario   zero  viable  total  max storage min')
+print('Scenario   zero  viable  total           storage          ')
+print('                                max   min    mean  mean-non-zero')
 dfs={}
+warnings=[]
 top_convert={}
 right_convert={}
 stats={}
@@ -1091,7 +1104,7 @@ for key, scenario in scenarios.items():
     df = pd.read_csv(path, header=0, index_col=0)
     for col in ['base', 'variable', 'wind_energy', 'pv_energy', 'charge_rate', 'discharge_rate', 'variable_energy', 'yearly_store_min', 'yearly_store_max', 'area']:
         if col not in df.columns:
-            print('Warning {} missing, setting to zero'.format(col))
+            warnings.append('Warning {} missing, setting to zero'.format(col))
             df[col] = 0.0
 
 #   print(df)
@@ -1157,11 +1170,14 @@ for key, scenario in scenarios.items():
             viable = df[df['last']>97.0]
         else:
             viable = df
-    zero = df[df['storage']==0.0]
+    zero = viable[viable['storage']==0.0]
     dfs[key] = viable
     store_max = viable['storage'].max()
     store_min = viable['storage'].min()
-    print('{: <12}  {}  {}    {}   {:.2f}    {:.2f} '.format(key, len(zero), len(viable), len(df), store_max, store_min ) )
+    store_mean = viable['storage'].mean()
+    store_nz = viable[viable['storage']>0.0]
+    store_nz_mean = store_nz['storage'].mean()
+    print('{: <12}  {}  {}    {}   {:.2f} {:.2f} {:.2f} {:.2f} '.format(key, len(zero), len(viable), len(df), store_max, store_min, store_mean, store_nz_mean ) )
 
     # TODO this merges two together and then the 3rd into it so it gets a wierd result!
     if len(last_viable)>0:
@@ -1177,6 +1193,8 @@ for key, scenario in scenarios.items():
         last_viable = viable
     last_label = label
 
+for warning in warnings:
+    print(warning)
 
 # output comparison values
 
@@ -1367,6 +1385,10 @@ if not args.nolines:
             # print the minimum storage point in the contour
             min_storage = storage.min_point(storage_line, 'storage')
             output = print_min(min_storage, '{:.1f} days storag'.format(days), label, max_sl)
+            outputs.append(output)
+            # print the minimum storage point in the contour
+            min_area = storage.min_point(storage_line, 'area')
+            output = print_min(min_area, '{:.1f} days area  '.format(days), label, max_sl)
             outputs.append(output)
             # get the colour
             if args.dcolour:

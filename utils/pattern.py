@@ -55,10 +55,12 @@ plt.show()
 # 85% round-trip only
 
 count_case=0
+dfs=[]
 for case in cases:
     share_file = '{}{}2/e{}/sharesENS.csv'.format(output_dir,case,str(85))
     df = pd.read_csv(share_file, header=0, index_col=0)
     plt.plot(df['storage'], df['f_wind'],label=case_labels[count_case], linestyle=styles[count_case], marker=markers[count_eta], color=colours[count_case])
+    dfs.append(df)
     count_case+=1
 
 plt.title('Wind capacity vs Storage (zero PV, 85% round-trip efficiency)')
@@ -67,6 +69,14 @@ plt.ylabel('Wind capacity (days)')
 plt.legend(loc='upper right')
 plt.show()
 
+# biggest difference
+dfs0 = dfs[0]['storage']
+dfs1 = dfs[1]['storage']
+storage_diff = dfs0 - dfs1
+smax = storage_diff.idxmax()
+smin = storage_diff.idxmin()
+print('Storage max at {} for {} wind with storage0 {} storage1 {} diff {}'.format(smax, dfs[0]['f_wind'].values[smax], dfs0.values[smax], dfs1.values[smax], storage_diff.values[smax]) )
+print('Storage min at {} for {} wind with storage0 {} storage1 {} diff {}'.format(smin, dfs[0]['f_wind'].values[smin], dfs0.values[smin], dfs1.values[smin], storage_diff.values[smin]) )
 #
 
 etas = [30, 40, 50, 60, 70, 80]
