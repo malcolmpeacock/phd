@@ -78,6 +78,6 @@ for eta in etas:
     ecount+=1
 
 plt.title('Constant storage lines {} {} {}'.format(args.dir, args.electric, args.data))
-plt.xlabel('Wind ( capacity in proportion to nomarlised demand)')
-plt.ylabel('Solar PV ( capacity in proportion to normalised demand)')
+plt.xlabel('Wind Capacity ( days )')
+plt.ylabel('Solar PV Capacity ( days )')
 plt.show()

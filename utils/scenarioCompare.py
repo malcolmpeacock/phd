@@ -7,6 +7,8 @@ import pandas as pd
 from datetime import datetime
 import pytz
 import matplotlib.pyplot as plt
+import matplotlib.colors as mpc
+#import matplotlib.colormaps as mpcm
 from mpl_toolkits import mplot3d
 import statsmodels.api as sm
 import argparse
@@ -122,29 +124,57 @@ def top_cf2ef(x):
 
 # 3d scatter
 def scatter3d(ax, df, variable, title, label):
-    ax.set_xlabel(args.sx)
-    ax.set_ylabel(args.sy)
-    ax.set_zlabel(variable)
+    ax.set_xlabel(axis_labels_short[args.sx])
+    ax.set_ylabel(axis_labels_short[args.sy])
+    ax.set_zlabel(axis_labels_short[variable])
     ax.set_title(label)
 
     # Data for three-dimensional scattered points
     zdata = df[variable]
     xdata = df[args.sx]
     ydata = df[args.sy]
-#   ax.scatter3D(xdata, ydata, zdata, c=zdata, cmap='Greens');
     ax.scatter3D(xdata, ydata, zdata, c=zdata, cmap='viridis');
 
-def scatterHeat(df, variable, title, label, annotate=False):
-    ax = df.plot.scatter(x=args.sx, y=args.sy, c=variable, colormap='viridis')
+def scatterHeat(df, variable, title, label, annotate):
+    cm = plt.colormaps.get_cmap(args.cmap)
+    if args.zeroc:
+        p_data = df[df[variable]>0.01]
+        z_data = df[df[variable]<=0.01]
+    else:
+        p_data = df
+
+    if args.log:
+        norm = mpc.LogNorm()
+    else:
+        norm = mpc.Normalize()
+
+    plt.scatter(p_data[args.sx], p_data[args.sy], c=p_data[variable], cmap=cm, norm=norm)
+    ax = plt.gca()
+    if args.zeroc:
+        print('DEDBUG len {} colour {}'.format(len(z_data), args.zeroc) )
+        ax.scatter(z_data[args.sx], z_data[args.sy], color=args.zeroc )
     plt.xlabel(axis_labels[args.sx])
     plt.ylabel(axis_labels[args.sy])
-    plt.title('{} for different proportions of {} and {} ({} ).'.format(title, args.sx, args.sy, label))
     if annotate:
         for i, point in df.iterrows():
-            ax.text(point[args.sx],point[args.sy],'{:.1f}'.format(point[variable]))
-    f = plt.gcf()
-    cax = f.get_axes()[1]
-    cax.set_ylabel(title)
+            plt.text(point[args.sx],point[args.sy],'{:.1f}'.format(point[variable]))
+    # plot the colorbar
+    cb = plt.colorbar()
+    if variable == 'heat_diff':
+        cb.set_label('difference in ' + title)
+        plt.title('difference in {} ({} ).'.format(title, label))
+    else:
+        plt.title('{} ({} ).'.format(title, label))
+        cb.set_label(axis_labels[variable])
+    # 2nd axis
+#   axx = ax.secondary_xaxis('top', functions=(top_cf2gw, top_gw2cf))
+#   axx = ax[0].secondary_xaxis('top', functions=(top_cf2gw, top_gw2cf))
+    if (args.sx == 'f_wind' and args.sy=='f_pv') or (args.sx == 'wind_energy' and args.sy=='pv_energy'):
+        axx = ax.secondary_xaxis('top', functions=(top_cf2gw, top_gw2cf))
+        axx.set_xlabel('Wind Generation Capacity (GW)')
+        axy = ax.secondary_yaxis('right', functions=(right_cf2gw, right_gw2cf))
+        axy.set_ylabel('Solar PV Generation Capacity (GW)')
+
     plt.show()
 
 def min_gen_line(ax, days, marker):
@@ -193,6 +223,7 @@ parser.add_argument('--rate', action="store_true", dest="rate", help='Plot the c
 parser.add_argument('--stype', action="store", dest="stype", help='Type of Storage: pumped, hydrogen, caes.', default='pumped', choices=['pumped','hydrogen','caes', 'none' ])
 parser.add_argument('--min', action="store_true", dest="min", help='Plot the minimum generation line', default=False)
 parser.add_argument('--annotate', action="store_true", dest="annotate", help='Annotate the shares heat map', default=False)
+parser.add_argument('--log', action="store_true", dest="log", help='Use logarithmic heat map scale', default=False)
 parser.add_argument('--scenario', action="store", dest="scenario", help='Scenarion to plot', default='adhoc')
 parser.add_argument('--days', action="store", dest="days", help='Days of storage line to plot', default='0.5, 1, 3, 10, 25, 30, 40, 60' )
 parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1', choices=['interp1','threshold','smooth','sboth','both','skline'])
@@ -205,7 +236,7 @@ parser.add_argument('--adverse', action="store", dest="adverse", help='Adverse f
 parser.add_argument('--last', action="store", dest="last", help='Only include configs which ended with store: any, full, p3=3 percent full ', default='any')
 parser.add_argument('--shore', action="store", dest="shore", help='Wind to base cost on both, on, off . default = both ', default='both')
 parser.add_argument('--excess', action="store", dest="excess", help='Excess value to find minimum storage against', type=float, default=0.5)
-parser.add_argument('--normalise', action="store", dest="normalise", help='Normalise factor to override the one from settings', type=float, default=0.0)
+parser.add_argument('--normalise', action="store", dest="normalise", help='Normalise factor to override the one from settings or demand', default=None)
 parser.add_argument('--tenergy', action="store", dest="tenergy", help='Total energy to pass to cost calculation instead of total electricity demand', type=float, default=0.0)
 parser.add_argument('--variable', action="store", dest="variable", help='Variable to plot from scenario', default=None)
 parser.add_argument('--heat', action="store", dest="heat", help='Variable to plot a heat map of', default=None)
@@ -213,6 +244,8 @@ parser.add_argument('--surface', action="store", dest="surface", help='Variable 
 parser.add_argument('--pwind', action="store", dest="pwind", help='Print points with this wind proportion', default=None, type=float)
 parser.add_argument('--ppv', action="store", dest="ppv", help='Print points with this PV proportion', default=None, type=float)
 parser.add_argument('--costmodel', action="store", dest="costmodel", help='Cost model A or B', default='B', choices=['A', 'B', 'C'])
+parser.add_argument('--zeroc', action="store", dest="zeroc", help='Colour for zero', default=None)
+parser.add_argument('--cmap', action="store", dest="cmap", help='Colour map eg viridis, YlOrRd, Greens, RdYlBu ', default='viridis' )
 args = parser.parse_args()
 
 day_str = args.days.split(',')
@@ -324,7 +357,7 @@ if args.scenario == 'hydrogencaes':
 if args.scenario == 'storagemodel50':
     scenario_title = 'Base load 0.4 (50% round trip efficiency)'
     scenarios = {'he' :
-       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Storage 50% efficient'}
+       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'existing heating'}
     }
 if args.scenario == 'storagemodel70':
     scenario_title = 'Base load 0.4 (70% round trip efficiency)'
@@ -407,9 +440,11 @@ if args.scenario == 'hydrogenClimate':
     }
 if args.scenario == 'capacity':
     scenarios = {'c1' :
-       {'file': 'ENS', 'dir' : 'capacity/c50/', 'title': 'Store starts at 50%'},
+       {'file': 'ENS', 'dir' : 'capacity/f30/', 'title': 'Store starts at 30%'},
                  'c2' : 
-       {'file': 'ENS', 'dir' : 'capacity/c60/', 'title': 'Store starts at 60%'} 
+       {'file': 'ENS', 'dir' : 'capacity/f50/', 'title': 'Store starts at 50%'},
+                 'c3' : 
+       {'file': 'ENS', 'dir' : 'capacity/f70/', 'title': 'Store starts at 70%'} 
     }
 if args.scenario == 'all_model':
     scenarios = {'old' :
@@ -590,7 +625,7 @@ if args.scenario == 'newold':
                  'new' : 
        {'file': 'ENS', 'dir' : 'new_model/old/', 'title': 'Existing heating 0.75 new model with old constraints'}    }
 if args.scenario == 'newfig8':
-    scenario_title = 'Fig (8) Fragaki et. al. with model and data changes'
+    scenario_title = 'How the new model changes the results of Fig (8) from Fragaki et. al.'
     scenarios = {'old' :
        {'file': 'ENS', 'dir' : 'new_fig8S75/', 'title': 'Efficiency 75%'},
                  'new' : 
@@ -628,11 +663,11 @@ if args.scenario == 'halfhp':
                  'allS85' : 
        {'file': 'HNS', 'dir' : 'allS75/', 'title': 'Half Heat Pumps 0.75'}    }
 if args.scenario == 'model_comp':
-    scenario_title = 'Compare model from this thesis with Fragaki et. al.'
+    scenario_title = 'Compare iterative model from this thesis with max deficit model'
     scenarios = {'kf' :
-       {'file': 'ENS', 'dir' : 'allS85/', 'title': 'Storage model Fragaki'},
+       {'file': 'ENS', 'dir' : 'allS85/', 'title': 'Storage model max deficit'},
                  'new' : 
-       {'file': 'ENS', 'dir' : 'new_fig8S85/', 'title': 'Storage model this theis'}    }
+       {'file': 'ENS', 'dir' : 'new_fig8S85/', 'title': 'Storage model iterative'}    }
 if args.scenario == 'time_comp':
     scenario_title = 'Compare time period from this thesis with Fragaki et. al.'
     scenarios = {'kf' :
@@ -658,12 +693,12 @@ if args.scenario == 'all_comp':
                  'time' : 
        {'file': 'ENS', 'dir' : 'short_allS85/', 'title': 'Years 1984 - 2013'} }
 if args.scenario == 'mfig8':
-    scenario_title = 'using this model from this study.'
     scenarios = {'allS75' :
        {'file': 'ENS', 'dir' : 'allS75/', 'title': 'Existing heating 0.75'},
                  'allS85' : 
        {'file': 'ENS', 'dir' : 'allS85/', 'title': 'Existing heating 0.85'}    }
 if args.scenario == 'years':
+    scenario_title = 'Compare 4 years data with a cold year to 40 years.'
     scenarios = {'y4' :
        {'file': 'ENS', 'dir' : 'fouryears/y20092012', 'title': 'Existing heating 2009 - 2012'},
                  'y40' : 
@@ -794,7 +829,7 @@ if args.scenario == 'kfig8':
                  'S85' : 
        {'file': 'NNH', 'dir' : 'kfig8S85/', 'title': 'Efficiency 85%'}    }
 if args.scenario == 'kfvmp':
-    scenario_title = 'Comparison of methods from this theis with Fragaki et. al.'
+    scenario_title = 'Comparison of methods from this thesis with Fragaki et. al.'
     scenarios = {'mp' :
        {'file': 'ENS', 'dir' : 'new_fig8S85/', 'title': 'Model from this thesis'},
                  'kf' : 
@@ -845,9 +880,9 @@ if args.scenario == 'hp1':
        {'file': 'GNS', 'dir' : hp, 'title': '41% Heat Pumps'},
     }
 if args.scenario == 'zero':
-    scenario_title = ' baseload 0.4 maximum and minimum storage'
+    scenario_title = ' baseload 0.4, large range of generation capacities'
     scenarios = {'ENS' :
-       {'file': 'ENS', 'dir' : 'fouryears/zero', 'title': 'Four years with existing heating technology'},
+       {'file': 'ENS', 'dir' : 'fouryears/zero', 'title': 'existing heating technology'},
     }
 if args.scenario == 'zerof':
     scenario_title = ' baseload 0.4 maximum and minimum storage'
@@ -892,9 +927,9 @@ if args.scenario == 'cardenas2':
                  'years' :
        {'file': 'ENS', 'dir' : 'cost_hourly', 'title': 'Thesis Model: 2011 - 2019'},
                  'ngrid_wind' :
-       {'file': 'ENS', 'dir' : 'cost_ngrid', 'title': 'National Grid Wind.'},
+                 {'file': 'ENS', 'dir' : 'cost_ngrid', 'title': 'National Grid Wind: 2011 - 2019'},
                  'demand_scale' :
-       {'file': 'ENM', 'dir' : 'cost_hourly2', 'title': 'Scaled demand '}
+                 {'file': 'ENM', 'dir' : 'cost_hourly2', 'title': 'Scaled demand: 2011 - 2019'}
     }
 if args.scenario == 'cardenas19':
     scenario_title = 'Reproduction of Cardenas '
@@ -992,15 +1027,34 @@ output_dir = "/home/malcolm/uclan/output"
 
 # variables and axis labels
 axis_labels = {
-    'f_pv': 'Solar PV ( generation capacity in proportion to normalised demand)',
-    'f_wind': 'Wind ( generation capacity in proportion to normalised demand)',
-    'energy' : 'Renewable energy generated ( normalised to demand )',
-    'all_energy' : 'Total energy generated ( normalised to demand )',
+    'f_pv': 'Solar PV generation capacity (days)',
+    'f_wind': 'Wind generation capacity (days)',
+    'energy' : 'Renewable energy generated ( in proportion to load )',
+    'all_energy' : 'Total energy generated ( in proportion to load )',
     'fraction' : 'Wind energy fraction',
     'cfraction' : 'Wind capacity fraction',
-    'wind_energy' : 'Wind energy ( normalised to demand )',
-    'pv_energy' : 'PV energy ( normalised to demand )',
+    'wind_energy' : 'Wind energy ( days )',
+    'pv_energy' : 'PV energy ( days )',
     'storage' : 'Amount of energy storage (days)',
+    'cost' : 'cost ( £/Kwh )',
+    'last' : 'store level % fill at end',
+    'lost' : 'Lost (curtailed) energy',
+    'slost' : 'Lost energy due to storage efficiency',
+    'charge' : 'store charge',
+    'area' : 'Area under net demand curve',
+    'discharge' : 'store discharge'
+}
+# variables and axis labels
+axis_labels_short = {
+    'f_pv': 'Solar PV capacity (days)',
+    'f_wind': 'Wind capacity (days)',
+    'energy' : 'Renewable energy generated ( in proportion to load )',
+    'all_energy' : 'Total energy generated ( in proportion to load )',
+    'fraction' : 'Wind energy fraction',
+    'cfraction' : 'Wind capacity fraction',
+    'wind_energy' : 'Wind energy ( days )',
+    'pv_energy' : 'PV energy ( days )',
+    'storage' : 'energy storage (days)',
     'cost' : 'cost ( £/Kwh )',
     'last' : 'store level % fill at end',
     'lost' : 'Lost (curtailed) energy',
@@ -1070,13 +1124,23 @@ for key, scenario in scenarios.items():
     else:
         setting = {'storage' : 'kf', 'baseload' : '0.0', 'start' : 1980, 'end': 2019, 'hourly': 'False', 'normalise' : 818387.7082191781, 'etad' : 0.0, 'eta' : 0.80 }
     # Override normalise factor if requested.
-    if args.normalise > 0.0:
-        setting['normalise'] = args.normalise
+    normalise_mean = 1.0
+    if args.normalise:
+        if args.normalise == 'demand':
+            normalise_mean = demand.mean()
+            normalise_factor = float(setting['normalise']) / normalise_mean
+        else:
+            normalise_factor = float(args.normalise)
+        print('Normalise mean {} Factor Set to {} for {} '.format(normalise_mean, normalise_factor, key) )
+        setting['normalise'] = normalise_factor
+    else:
+        normalise_factor = float(setting['normalise'])
+        print('Normalise Factor Left at {} for {} '.format(normalise_factor, key) )
 
+    setting['normalise_mean'] = normalise_mean
     settings[key] = setting
 
     # set total demand
-    normalise_factor = float(settings[key]['normalise'])
     demand = demand * normalise_factor
     hourly = settings[key]['hourly']=='True'
     if hourly:
@@ -1096,6 +1160,7 @@ top_convert={}
 right_convert={}
 stats={}
 last_viable = pd.DataFrame()
+last_key = ' '
 for key, scenario in scenarios.items():
     folder = scenario['dir']
     label = scenario['title']
@@ -1141,7 +1206,7 @@ for key, scenario in scenarios.items():
         storage.generation_cost(df, args.stype, float(settings[key]['normalise']), total_demands[key], n_years, hourly, args.shore, args.costmodel  )
 
     # calculate energy
-    df['energy'] = df['wind_energy'] + df['pv_energy']
+    df['energy'] = ( df['wind_energy'] + df['pv_energy'] )
     df['all_energy'] = df['energy'] + (df['variable_energy'] / 818387.7082191781) + df['base']
     # calculate wind energy fraction
     df['fraction'] = df['wind_energy'] / df['energy']
@@ -1150,6 +1215,11 @@ for key, scenario in scenarios.items():
     # calculate wind capacity fraction
     df['cfraction'] = df['f_wind'] / (df['f_pv'] + df['f_wind'] )
     df['cfraction'].fillna(0.0, inplace=True)
+
+    # adjust to factor by the actual demand, rather than 2018 historic
+    norm_mean = float(settings[key]['normalise_mean'])
+    df['energy'] = df['energy'] / norm_mean
+    df['storage'] = df['storage'] / norm_mean
 
     # calculate the 'lost' energy
     factor = 1
@@ -1179,18 +1249,19 @@ for key, scenario in scenarios.items():
     store_nz_mean = store_nz['storage'].mean()
     print('{: <12}  {}  {}    {}   {:.2f} {:.2f} {:.2f} {:.2f} '.format(key, len(zero), len(viable), len(df), store_max, store_min, store_mean, store_nz_mean ) )
 
-    # TODO this merges two together and then the 3rd into it so it gets a wierd result!
     if len(last_viable)>0:
-        last_viable = pd.merge(last_viable, viable, how='inner', on=['f_pv', 'f_wind'], suffixes=('_x' + key, '_y' + key))
+        merged = pd.merge(last_viable, viable, how='inner', on=['f_pv', 'f_wind'], suffixes=(last_key, key))
         if args.heatdiff:
+            top_factor = top_convert[key]
+            right_factor = right_convert[key]
             diff_variable = 'storage'
             if args.heat:
                 diff_variable = args.heat
-            diff_label = '{} difference'.format(diff_variable)
-            last_viable['heat_diff'] = last_viable[diff_variable + '_x'] - last_viable[diff_variable + '_y']
-            scatterHeat(last_viable, 'heat_diff', diff_label, 'between {} and {}'.format(label, last_label), args.annotate)
-    else:
-        last_viable = viable
+            merged['heat_diff'] = merged[diff_variable + last_key] - merged[diff_variable + key]
+            scatterHeat(merged, 'heat_diff', diff_variable, 'between {} and {}'.format(label, last_label), args.annotate)
+              
+    last_viable = viable
+    last_key = key
     last_label = label
 
 for warning in warnings:
@@ -1263,7 +1334,9 @@ if args.heat:
     for key, scenario in scenarios.items():
         label = scenario['title']
         df = dfs[key]
-        scatterHeat(df, args.heat, axis_labels[args.heat], label, args.annotate)
+        top_factor = top_convert[key]
+        right_factor = right_convert[key]
+        scatterHeat(df, args.heat, scenario_title, label, args.annotate)
 
 # Plot surface
 if args.surface:
@@ -1283,7 +1356,7 @@ if args.plot:
     for key, scenario in scenarios.items():
         label = scenario['title']
         df = dfs[key]
-        scatterHeat(df, 'last', 'Store % remaining at end', label)
+        scatterHeat(df, 'last', 'Store % remaining at end', label, args.annotate)
 
 if args.pfit:
     # Plot viable solutions
@@ -1324,13 +1397,13 @@ if args.rate:
     for key, scenario in scenarios.items():
         label = scenario['title']
         df = dfs[key]
-        scatterHeat(df, 'charge', 'Max charge rate in %peak', label)
+        scatterHeat(df, 'charge', 'Max charge rate in %peak', label, args.annotate)
 
     # Plot max discharge rate. 
     for filename, scenario in scenarios.items():
         label = scenario['title']
         df = dfs[key]
-        scatterHeat(df, 'discharge', 'Max discharge rate in %peak', label )
+        scatterHeat(df, 'discharge', 'Max discharge rate in %peak', label, args.annotate )
 
 
 # Plot constant storage lines
@@ -1456,21 +1529,11 @@ if not args.nolines:
     plt.ylabel(axis_labels[args.sy])
     # 2nd axis#
 #   if not first and args.sx == 'f_wind' and args.sy=='f_pv':
-    if args.sx == 'f_wind' and args.sy=='f_pv':
+    if (args.sx == 'f_wind' and args.sy=='f_pv') or (args.sx == 'wind_energy' and args.sy=='pv_energy'):
         axx = ax.secondary_xaxis('top', functions=(top_cf2gw, top_gw2cf))
-        axx.set_xlabel('Capacity GW')
+        axx.set_xlabel('Wind Generation Capacity (GW)')
         axy = ax.secondary_yaxis('right', functions=(right_cf2gw, right_gw2cf))
-        axy.set_ylabel('Capacity GW')
-#   if args.sx == 'fraction':
-#       top_cf = storage_line['cfraction']
-#       top_ef = storage_line['fraction']
-#       axx = ax.secondary_xaxis('top', functions=(top_ef2cf, top_cf2ef))
-#       axx.set_xlabel('Capacity Fraction')
-    if args.sx == 'wind_energy' and args.sy=='pv_energy':
-        axx = ax.secondary_xaxis('top', functions=(top_cf2gw, top_gw2cf))
-        axx.set_xlabel('Capacity GW')
-        axy = ax.secondary_yaxis('right', functions=(right_cf2gw, right_gw2cf))
-        axy.set_ylabel('Capacity GW')
+        axy.set_ylabel('Solar PV Generation Capacity (GW)')
 
     plt.legend(loc='best', fontsize=10)
     plt.show()

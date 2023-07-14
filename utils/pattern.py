@@ -70,13 +70,18 @@ plt.legend(loc='upper right')
 plt.show()
 
 # biggest difference
-dfs0 = dfs[0]['storage']
-dfs1 = dfs[1]['storage']
-storage_diff = dfs0 - dfs1
-smax = storage_diff.idxmax()
-smin = storage_diff.idxmin()
-print('Storage max at {} for {} wind with storage0 {} storage1 {} diff {}'.format(smax, dfs[0]['f_wind'].values[smax], dfs0.values[smax], dfs1.values[smax], storage_diff.values[smax]) )
-print('Storage min at {} for {} wind with storage0 {} storage1 {} diff {}'.format(smin, dfs[0]['f_wind'].values[smin], dfs0.values[smin], dfs1.values[smin], storage_diff.values[smin]) )
+dfs0 = dfs[0]
+dfs1 = dfs[1]
+print(dfs0)
+print(dfs1)
+merged = dfs0.merge(dfs1, how='inner', on='f_wind')
+merged['diff'] = merged['storage_x'] - merged['storage_y']
+print(merged)
+smax = merged['diff'].idxmax()
+smin = merged['diff'].idxmin()
+print('Storage diff max {} at {} is {} min {} at {} is {}'.format(merged['diff'].max(), smax, merged['diff'].values[smax], merged['diff'].min(), smin, merged['diff'].values[smin] ) )
+print('Storage max at {} for {} wind with storage0 {} storage1 {} diff {}'.format(smax, merged['f_wind'].values[smax], merged['storage_x'].values[smax], merged['storage_y'].values[smax], merged['diff'].values[smax]) )
+print('Storage min at {} for {} wind with storage0 {} storage1 {} diff {}'.format(smin, merged['f_wind'].values[smin], merged['storage_x'].values[smin], merged['storage_y'].values[smin], merged['diff'].values[smin]) )
 #
 
 etas = [30, 40, 50, 60, 70, 80]
