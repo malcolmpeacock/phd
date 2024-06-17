@@ -27,13 +27,23 @@ parser.add_argument('--last', action="store_true", dest="last", help='Only use c
 parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1')
 parser.add_argument('--eta', action="store", dest="eta", help='Storage efficiency', default=75, type=int)
 parser.add_argument('--etak', action="store", dest="etak", help='Storage efficiency for kf', default=0, type=int)
-parser.add_argument('--dir', action="store", dest="dir", help='Directory for my files', default='fixed_scaleKF')
+parser.add_argument('--dir', action="store", dest="dir", help='Directory for my files', default='kfig8')
 parser.add_argument('--electric', action="store", dest="electric", help='Electricity H=historic, S=snythetic', default='H')
 parser.add_argument('--threshold', action="store_true", dest="threshold", help='Use contour files from threshold method') 
+parser.add_argument('--stype', action="store", dest="stype", help='Type of Storage: pumped, hydrogen, caes.', default='pumped')
+parser.add_argument('--costmodel', action="store", dest="costmodel", help='Cost model A or B', default='A')
+parser.add_argument('--shore', action="store", dest="shore", help='Wind to base cost on both, on, off . default = both ', default='both')
 args = parser.parse_args()
 
 # read in mp shares data
-mp = pd.read_csv("/home/malcolm/uclan/output/{}/sharesEN{}S{:02d}.csv".format(args.dir,args.electric,args.eta))
+mp = pd.read_csv("/home/malcolm/uclan/output/{}S{:02d}/sharesNNH.csv".format(args.dir,args.eta))
+settings = readers.read_settings("/home/malcolm/uclan/output/{}S{:02d}/settingsNNH.csv".format(args.dir,args.eta))
+n_years = 30
+storage.generation_cost(mp, args.stype, n_years, float(settings['normalise']), settings['hourly']=='True', args.shore, args.costmodel )
+mp['energy'] = mp['wind_energy'] + mp['pv_energy']
+mp['fraction'] = mp['wind_energy'] / mp['energy']
+for c in ['cost_gen', 'cost_store', 'yearly_store_min', 'yearly_store_max', 'lost', 'slost', 'area']:
+    mp[c] = 1
 
 if args.last:
     original = len(mp)
@@ -63,8 +73,8 @@ for line in lines:
         mp_line = mp.sort_values(['f_pv', 'f_wind'], ascending=[True, True])
     else:
         mp_line = storage.storage_line(mp, line, args.sline, 'f_wind', 'f_pv')
-        x_var = 'Pw'
-        y_var = 'Ps'
+        x_var = 'f_wind'
+        y_var = 'f_pv'
     if first:
         ax = mp_line.plot(x=x_var,y=y_var,color=colours[count],label='Storage MP {} days'.format(line))
         first = False

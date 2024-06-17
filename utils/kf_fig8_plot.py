@@ -25,9 +25,12 @@ parser = argparse.ArgumentParser(description='Compare and plot scenarios')
 parser.add_argument('--last', action="store_true", dest="last", help='Only include configs which ended with store full', default=False)
 parser.add_argument('--newdays', action="store_true", dest="newdays", help='Use new set of storage days', default=False)
 parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1')
-parser.add_argument('--dir', action="store", dest="dir", help='Directory for my files', default='fixed_scaleKF')
+parser.add_argument('--dir', action="store", dest="dir", help='Directory for my files', default='kfig8')
 parser.add_argument('--electric', action="store", dest="electric", help='Electricity H=historic, S=snythetic', default='H')
 parser.add_argument('--data', action="store", dest="data", help='Data to use K=KF, S=MP shares, T=mp threshold', default='T')
+parser.add_argument('--stype', action="store", dest="stype", help='Type of Storage: pumped, hydrogen, caes.', default='pumped')
+parser.add_argument('--costmodel', action="store", dest="costmodel", help='Cost model A or B', default='A')
+parser.add_argument('--shore', action="store", dest="shore", help='Wind to base cost on both, on, off . default = both ', default='both')
 args = parser.parse_args()
 
 lines = [25, 30, 40, 60]
@@ -44,7 +47,15 @@ for eta in etas:
     count=0
     # read in mp shares data
     if args.data == 'S':
-        mp = pd.read_csv("/home/malcolm/uclan/output/{}/sharesEN{}S{:02d}.csv".format(args.dir,args.electric,eta))
+        mp = pd.read_csv("/home/malcolm/uclan/output/{}S{:02d}/sharesNN{}.csv".format(args.dir,eta,args.electric))
+        settings = readers.read_settings("/home/malcolm/uclan/output/{}S{:02d}/settingsNN{}.csv".format(args.dir,eta,args.electric))
+        n_years = 30
+        storage.generation_cost(mp, args.stype, n_years, float(settings['normalise']), settings['hourly']=='True', args.shore, args.costmodel )
+        mp['energy'] = mp['wind_energy'] + mp['pv_energy']
+        mp['fraction'] = mp['wind_energy'] / mp['energy']
+        for c in ['cost_gen', 'cost_store', 'yearly_store_min', 'yearly_store_max', 'lost', 'slost', 'area']:
+            mp[c] = 1
+
         print('Synthetic time series {} values'.format(len(mp)))
         if args.last:
             mp = mp[mp['last']==0.0]
@@ -66,8 +77,8 @@ for eta in etas:
             points = mp.sort_values(['f_pv', 'f_wind'], ascending=[True, True])
         if args.data == 'S':
             points = storage.storage_line(mp,line, args.sline, 'f_wind', 'f_pv')
-            x_var = 'Pw'
-            y_var = 'Ps'
+            x_var = 'f_wind'
+            y_var = 'f_pv'
         #print(mp_line)
         if first:
             ax = points.plot(x=x_var,y=y_var,color=colours[count],linestyle=styles[ecount],label='Efficiency {} days storage {}'.format(eta, line))

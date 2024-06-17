@@ -1,4 +1,4 @@
-# python script to compare gas demand vs daily OK temperature.
+# python script to compare gas demand vs daily UK temperature.
 
 # library stuff
 import sys

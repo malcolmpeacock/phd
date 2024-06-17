@@ -70,7 +70,7 @@ def read_copheat(filename, parms=['electricity']):
 # Renewables ninja individual generation file
 
 def read_ninja(filename):
-    ninja = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], date_parser=lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M'),index_col=0, squeeze=True, usecols=[0,2], comment='#')
+    ninja = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], date_parser=lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M'),index_col=0, usecols=[0,2], comment='#').squeeze()
     # create a datetime index so we can plot
     # (the round stops us getting a 1 in the minutes )
     ninja.index = pd.DatetimeIndex(pd.to_datetime(ninja.index).round('H'))
@@ -87,7 +87,7 @@ def read_ninja_country(filename):
 
 # note we only have daily gas
 def read_gas(filename):
-    gas = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], date_parser=lambda x: datetime.strptime(x, '%d/%m/%Y').replace(tzinfo=pytz.timezone('Europe/London')), index_col=0, squeeze=True, usecols=[1,3] )
+    gas = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], date_parser=lambda x: datetime.strptime(x, '%d/%m/%Y').replace(tzinfo=pytz.timezone('Europe/London')), index_col=0, usecols=[1,3] ).squeeze()
     gas = gas.astype('float')
     # reverse it (december was first! )
     gas = gas.iloc[::-1]
@@ -112,7 +112,7 @@ def dt_parse(y,m,d):
     return dt
 
 def read_hadcet(filename):
-    hadcet = pd.read_csv(filename, header=0, sep=',', parse_dates={'datetime': [0,1,2]}, date_parser=dt_parse, index_col='datetime', squeeze=True)
+    hadcet = pd.read_csv(filename, header=0, sep=',', parse_dates={'datetime': [0,1,2]}, date_parser=dt_parse, index_col='datetime').squeeze()
     # create a datetime index so we can plot
     hadcet.index = pd.DatetimeIndex(pd.to_datetime(hadcet.index).date)
     # convert to degrees (is in tenths)

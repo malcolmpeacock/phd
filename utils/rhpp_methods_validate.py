@@ -21,7 +21,7 @@ args = parser.parse_args()
 # read in the data
 output_dir = "/home/malcolm/uclan/data/rhpp-heatpump/testing/"
 filename = output_dir + 'methods.csv'
-df = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+df = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], index_col=0).squeeze()
 
 # convert from Wh to kWh
 

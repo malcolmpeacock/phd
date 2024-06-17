@@ -60,7 +60,8 @@ def r2(y_true, y_pred):
 
 def print_stats(heat, gas, method, nvars=1, plot=False, xl='Heat Demand (from the method)', yl='Heat Demand (from gas)', predr2=True):
     # Root Mean Square Error (RMSE)
-    rmse = ( ( heat - gas ) **2 ).mean() ** .5
+    diff = heat - gas
+    rmse = ( ( diff ** 2 ).mean() ) ** .5
     average = heat.mean()
     # Normalised Root Mean Square Error (nRMSE)
     nrmse = rmse / average
@@ -140,8 +141,9 @@ def print_stats(heat, gas, method, nvars=1, plot=False, xl='Heat Demand (from th
         plt.plot(x,y,color='green')
         # labels
         plt.title('Residuals vs fit ' + method)
-        plt.xlabel('Fit (m * y)')
-        plt.ylabel('Residual ( x - m*y )')
+        plt.xlabel('Gas heat ( y )')
+#       plt.ylabel('Residual ( Y - ' r'$\hat{O}' )
+        plt.ylabel('Residual / Quality of Fit ( y - ŷ )')
         plt.show()
 
 def print_stats_header(header=' Method     '):

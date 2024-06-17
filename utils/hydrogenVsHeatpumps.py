@@ -135,6 +135,7 @@ def supply_and_storage(mod_electric_ref, wind, pv, scenario, years, plot, hourly
     if use_baseline:
         # ordinary year
         ordinary_year = mod_electric_ref.values
+        print('DEBUG baseline {} '.format(ordinary_year[0]) )
         # leap year
         # create a feb 29th by interpolating between feb 28th and Mar 1st
         # find doy for feb 28th ( 31 days in jan )
@@ -463,7 +464,7 @@ parser.add_argument('--climate', action="store_true", dest="climate", help='Use 
 parser.add_argument('--base', action="store_true", dest="base", help='Use range of  baseload shares', default=False)
 parser.add_argument('--ev', action="store_true", dest="ev", help='Include Electric Vehicles', default=False)
 parser.add_argument('--genh', action="store_true", dest="genh", help='Assume hydrogen made from electricity and stored in the same store', default=False)
-parser.add_argument('--normalise', action="store", dest="normalise", help='Method of normalise by (ie converting to days): annual, peak, kf.', default='annual', choices=['annual', 'peak', 'kf', 'scale'])
+parser.add_argument('--normalise', action="store", dest="normalise", help='Method of normalise by (ie converting to days): annual, peak, kf or a float.', default='annual')
 parser.add_argument('--scale', action="store", dest="scale", help='How to scale : average (energy over the period), reference (by the reference year) or a value passed in.', default="reference")
 parser.add_argument('--storage', action="store", dest="storage", help='Storage model kf , mp, cardenas, new or all', default="kf")
 parser.add_argument('--constraints', action="store", dest="constraints", help='Constraints on new storage model: new or old', default="new")
@@ -571,7 +572,10 @@ else:
     if args.normalise == 'peak':
         normalise_factor = daily_original_electric_with_heat.max()
     else:
-        normalise_factor = 835616.0
+        if args.normalise == 'kf':
+            normalise_factor = 835616.0
+        else:
+            normalise_factor = float(args.normalise)
 if args.hourly:
     normalise_factor = normalise_factor / 24.0
 print('PEAK DEMAND {} Annual Demand {} Mean Daily Demand {} Normalise Factor {}'.format(daily_original_electric_with_heat.max(), daily_original_electric_with_heat.sum(), daily_original_electric_with_heat.mean(), normalise_factor))
@@ -597,6 +601,7 @@ if args.dmethod == 'baseline':
     #  series for the reference year - subtract the resistive heat series
 #   print('DEBUG: heat_that_is_electric {} electric_ref max {} min {} sum {} ref_resistive_heat max {} min {} sum {}'.format(heat_that_is_electric, electric_ref.max(), electric_ref.min(), electric_ref.sum(), ref_resistive_heat.max(), ref_resistive_heat.min(), ref_resistive_heat.sum() ) )
     mod_electric_ref = electric_ref - (ref_resistive_heat * heat_that_is_electric)
+    print('DEBUG hourly baseline {} original {}'.format(mod_electric_ref.values[0], electric_ref.values[0]) )
     daily_electric_ref = mod_electric_ref.resample('D').sum()
 
     # plot the electricity time series with heating removed

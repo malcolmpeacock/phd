@@ -8,6 +8,7 @@ from datetime import datetime
 import pytz
 import matplotlib.pyplot as plt
 import matplotlib.colors as mpc
+import matplotlib.ticker as ticker
 #import matplotlib.colormaps as mpcm
 from mpl_toolkits import mplot3d
 import statsmodels.api as sm
@@ -82,6 +83,7 @@ def get_storage_line(df, storage_model, days, wind_parm='f_wind', pv_parm='f_pv'
     # NOTE: variable_energy really should be normalised in hydrogenVheatpumps
     #       but I don't want to rerun everything!
     storage_line['all_energy'] = storage_line['energy'] + (storage_line['variable_energy'] / 818387.7082191781) + storage_line['base']
+    storage_line['excess_energy'] = ( storage_line['all_energy'] - mean_load[key] ) / mean_load[key]
     return storage_line
 
 def get_viable(df, last, days):
@@ -135,7 +137,7 @@ def scatter3d(ax, df, variable, title, label):
     ydata = df[args.sy]
     ax.scatter3D(xdata, ydata, zdata, c=zdata, cmap='viridis');
 
-def scatterHeat(df, variable, title, label, annotate):
+def scatterHeat(df, variable, title, label, annotate, vmin, vmax):
     cm = plt.colormaps.get_cmap(args.cmap)
     if args.zeroc:
         p_data = df[df[variable]>0.01]
@@ -148,7 +150,10 @@ def scatterHeat(df, variable, title, label, annotate):
     else:
         norm = mpc.Normalize()
 
-    plt.scatter(p_data[args.sx], p_data[args.sy], c=p_data[variable], cmap=cm, norm=norm)
+    if args.vmax > 0.0:
+        plt.scatter(p_data[args.sx], p_data[args.sy], c=p_data[variable], cmap=cm, vmin=vmin, vmax=vmax)
+    else:
+        plt.scatter(p_data[args.sx], p_data[args.sy], c=p_data[variable], cmap=cm, norm=norm)
     ax = plt.gca()
     if args.zeroc:
         print('DEDBUG len {} colour {}'.format(len(z_data), args.zeroc) )
@@ -158,14 +163,7 @@ def scatterHeat(df, variable, title, label, annotate):
     if annotate:
         for i, point in df.iterrows():
             plt.text(point[args.sx],point[args.sy],'{:.1f}'.format(point[variable]))
-    # plot the colorbar
-    cb = plt.colorbar()
-    if variable == 'heat_diff':
-        cb.set_label('difference in ' + title)
-        plt.title('difference in {} ({} ).'.format(title, label))
-    else:
-        plt.title('{} ({} ).'.format(title, label))
-        cb.set_label(axis_labels[variable])
+    
     # 2nd axis
 #   axx = ax.secondary_xaxis('top', functions=(top_cf2gw, top_gw2cf))
 #   axx = ax[0].secondary_xaxis('top', functions=(top_cf2gw, top_gw2cf))
@@ -174,6 +172,18 @@ def scatterHeat(df, variable, title, label, annotate):
         axx.set_xlabel('Wind Generation Capacity (GW)')
         axy = ax.secondary_yaxis('right', functions=(right_cf2gw, right_gw2cf))
         axy.set_ylabel('Solar PV Generation Capacity (GW)')
+    # plot the colorbar
+    cb = plt.colorbar(pad=0.1)
+    if variable == 'heat_diff':
+        cb.set_label('difference in ' + title)
+        plt.title('difference in {} ({} ).'.format(title, label))
+    else:
+        plt.title('{} ({} ).'.format(title, label))
+        cb.set_label(axis_labels[variable])
+    if args.log:
+#       cb.ax.yaxis.set_scientific(False)
+        cb.ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+#       cb.ax.set_yticklabels([0.01, 0.1, 1, 10, 100])
 
     plt.show()
 
@@ -193,7 +203,7 @@ def min_gen_line(ax, days, marker):
 
     min_energy_line = { 'f_wind' : Pw, 'f_pv' : Ps }
     df_min = pd.DataFrame(data=min_energy_line)
-    df_min.plot(x='f_wind', y='f_pv', ax=ax, label='theorectical minimum generation from mean cf', marker=marker)
+    df_min.plot(x='f_wind', y='f_pv', ax=ax, label='theoretical minimum generation from mean cf', marker=marker)
 
 
 # main program
@@ -212,6 +222,7 @@ parser.add_argument('--compare', action="store_true", dest="compare", help='Outp
 parser.add_argument('--pstore', action="store_true", dest="pstore", help='Plot the sample store history ', default=False)
 parser.add_argument('--features', action="store_true", dest="features", help='Print feature correlarions ', default=False)
 parser.add_argument('--pdemand', action="store_true", dest="pdemand", help='Plot the demand ', default=False)
+parser.add_argument('--nolegend', action="store_true", dest="nolegend", help='Do not plot a legend ', default=False)
 parser.add_argument('--pnet', action="store_true", dest="pnet", help='Plot the net demand ', default=False)
 parser.add_argument('--heatdiff', action="store_true", dest="heatdiff", help='Create a heat map as difference of 2 scenarios', default=False)
 parser.add_argument('--pfit', action="store_true", dest="pfit", help='Show 2d plots', default=False)
@@ -222,6 +233,7 @@ parser.add_argument('--yearly', action="store_true", dest="yearly", help='Show Y
 parser.add_argument('--rate', action="store_true", dest="rate", help='Plot the charge and discharge rates', default=False)
 parser.add_argument('--stype', action="store", dest="stype", help='Type of Storage: pumped, hydrogen, caes.', default='pumped', choices=['pumped','hydrogen','caes', 'none' ])
 parser.add_argument('--min', action="store_true", dest="min", help='Plot the minimum generation line', default=False)
+parser.add_argument('--mine', action="store_true", dest="min", help='Plot the minimum energy line', default=False)
 parser.add_argument('--annotate', action="store_true", dest="annotate", help='Annotate the shares heat map', default=False)
 parser.add_argument('--log', action="store_true", dest="log", help='Use logarithmic heat map scale', default=False)
 parser.add_argument('--scenario', action="store", dest="scenario", help='Scenarion to plot', default='adhoc')
@@ -246,6 +258,8 @@ parser.add_argument('--ppv', action="store", dest="ppv", help='Print points with
 parser.add_argument('--costmodel', action="store", dest="costmodel", help='Cost model A or B', default='B', choices=['A', 'B', 'C'])
 parser.add_argument('--zeroc', action="store", dest="zeroc", help='Colour for zero', default=None)
 parser.add_argument('--cmap', action="store", dest="cmap", help='Colour map eg viridis, YlOrRd, Greens, RdYlBu ', default='viridis' )
+parser.add_argument('--vmin', action="store", dest="vmin", help='vmin to pass to heatmap for min of colour bar', type=float, default=0.0)
+parser.add_argument('--vmax', action="store", dest="vmax", help='vmax to pass to heatmap for min of colour bar', type=float, default=0.0)
 args = parser.parse_args()
 
 day_str = args.days.split(',')
@@ -396,12 +410,10 @@ if args.scenario == 'hydrogendvh':
                  'hourly' : 
        {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 existing heating. Hourly'} 
     }
-if args.scenario == 'mystorage':
-    scenario_title = 'Required UK Energy storage'
-    scenarios = {'he' :
-       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 existing heating'},
-                 'hfes' : 
-       {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 electrified heat 41% heat pumps'} 
+if args.scenario == 'rerun1':
+    scenario_title = 'The impact of electrification of heating'
+    scenarios = {'hp' :
+       {'file': 'FNS', 'dir' : 'rerun/', 'title': 'Base load 0.4 electrified heat 41% heat pumps'} 
     }
 if args.scenario == 'hydrogenfesh':
     scenario_title = 'The impact of electrification of heating'
@@ -410,14 +422,28 @@ if args.scenario == 'hydrogenfesh':
                  'hfes' : 
        {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 electrified heat 41% heat pumps'} 
     }
+if args.scenario == 'rerun':
+    scenario_title = 'The impact of electrification of heating'
+    scenarios = {'he' :
+       {'file': 'ENS', 'dir' : 'rerun/', 'title': 'Base load 0.4 existing heating'},
+                 'hfes' : 
+       {'file': 'FNS', 'dir' : 'rerun/', 'title': 'Base load 0.4 electrified heat 41% heat pumps'} 
+    }
 if args.scenario == 'hourlyhpev':
     scenario_title = 'Impact of electricifcation of heating and transport'
-    scenarios = {'he' :
-       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 existing heating'},
-                 'hfes' : 
+    scenarios = {'hefs' :
        {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 electrified heat 41% heat pumps'},
+                 'he' : 
+       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 existing heating'},
                  'ev' : 
        {'file': 'ENS', 'dir' : 'hourly/gbase04ev/', 'title': 'Base load 0.4 mostly electric vehicles'} 
+    }
+if args.scenario == 'caesev':
+    scenario_title = 'Impact of electricifcation of heating and transport'
+    scenarios = {'ev' :
+       {'file': 'ENS', 'dir' : 'hourly/eta70ev/', 'title': 'Base load 0.4 mostly electric vehicles CAES'} ,
+                 'all' : 
+       {'file': 'PNS', 'dir' : 'hourly/eta70/', 'title': 'Base load 0.4 all heating provided by heat pumps'} 
     }
 if args.scenario == 'zerowind':
     scenario_title = 'The impact of electrification of heating'
@@ -461,6 +487,11 @@ if args.scenario == 'hvh':
                  '0.5' : 
        {'file': 'HNS', 'dir' : 'hydrogen/vheatpumps/', 'title': 'Half heat pumps half hydrogen boilers'},
                  '1.0' : 
+       {'file': 'PNS', 'dir' : 'hydrogen/vheatpumps/', 'title': 'All heat pumps'}
+    }
+if args.scenario == 'hvh2':
+    scenario_title = 'for hydrogen boilers vs heat pumps'
+    scenarios = { '1.0' : 
        {'file': 'PNS', 'dir' : 'hydrogen/vheatpumps/', 'title': 'All heat pumps'}
     }
 if args.scenario == 'hvhh':
@@ -529,6 +560,13 @@ if args.scenario == 'todayh':
     scenario_title = 'Generation capacities of today'
     scenarios = {'today' :
        {'file': 'ENS', 'dir' : 'individuals/today/', 'title': 'Todays generation 2.0'},
+    }
+if args.scenario == 'storef':
+    scenario_title = 'Store history '
+    scenarios = {'41PHP' :
+       {'file': 'FNS', 'dir' : 'store/hydrogenCost41PHP/', 'title': '41% Heat Pumps '},
+                 'Exist' :
+       {'file': 'ENS', 'dir' : 'store/hydrogenCostExisting/', 'title': 'Existing heating technology '},
     }
 if args.scenario == 'today':
     scenario_title = 'Mirgration towards higher wind and solar'
@@ -859,9 +897,9 @@ if args.scenario == 'eheat3':
     }
 if args.scenario == 'eheatev':
     scenarios = {'BBB' :
-       {'file': 'ENS', 'dir' : 'heatpaper', 'title': '2018 Heating Technology'},
+       {'file': 'ENS', 'dir' : 'thesis/evs', 'title': '2018 Heating Technology with EVs'},
                  'AAA' :
-       {'file': 'ENS', 'dir' : 'thesis/evs', 'title': '2018 Heating Technology with EVs'}
+       {'file': 'ENS', 'dir' : 'heatpaper', 'title': '2018 Heating Technology'},
     }
 if args.scenario == 'hp':
     scenarios = {'GNS' :
@@ -1027,40 +1065,46 @@ output_dir = "/home/malcolm/uclan/output"
 
 # variables and axis labels
 axis_labels = {
-    'f_pv': 'Solar PV generation capacity (days)',
-    'f_wind': 'Wind generation capacity (days)',
+    'f_pv': 'Solar PV generation capacity ( in proportion to load )',
+    'f_wind': 'Wind generation capacity ( in proportion to load )',
     'energy' : 'Renewable energy generated ( in proportion to load )',
     'all_energy' : 'Total energy generated ( in proportion to load )',
+    'excess_energy' : 'Excess energy generated ( in proportion to load )',
     'fraction' : 'Wind energy fraction',
     'cfraction' : 'Wind capacity fraction',
     'wind_energy' : 'Wind energy ( days )',
     'pv_energy' : 'PV energy ( days )',
     'storage' : 'Amount of energy storage (days)',
-    'cost' : 'cost ( £/Kwh )',
+    'cost' : 'cost ( £/kWh )',
     'last' : 'store level % fill at end',
-    'lost' : 'Lost (curtailed) energy',
-    'slost' : 'Lost energy due to storage efficiency',
+    'lost' : 'Lost (curtailed) energy (in proportion to load)',
+    'slost' : 'Lost energy due to storage efficiency (in proportion to load)',
     'charge' : 'store charge',
     'area' : 'Area under net demand curve',
+    'charge_rate' : 'Charge rate (in proportion to load)',
+    'discharge_rate' : 'Discharge rate (in proportion to load)',
     'discharge' : 'store discharge'
 }
 # variables and axis labels
 axis_labels_short = {
-    'f_pv': 'Solar PV capacity (days)',
-    'f_wind': 'Wind capacity (days)',
+    'f_pv': 'Solar PV capacity (in proportion to load)',
+    'f_wind': 'Wind capacity (in proportion to load)',
     'energy' : 'Renewable energy generated ( in proportion to load )',
-    'all_energy' : 'Total energy generated ( in proportion to load )',
     'fraction' : 'Wind energy fraction',
     'cfraction' : 'Wind capacity fraction',
     'wind_energy' : 'Wind energy ( days )',
     'pv_energy' : 'PV energy ( days )',
+    'all_energy' : 'All energy ( days )',
+    'excess_energy' : 'Excess energy generated ( in proportion to load )',
     'storage' : 'energy storage (days)',
-    'cost' : 'cost ( £/Kwh )',
+    'cost' : 'cost ( £/kWh )',
     'last' : 'store level % fill at end',
-    'lost' : 'Lost (curtailed) energy',
-    'slost' : 'Lost energy due to storage efficiency',
+    'lost' : 'Lost (curtailed) energy (days)',
+    'slost' : 'Lost energy due to storage efficiency (days)',
     'charge' : 'store charge',
     'area' : 'Area under net demand curve',
+    'discharge_rate' : 'store discharge rate',
+    'charge_rate' : 'store charge rate',
     'discharge' : 'store discharge'
 }
 
@@ -1069,12 +1113,14 @@ units = {
     'f_pv': 'days',
     'f_wind': 'days',
     'energy' : 'days',
+    'all_energy' : 'days',
+    'excess_energy' : 'days',
     'fraction' : '%',
     'cfraction' : '%',
     'wind_energy' : 'days',
     'pv_energy' : 'days',
     'storage' : 'days',
-    'cost' : '£/Kwh',
+    'cost' : '£/kWh',
     'last' : '%',
     'lost' : 'days',
     'slost' : 'days',
@@ -1086,6 +1132,7 @@ units = {
 # load the demands
 demands = {}
 total_demands = {}
+mean_load = {}
 capacities = {}
 settings = {}
 max_sl = 0
@@ -1122,7 +1169,7 @@ for key, scenario in scenarios.items():
         if not 'etad' in setting:
             setting['etad'] = 0.0
     else:
-        setting = {'storage' : 'kf', 'baseload' : '0.0', 'start' : 1980, 'end': 2019, 'hourly': 'False', 'normalise' : 818387.7082191781, 'etad' : 0.0, 'eta' : 0.80 }
+        setting = {'storage' : 'kf', 'baseload' : '0.0', 'start' : 1980, 'end': 2019, 'hourly': 'False', 'normalise' : 818387.7082191781, 'etad' : 0.0, 'eta' : 80 }
     # Override normalise factor if requested.
     normalise_mean = 1.0
     if args.normalise:
@@ -1149,6 +1196,7 @@ for key, scenario in scenarios.items():
         total_demands[key] = demand.sum() * 1e3 * 24
     if args.tenergy > 0.0:
         total_demands[key] = args.tenergy
+    mean_load[key] = demand.mean() / float(settings[key]['normalise'])
 
 # Load the shares dfs
 
@@ -1191,6 +1239,8 @@ for key, scenario in scenarios.items():
     else:
         eta = math.sqrt(float(settings[key]['eta']) / 100.0 )
         etad = eta
+    if args.debug:
+        print('etad {} eta {}'.format(eta, etad) )
 
     # use the input energy for charge rate, not the stored energy
     if args.inrate:
@@ -1208,6 +1258,7 @@ for key, scenario in scenarios.items():
     # calculate energy
     df['energy'] = ( df['wind_energy'] + df['pv_energy'] )
     df['all_energy'] = df['energy'] + (df['variable_energy'] / 818387.7082191781) + df['base']
+    df['excess_energy'] = ( df['all_energy'] - mean_load[key] ) / mean_load[key]
     # calculate wind energy fraction
     df['fraction'] = df['wind_energy'] / df['energy']
     df['fraction'].fillna(0.0, inplace=True)
@@ -1225,9 +1276,9 @@ for key, scenario in scenarios.items():
     factor = 1
     if hourly:
         factor = 24
-    charge = df['charge'] / ( n_years * 366.25 * factor )
-    discharge = df['discharge'] / ( n_years * 366.25 * factor )
-    battery_loss = charge * ( ( 1 - eta ) / eta) + (discharge*(1-etad))
+    df['charge'] = df['charge'] / ( n_years * 365.25 * factor )
+    df['discharge'] = df['discharge'] / ( n_years * 365.25 * factor )
+    battery_loss = df['charge'] * ( ( 1 - eta ) / eta) + (df['discharge']*(1-etad))
     generated = df['energy'] + df['base']
     load = 1.0
     df['lost'] = generated - load - battery_loss
@@ -1258,7 +1309,7 @@ for key, scenario in scenarios.items():
             if args.heat:
                 diff_variable = args.heat
             merged['heat_diff'] = merged[diff_variable + last_key] - merged[diff_variable + key]
-            scatterHeat(merged, 'heat_diff', diff_variable, 'between {} and {}'.format(label, last_label), args.annotate)
+            scatterHeat(merged, 'heat_diff', diff_variable, 'between {} and {}'.format(label, last_label), args.annotate, args.vmin, args.vmax)
               
     last_viable = viable
     last_key = key
@@ -1336,7 +1387,7 @@ if args.heat:
         df = dfs[key]
         top_factor = top_convert[key]
         right_factor = right_convert[key]
-        scatterHeat(df, args.heat, scenario_title, label, args.annotate)
+        scatterHeat(df, args.heat, scenario_title, label, args.annotate, args.vmin, args.vmax)
 
 # Plot surface
 if args.surface:
@@ -1356,7 +1407,7 @@ if args.plot:
     for key, scenario in scenarios.items():
         label = scenario['title']
         df = dfs[key]
-        scatterHeat(df, 'last', 'Store % remaining at end', label, args.annotate)
+        scatterHeat(df, 'last', 'Store % remaining at end', label, args.annotate, args.vmin, args.vmax)
 
 if args.pfit:
     # Plot viable solutions
@@ -1397,13 +1448,13 @@ if args.rate:
     for key, scenario in scenarios.items():
         label = scenario['title']
         df = dfs[key]
-        scatterHeat(df, 'charge', 'Max charge rate in %peak', label, args.annotate)
+        scatterHeat(df, 'charge', 'Max charge rate in %peak', label, args.annotate, args.vmin, args.vmax)
 
     # Plot max discharge rate. 
     for filename, scenario in scenarios.items():
         label = scenario['title']
         df = dfs[key]
-        scatterHeat(df, 'discharge', 'Max discharge rate in %peak', label, args.annotate )
+        scatterHeat(df, 'discharge', 'Max discharge rate in %peak', label, args.annotate, args.vmin, args.vmax )
 
 
 # Plot constant storage lines
@@ -1516,10 +1567,10 @@ if not args.nolines:
         scount+=1
 
         # plot energy generation of 1.0 line 
+        min_days = mean_load[key] - (baseload * 0.4)
         if args.min:
-            min_days = 1.0 - (baseload * 0.6)
             energy_line = get_storage_line(df, storage_model, min_days, 'f_wind', 'f_pv', 'energy')
-            energy_line.plot(x='f_wind',y='f_pv',ax=ax,label='energy {:.2f} days. {}'.format(min_days,label), marker=markers[scount])
+            energy_line.plot(x='f_wind',y='f_pv',ax=ax,label='actual minimum: energy {:.2f} days. {}'.format(min_days,label), marker=markers[scount])
             scount+=1
             min_gen_line(ax, min_days, markers[scount])
             scount+=1
@@ -1535,7 +1586,8 @@ if not args.nolines:
         axy = ax.secondary_yaxis('right', functions=(right_cf2gw, right_gw2cf))
         axy.set_ylabel('Solar PV Generation Capacity (GW)')
 
-    plt.legend(loc='best', fontsize=10)
+    if not args.nolegend:
+        plt.legend(loc='best', fontsize=10)
     plt.show()
 
 keys = scenarios.keys()
@@ -1574,7 +1626,8 @@ if args.yearly:
     plt.title('Interannual variation of electricity demand')
     plt.xlabel('weather year', fontsize=15)
     plt.ylabel('Annual Electricity Demand (TWh)', fontsize=15)
-    plt.legend(loc='center left', fontsize=15)
+    if not args.nolegend:
+        plt.legend(loc='center left', fontsize=15)
 
     plt.show()
     
@@ -1592,7 +1645,8 @@ if args.yearly:
     plt.title('Difference on yearly term storage')
     plt.xlabel('year', fontsize=15)
     plt.ylabel('Days of storage', fontsize=15)
-    plt.legend(loc='upper left', fontsize=15)
+    if not args.nolegend:
+        plt.legend(loc='upper left', fontsize=15)
     plt.show()
 
     # december 31st
@@ -1607,7 +1661,8 @@ if args.yearly:
     plt.title('December 31st Generation')
     plt.xlabel('year', fontsize=15)
     plt.ylabel('Normalised Energy', fontsize=15)
-    plt.legend(loc='upper left', fontsize=15)
+    if not args.nolegend:
+        plt.legend(loc='upper left', fontsize=15)
     plt.show()
 
 if args.pnet:
@@ -1630,15 +1685,16 @@ if args.pnet:
     plt.title('Daily Net Electricity demand')
     plt.xlabel('weather year', fontsize=15)
     plt.ylabel(' Net Electricity Demand (TWh)', fontsize=15)
-    plt.legend(loc='upper center', fontsize=15)
+    if not args.nolegend:
+        plt.legend(loc='upper center', fontsize=15)
     plt.show()
 
 if args.pdemand:
-    hourly = settings[key]['hourly']=='True'
     # plot the electricity demand
     dcolours = ['purple', 'orange', 'blue', 'green', 'red', 'brown', 'pink', 'olive', 'cyan', 'yellow', 'salmon' ]
     count=0
     for key, scenario in scenarios.items():
+        hourly = settings[key]['hourly']=='True'
         label = scenario['title']
         demand = demands[key]
         normalise_factor = float(settings[key]['normalise'])
@@ -1652,7 +1708,8 @@ if args.pdemand:
     plt.title('Daily Electricity demand')
     plt.xlabel('weather year', fontsize=15)
     plt.ylabel('Daily Electricity Demand (TWh)', fontsize=15)
-    plt.legend(loc='upper center', fontsize=15)
+    if not args.nolegend:
+        plt.legend(loc='upper center', fontsize=15)
 #   plt.ylim(0,2.5)
     plt.show()
 
@@ -1663,8 +1720,7 @@ if args.pdemand:
         label = scenario['title']
         filename = scenario['file']
         path = '{}/{}/hydrogen{}.csv'.format(output_dir, folder, filename)
-#       demand = pd.read_csv(path, header=0, index_col=0, squeeze=True)
-        demand = pd.read_csv(path, header=0, index_col=0)
+        demand = pd.read_csv(path, header=0, index_col=0).squeeze()
         demand.index = pd.DatetimeIndex(pd.to_datetime(demand.index).date)
         if hourly:
             demand = demand.resample('D').sum()
@@ -1677,7 +1733,8 @@ if args.pdemand:
     plt.title('Daily Hydrogen demand')
     plt.xlabel('weather year', fontsize=15)
     plt.ylabel('Hydrogen Demand (TWh per day)', fontsize=15)
-    plt.legend(loc='upper left', fontsize=15)
+    if not args.nolegend:
+        plt.legend(loc='upper left', fontsize=15)
     plt.show()
 
 # compare the shares files
@@ -1744,17 +1801,26 @@ if args.pstore:
         filename = scenario['file']
         folder = scenario['dir']
         path = '{}/{}/store{}.csv'.format(output_dir, folder, filename)
-        store = pd.read_csv(path, header=0, index_col=0, squeeze=True)
+        store = pd.read_csv(path, header=0, index_col=0).squeeze()
         store.index = pd.DatetimeIndex(pd.to_datetime(store.index).date)
         if args.rolling >0:
             store = store.rolling(args.rolling, min_periods=1).mean()
         store.plot(label='Store size: {}'.format(label) )
         durations[key] = storage.storage_duration(store)
 
+        utilization = store.sum() / ( store.max() * len(store) )
+        rate = store.diff()
+        plus_rates = rate[rate>0]
+        charge_util = plus_rates.sum() / ( plus_rates.max() * len(plus_rates) )
+        minus_rates = rate[rate<0]
+        discharge_util = minus_rates.sum() / ( minus_rates.min() * len(minus_rates) )
+        print('STORE: utilization capacity {} charge {} discharge {}  '.format(utilization, charge_util, discharge_util) )
+
     plt.xlabel('Time')
     plt.ylabel('Storage days')
     plt.title('Store history ')
-    plt.legend(loc='lower center', fontsize=15)
+    if not args.nolegend:
+        plt.legend(loc='lower center', fontsize=15)
     plt.show()
 
     # storage duration
@@ -1771,7 +1837,8 @@ if args.pstore:
     plt.xlabel('State Of Charge (stored energy) in days')
     plt.ylabel('Time in days the store contained more energy than this')
     plt.title('Store duration ')
-    plt.legend(loc='upper left', fontsize=15)
+    if not args.nolegend:
+        plt.legend(loc='upper left', fontsize=15)
     plt.show()
 
 if args.variable:
@@ -1807,7 +1874,8 @@ if args.variable:
     plt.xlabel('Base load capacity in days')
     plt.ylabel('Days of storage')
     plt.title('Base load vs Storage')
-    plt.legend(loc='upper right', fontsize=12)
+    if not args.nolegend:
+        plt.legend(loc='upper right', fontsize=12)
     plt.show()
 
 if args.features:

@@ -79,6 +79,8 @@ for eta in etas:
     storage.generation_cost(df, args.stype, n_years, float(settings['normalise']), settings['hourly']=='True', args.shore, args.costmodel )
     df['energy'] = df['wind_energy'] + df['pv_energy']
     df['fraction'] = df['wind_energy'] / df['energy']
+    for c in ['cost_gen', 'cost_store', 'yearly_store_min', 'yearly_store_max', 'lost', 'slost', 'area']:
+        df[c] = 1
     if args.last:
         df = df[df['last']==0.0]
         print('Only use configs where store ends full {} values'.format(len(df)))

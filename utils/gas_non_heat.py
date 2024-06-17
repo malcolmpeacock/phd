@@ -107,7 +107,7 @@ if args.plot:
     plt.plot(hdd, y, color='red')
     plt.title('Relationship between daily gas consumption and {}'.format(var))
     plt.xlabel(xlabel, fontsize=15)
-    plt.ylabel('Gas Demand (Twh) per day', fontsize=15)
+    plt.ylabel('Gas Demand (Twh)', fontsize=15)
     legend_elements = [Line2D([0], [0], color='red', label='Ordinary Least Squares Regression (Rd)'),
                        Line2D([0], [0], marker='o', color='blue', label='Daily gas demand {} (Gd)'.format(args.year)) ]
     plt.legend(loc='upper left', handles=legend_elements)
@@ -118,7 +118,7 @@ if args.plot:
     base.plot(color='green', label='Daily Gas demand with heating removed (Dd)')
     plt.title('Daily gas demand {} base using {}'.format(args.year, var))
     plt.xlabel('day of the year', fontsize=15)
-    plt.ylabel('Gas Demand (Twh) per day', fontsize=15)
+    plt.ylabel('Gas Demand (Twh)', fontsize=15)
     plt.legend(loc='upper center')
     plt.show()
 

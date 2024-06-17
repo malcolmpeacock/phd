@@ -57,6 +57,7 @@ parser.add_argument('--plot', action="store_true", dest="plot", help='Show diagn
 parser.add_argument('--pstore', action="store_true", dest="pstore", help='Plot the sample store history ', default=False)
 parser.add_argument('--pdemand', action="store_true", dest="pdemand", help='Plot the demand ', default=False)
 parser.add_argument('--fit', action="store_true", dest="fit", help='Try fiting a curve', default=False)
+parser.add_argument('--debug', action="store_true", dest="debug", help='Print debug stuff', default=False)
 parser.add_argument('--nolist', action="store_true", dest="nolist", help='Do not list values', default=False)
 parser.add_argument('--rolling', action="store", dest="rolling", help='Rolling average window', default=0, type=int)
 parser.add_argument('--dir', action="store", dest="dir", help='Directory', default='adhoc')
@@ -67,32 +68,6 @@ parser.add_argument('--wind', action="store", dest="wind", help='A particular va
 parser.add_argument('--inrate', action="store_true", dest="inrate", help='Base the charge rate on the energy input, not energy stored', default=False)
 args = parser.parse_args()
 
-# variables and axis labels
-axis_labels = {
-    'f_pv': 'Solar PV ( generation capacity in proportion to normalised demand)',
-    'f_wind': 'Wind ( generation capacity in proportion to nomarlised demand)',
-    'energy' : 'Energy generated ( normalised to demand )',
-    'fraction' : 'Wind energy fraction',
-    'wind_energy' : 'Wind energy ( normalised to demand )',
-    'pv_energy' : 'PV energy ( normalised to demand )',
-    'storage' : 'Amount of energy storage (days)',
-    'cost' : 'cost ( £/Kwh )',
-    'last' : 'store level % fill at end',
-}
-
-# units
-units = {
-    'f_pv': 'days',
-    'f_wind': 'days',
-    'energy' : 'days',
-    'fraction' : '%',
-    'wind_energy' : 'days',
-    'pv_energy' : 'days',
-    'storage' : 'days',
-    'cost' : '£/Kwh',
-    'last' : '%',
-}
-
 stores={}
 durations={}
 hydrogens={}
@@ -102,9 +77,11 @@ labels={}
 output_dir = '/home/malcolm/uclan/output/' + args.dir + '/'
 
 if not args.nolist:
-    print('File f_wind f_pv storage    charge discharge cost  energy                                       last ')
+    print('File f_wind f_pv storage    charge discharge cost  energy                                      last  lost slost sum load')
     print('                 days twh   rate   rate            wind pv   fraction total discharged charged')
 for path in glob.glob(output_dir + 'shares*.csv'):
+    if args.debug:
+        print('DBG: Reading {}'.format(path) )
     df = pd.read_csv(path, header=0, index_col=0)
     for col in ['base', 'variable', 'wind_energy', 'pv_energy', 'charge_rate', 'discharge_rate', 'variable_energy', 'yearly_store_min', 'yearly_store_max']:
         if col not in df.columns:
@@ -152,11 +129,11 @@ for path in glob.glob(output_dir + 'shares*.csv'):
     path = output_dir + 'demand' + scenario
     demand = pd.read_csv(path, header=0, index_col=0).squeeze()
     demand.index = pd.DatetimeIndex(pd.to_datetime(demand.index).date)
+    load = demand.sum()
     # set total demand
     normalise_factor = float(setting['normalise'])
     demand = demand * normalise_factor
     total_demand = demand.sum() * 1e3
-#   print('DEBUG {} factor {} total_demand {}'.format(scenario, normalise_factor, total_demand))
 
     # calculate efficiencies
     if float(setting['etad']) > 0:
@@ -186,6 +163,27 @@ for path in glob.glob(output_dir + 'shares*.csv'):
     # calculate wind energy fraction
     df['fraction'] = df['wind_energy'] / df['energy']
 
+    # need to divide variable energy by number of values to get the mean
+    # (should have been done in HvH )
+    factor = 1
+    if hourly:
+        factor = 24
+    df['charge'] = df['charge'] / ( n_years * 365.25 * factor )
+    df['discharge'] = df['discharge'] / ( n_years * 365.25 * factor )
+    df['variable_energy'] = df['variable_energy'] / ( n_years * 365.25 * factor )
+    load = load / ( n_years * 365.25 * factor )
+
+    # calculate the 'lost' energy
+    df['all_energy'] = df['energy'] + df['variable_energy']
+    battery_loss = df['charge'] * ( ( 1 - eta ) / eta) + (df['discharge']*(1-etad))
+    generated = df['all_energy'] + df['base']
+    # only true for existing
+    df['lost'] = generated - load - battery_loss
+    df['slost'] = battery_loss
+
+    # check energy sum (should be 1.0, ie the load)
+    df['energy_sum'] = df['wind_energy'] + df['pv_energy'] + df['base'] + df['variable_energy'] - df['lost'] - df['slost']
+
     # each row of dataframe
     for index, row in df.iterrows():
         # rates in days per day or days per hour
@@ -205,7 +203,7 @@ for path in glob.glob(output_dir + 'shares*.csv'):
             discharge = storage.days2energy(row['discharge'], one_day , number_of_days, True)
             charge = storage.days2energy(row['charge'], one_day , number_of_days, True)
         if not args.nolist:
-            print('{}  {:.1f}    {:.1f}  {:4.1f} {:4.1f} {:5.2f}  {:5.2f}      {:.3f} {:.2f} {:.2f} {:.2f}     {:.3f} {:.3f}      {:.3f}  {:.2f}'.format(scenario[0:3], row['f_wind'], row['f_pv'], row['storage'], days2twh(row['storage'], one_day, hourly), charge_rate, discharge_rate, row['cost'], row['wind_energy'], row['pv_energy'], row['fraction'], row['energy'], discharge, charge, row['last'] ) )
+            print('{}  {:.1f}    {:.1f}  {:4.1f} {:4.1f} {:5.2f}  {:5.2f}      {:.3f} {:.2f} {:.2f} {:.2f}     {:.3f} {:.3f}      {:.3f}   {:.2f}  {:.2f} {:.2f} {:.2f} {:.2f}'.format(scenario[0:3], row['f_wind'], row['f_pv'], row['storage'], days2twh(row['storage'], one_day, hourly), charge_rate, discharge_rate, row['cost'], row['wind_energy'], row['pv_energy'], row['fraction'], row['energy'], discharge, charge, row['last'], row['lost'], row['slost'], row['energy_sum'], load ) )
 
     if args.fit:
         print('Doing regression {} '.format(scenario[0:3] ))
@@ -245,9 +243,11 @@ if args.pstore:
         store_sorted = store.sort_values(ascending=False)
         if args.rolling >0:
             store_sorted = store_sorted.rolling(args.rolling, min_periods=1).mean()
-        store_sorted.plot(label='Store size: {}'.format(labels[label]), use_index=False )
+        hours = np.arange(0, len(store_sorted))
+        store_sorted.index = hours / 24
+        store_sorted.plot(label='Store size: {}'.format(labels[label]) )
 
-    plt.xlabel('Time sorted by state of charge')
+    plt.xlabel('Time (days) sorted by state of charge')
     plt.ylabel('State of charge (days)')
     plt.title('Store history sorted by state of charge')
     plt.legend(loc='lower center', fontsize=15)

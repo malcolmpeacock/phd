@@ -13,11 +13,11 @@ import argparse
 import stats
 
 def read_mycsv(filename):
-    when2heat = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True, usecols=['time','space','water'] )
+    when2heat = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], index_col=0, usecols=['time','space','water'] ).squeeze()
     return when2heat
 
 def read_gas(filename):
-    gas = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], date_parser=lambda x: datetime.strptime(x, '%d/%m/%Y').replace(tzinfo=pytz.timezone('Europe/London')), index_col=0, squeeze=True, usecols=[1,3] )
+    gas = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], date_parser=lambda x: datetime.strptime(x, '%d/%m/%Y').replace(tzinfo=pytz.timezone('Europe/London')), index_col=0, usecols=[1,3] ).squeeze()
     gas = gas.astype('float')
     # reverse it (december was first! )
     gas = gas.iloc[::-1]

@@ -106,7 +106,7 @@ args = parser.parse_args()
 # read in the data
 output_dir = "/home/malcolm/uclan/data/rhpp-heatpump/testing/"
 filename = output_dir + 'electric.csv'
-df = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], index_col=0, squeeze=True)
+df = pd.read_csv(filename, header=0, sep=',', parse_dates=[0], index_col=0).squeeze()
 
 # convert from Wh to kWh
 
@@ -145,7 +145,7 @@ if args.cop:
 #df_ashp = cop(df,'ASHP',40.0, 'temperature')
 #df_gshp = daily_cop(df,'GSHP',40.0, 'soiltemp')
     filename = output_dir + 'ashp.csv'
-    df_ashp = pd.read_csv(filename, header=0, sep=',', index_col=0, squeeze=True)
+    df_ashp = pd.read_csv(filename, header=0, sep=',', index_col=0).squeeze()
     count_raw = len(df_ashp)
     # replace NaNs by interpolation
     df_ashp = df_ashp.dropna()
@@ -167,7 +167,7 @@ if args.cop:
     #df_gshp = cop(df,'GSHP',40.0, 'soiltemp')
     #df_gshp = daily_cop(df,'GSHP',40.0, 'soiltemp')
     filename = output_dir + 'gshp.csv'
-    df_gshp = pd.read_csv(filename, header=0, sep=',', index_col=0, squeeze=True)
+    df_gshp = pd.read_csv(filename, header=0, sep=',', index_col=0).squeeze()
     # replace NaNs by interpolation
     df_gshp = df_gshp.interpolate()
     # remove stuff that physically doesn't make sense
@@ -298,6 +298,6 @@ df.to_csv(output_filename, float_format='%g');
 # read in the data
 output_dir = "/home/malcolm/uclan/data/rhpp-heatpump/testing/"
 filename = output_dir + 'sinks.csv'
-df = pd.read_csv(filename, header=0, sep=',', index_col=0, squeeze=True)
+df = pd.read_csv(filename, header=0, sep=',', index_col=0).squeeze()
 #print(df)
 print('SINKS: min {} max {} mean {}'.format(df['min'].min(), df['max'].max(), df['mean'].mean() ) )

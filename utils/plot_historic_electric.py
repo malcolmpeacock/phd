@@ -52,10 +52,10 @@ print(dukes)
 
 # plot
 if not args.dukes:
-    yearly_grid.plot(color='blue', label='Annual Historic Electricity Demand (KF)')
-    yearly_espini.plot(color='red', label='Annual Historic Electricity Demand (Espini)')
-dukes.plot(color='green', label='Annual Historic Electricity Demand (DUKES)')
-plt.title('Yearly Electricity demand')
+    yearly_grid.plot(color='blue', label='National Grid (Fragaki et. al paper)')
+    yearly_espini.plot(color='red', label='ESPINI (Combination of Elexon and National Grid)')
+dukes.plot(color='green', label='DUKES (Digest of UK Energy Statistics')
+plt.title('Annual Historic Electricity demand')
 plt.xlabel('Year', fontsize=15)
 plt.ylabel('Electricity Demand (TWh)', fontsize=15)
 if not args.dukes:

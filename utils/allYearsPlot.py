@@ -10,7 +10,6 @@ import statsmodels.api as sm
 import argparse
 import calendar
 import numpy as np
-from icecream import ic 
 
 # custom code
 import stats
@@ -38,14 +37,14 @@ folder = 'heatpaper'
 # load demand with heatpumps
 filename = 'GNS'
 path = '{}/{}/demand{}.csv'.format(output_dir, folder, filename)
-electric_demand = pd.read_csv(path, header=0, index_col=0, squeeze=True)
+electric_demand = pd.read_csv(path, header=0, index_col=0).squeeze()
 electric_demand.index = pd.DatetimeIndex(pd.to_datetime(electric_demand.index).date)
 normalise_factor = 728400.086232
 demand = electric_demand * normalise_factor
 # load existing heat
 filename = 'ENS'
 path = '{}/{}/demand{}.csv'.format(output_dir, folder, filename)
-electric_existing = pd.read_csv(path, header=0, index_col=0, squeeze=True)
+electric_existing = pd.read_csv(path, header=0, index_col=0,).squeeze()
 electric_existing.index = pd.DatetimeIndex(pd.to_datetime(electric_existing.index).date)
 #print(electric_existing)
 existing = electric_existing * normalise_factor
