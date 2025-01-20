@@ -106,7 +106,7 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
     # linearly interpolate along wind and then pv
     else:
 #       print('storage_line for {} days '.format(storage_value) )
-        variables = ['f_wind', 'f_pv', 'storage', 'last', 'wind_energy', 'pv_energy', 'discharge', 'base', 'cost', 'cost_gen', 'cost_store', 'charge_rate', 'discharge_rate', 'charge', 'variable_energy', 'variable', 'gw_wind', 'gw_pv', 'fraction', 'energy', 'yearly_store_min', 'yearly_store_max', 'lost', 'slost', 'area', 'all_energy', 'excess_energy']
+        variables = ['f_wind', 'f_pv', 'storage', 'last', 'wind_energy', 'pv_energy', 'discharge', 'base', 'cost', 'cost_gen', 'cost_store', 'charge_rate', 'discharge_rate', 'charge', 'variable_energy', 'variable', 'gw_wind', 'gw_pv', 'fraction', 'energy', 'yearly_store_min', 'yearly_store_max', 'lost', 'slost', 'area', 'all_energy', 'excess_energy' ]
         if variable not in variables or wind_parm not in variables or pv_parm not in variables:
             print('ERROR variable : {} not in variables list'.format(variable) )
             quit()

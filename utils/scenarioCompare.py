@@ -25,6 +25,56 @@ import stats
 import readers
 import storage
 
+def diffContour(df, df_variable, diff_variable, title, day_list):
+    print('diffContour')
+    colours = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'olive', 'cyan', 'yellow', 'salmon' ]
+    markers = ['o', 'v', '+', '<', 'x', 'D', '*', 'X','o', 'v', '+', '<', 'x', 'D', '*', 'X']
+    print(df.columns)
+    odd=0
+    storage_model = 'all'
+    dcount = 0
+    scount = 0
+    for days in day_list:
+        if odd==1:
+            odd=0
+        else:
+            odd=1
+        print('DEBUG var {} days {}'.format(df_variable, days) )
+        print(args.cx, args.cy, df_variable)
+        print(df)
+        storage_line = get_storage_line(df, storage_model, days, args.cx, args.cy, df_variable)
+        print(storage_line)
+        if len(storage_line) == 0:
+            print('Skipping line {: <12} {} {} '.format(key, days, len(storage_line) ))
+            continue
+
+        line_colour = colours[dcount]
+        line_style = linestyle=styles[dcount]
+        marker_type = markers[dcount]
+
+        # format the line label
+        label_string = '{} {:.' + str(args.decimals) + 'f} ({}).'
+        label_formated = label_string.format(args.cvariable + ' difference', days, units[diff_variable])
+        # plot the storage line
+        plt.plot(storage_line[args.sx],storage_line[args.sy],label=label_formated, marker=marker_type, linestyle=line_style, color=line_colour, markevery=args.markevery)
+        # optionally output the storage line
+        if args.output:
+            filename = '{}/{}-{}-{}'.format(args.output, 'diff', args.cvariable, days)
+            print('outputing line to {}'.format(filename))
+            lineout = storage_line[[args.sx, args.sy]]
+            lineout.to_csv(filename, float_format='%g', index=False)
+        # day counter
+        dcount+=1
+
+    plt.title('Constant {} lines {}'.format(args.dvariable, title) )
+    plt.xlabel(axis_labels[args.sx])
+    plt.ylabel(axis_labels[args.sy])
+    plt.legend(loc='upper right', fontsize=9)
+
+def energyLine(df, storage_model, min_days, label, style, color, ax):
+    energy_line = get_storage_line(df, storage_model, min_days, 'f_wind', 'f_pv', 'excess_energy')
+    ax.plot(energy_line['f_wind'], energy_line['f_pv'], label=label, linestyle=style, color=color  )
+
 # feature correlation
 def correlation(df):
 #   print(input_df.index)
@@ -184,10 +234,10 @@ def scatterHeat(df, variable, title, label, annotate, vmin, vmax):
 #       cb.ax.yaxis.set_scientific(False)
         cb.ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
 #       cb.ax.set_yticklabels([0.01, 0.1, 1, 10, 100])
+    return ax
 
-    plt.show()
 
-def min_gen_line(ax, days, marker):
+def min_gen_line(ax, days, marker, label='theoretical minimum generation from mean cf', style='solid'):
     Lw = 0.38
     Ls = 0.1085
     # minimum generation
@@ -203,7 +253,8 @@ def min_gen_line(ax, days, marker):
 
     min_energy_line = { 'f_wind' : Pw, 'f_pv' : Ps }
     df_min = pd.DataFrame(data=min_energy_line)
-    df_min.plot(x='f_wind', y='f_pv', ax=ax, label='theoretical minimum generation from mean cf', marker=marker)
+#   df_min.plot(x='f_wind', y='f_pv', ax=ax, label=label, color='red')
+    ax.plot(df_min['f_wind'], df_min['f_pv'], label=label, color='red', linestyle=style)
 
 
 # main program
@@ -222,6 +273,7 @@ parser.add_argument('--compare', action="store_true", dest="compare", help='Outp
 parser.add_argument('--pstore', action="store_true", dest="pstore", help='Plot the sample store history ', default=False)
 parser.add_argument('--features', action="store_true", dest="features", help='Print feature correlarions ', default=False)
 parser.add_argument('--pdemand', action="store_true", dest="pdemand", help='Plot the demand ', default=False)
+parser.add_argument('--bdemand', action="store_true", dest="bdemand", help='Box Plot of demand ', default=False)
 parser.add_argument('--nolegend', action="store_true", dest="nolegend", help='Do not plot a legend ', default=False)
 parser.add_argument('--pnet', action="store_true", dest="pnet", help='Plot the net demand ', default=False)
 parser.add_argument('--heatdiff', action="store_true", dest="heatdiff", help='Create a heat map as difference of 2 scenarios', default=False)
@@ -240,6 +292,7 @@ parser.add_argument('--scenario', action="store", dest="scenario", help='Scenari
 parser.add_argument('--days', action="store", dest="days", help='Days of storage line to plot', default='0.5, 1, 3, 10, 25, 30, 40, 60' )
 parser.add_argument('--sline', action="store", dest="sline", help='Method of creating storage lines', default='interp1', choices=['interp1','threshold','smooth','sboth','both','skline'])
 parser.add_argument('--cvariable', action="store", dest="cvariable", help='Variable to contour, default is storage', default='storage')
+parser.add_argument('--dvariable', action="store", dest="dvariable", help='Variable to difference between scenarios, default is None', default=None)
 parser.add_argument('--cx', action="store", dest="cx", help='X Variable for contour creation, default is f_wind', default='f_wind')
 parser.add_argument('--cy', action="store", dest="cy", help='Y Variable for contour creation, default is f_pv', default='f_pv')
 parser.add_argument('--sx', action="store", dest="sx", help='Variable to plot on the X axis, default is f_wind', default='f_wind')
@@ -260,6 +313,8 @@ parser.add_argument('--zeroc', action="store", dest="zeroc", help='Colour for ze
 parser.add_argument('--cmap', action="store", dest="cmap", help='Colour map eg viridis, YlOrRd, Greens, RdYlBu ', default='viridis' )
 parser.add_argument('--vmin', action="store", dest="vmin", help='vmin to pass to heatmap for min of colour bar', type=float, default=0.0)
 parser.add_argument('--vmax', action="store", dest="vmax", help='vmax to pass to heatmap for min of colour bar', type=float, default=0.0)
+parser.add_argument('--output', action="store", dest="output", help='Directory to output contour lines to', default=None)
+parser.add_argument('--heatcv', action="store", dest="heatcv", help='days of contour line to show on heat map', default=None)
 args = parser.parse_args()
 
 day_str = args.days.split(',')
@@ -267,6 +322,7 @@ day_list=[]
 for d in day_str:
     day_list.append(float(d))
 
+styles = ['solid', 'dotted', 'dashed', 'dashdot', 'solid', 'dotted', 'dashed', 'solid', 'dotted', 'dashed', 'dashdot', 'dashdot', 'solid', 'dotted', 'dashed' ]
 
 # scenario files
 #  Of the 3 chars:
@@ -418,9 +474,16 @@ if args.scenario == 'rerun1':
 if args.scenario == 'hydrogenfesh':
     scenario_title = 'The impact of electrification of heating'
     scenarios = {'he' :
-       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 existing heating'},
+       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Existing heating'},
                  'hfes' : 
-       {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 electrified heat 41% heat pumps'} 
+       {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': '41% heat pumps'} 
+    }
+if args.scenario == 'hydrogenfesh2':
+    scenario_title = 'The impact of electrification of heating'
+    scenarios = {'hp41' :
+       {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': '41% heat pumps'} ,
+                 'eh' : 
+       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Existing heating'}
     }
 if args.scenario == 'rerun':
     scenario_title = 'The impact of electrification of heating'
@@ -432,11 +495,26 @@ if args.scenario == 'rerun':
 if args.scenario == 'hourlyhpev':
     scenario_title = 'Impact of electricifcation of heating and transport'
     scenarios = {'hefs' :
-       {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 electrified heat 41% heat pumps'},
+       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Existing heating'},
                  'he' : 
-       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Base load 0.4 existing heating'},
+       {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': '41% heat pumps'},
                  'ev' : 
-       {'file': 'ENS', 'dir' : 'hourly/gbase04ev/', 'title': 'Base load 0.4 mostly electric vehicles'} 
+       {'file': 'ENS', 'dir' : 'hourly/gbase04ev/', 'title': 'EVs'} 
+    }
+if args.scenario == 'hourlyExisting':
+    scenario_title = 'Impact of electricifcation of heating and transport'
+    scenarios = {'hefs' :
+       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': ''} 
+    }
+if args.scenario == 'hourlyHP41':
+    scenario_title = 'Impact of electricifcation of heating and transport'
+    scenarios = {'hefs' :
+       {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': ''} 
+    }
+if args.scenario == 'hourlyEV':
+    scenario_title = 'Impact of electricifcation of heating and transport'
+    scenarios = {'hefs' :
+       {'file': 'ENS', 'dir' : 'hourly/gbase04ev/', 'title': ''} 
     }
 if args.scenario == 'caesev':
     scenario_title = 'Impact of electricifcation of heating and transport'
@@ -563,10 +641,18 @@ if args.scenario == 'todayh':
     }
 if args.scenario == 'storef':
     scenario_title = 'Store history '
-    scenarios = {'41PHP' :
-       {'file': 'FNS', 'dir' : 'store/hydrogenCost41PHP/', 'title': '41% Heat Pumps '},
-                 'Exist' :
-       {'file': 'ENS', 'dir' : 'store/hydrogenCostExisting/', 'title': 'Existing heating technology '},
+    scenarios = {'HExist' :
+       {'file': 'ENS', 'dir' : 'store/hydrogenCostExisting/', 'title': 'Hydrogen: Existing '},
+                 'HHP' :
+       {'file': 'FNS', 'dir' : 'store/hydrogenCost41PHP/', 'title': 'Hydrogen: 41% Heat Pumps '},
+                 'HEV' :
+       {'file': 'ENS', 'dir' : 'store/hydrogenCostEV/', 'title': 'Hydrogen: EV '},
+                 'CExist' :
+       {'file': 'ENS', 'dir' : 'store/caesCostExisting/', 'title': 'CAES: Existing '},
+                 'CHP' :
+       {'file': 'FNS', 'dir' : 'store/caesCost41HP/', 'title': 'CAES: 41% Heat Pumps '},
+                 'CEV' :
+       {'file': 'ENS', 'dir' : 'store/caesCostEV/', 'title': 'CAES: EV '},
     }
 if args.scenario == 'today':
     scenario_title = 'Mirgration towards higher wind and solar'
@@ -1284,6 +1370,7 @@ for key, scenario in scenarios.items():
     df['lost'] = generated - load - battery_loss
     df['slost'] = battery_loss
 
+
     if args.last == 'full':
         viable = df[df['last']==100.0]
     else:
@@ -1301,15 +1388,42 @@ for key, scenario in scenarios.items():
     print('{: <12}  {}  {}    {}   {:.2f} {:.2f} {:.2f} {:.2f} '.format(key, len(zero), len(viable), len(df), store_max, store_min, store_mean, store_nz_mean ) )
 
     if len(last_viable)>0:
+        variable_list = last_viable.columns
+        variable_list = variable_list.drop(['f_pv', 'f_wind'])
         merged = pd.merge(last_viable, viable, how='inner', on=['f_pv', 'f_wind'], suffixes=(last_key, key))
+        for column in variable_list:
+            merged[column] = merged[column + last_key] - merged[column + key]
+            merged = merged.drop([column + last_key,column + key], axis=1)
         if args.heatdiff:
             top_factor = top_convert[key]
             right_factor = right_convert[key]
             diff_variable = 'storage'
             if args.heat:
                 diff_variable = args.heat
-            merged['heat_diff'] = merged[diff_variable + last_key] - merged[diff_variable + key]
-            scatterHeat(merged, 'heat_diff', diff_variable, 'between {} and {}'.format(label, last_label), args.annotate, args.vmin, args.vmax)
+#           merged['heat_diff'] = merged[diff_variable]
+            ax = scatterHeat(merged, diff_variable, diff_variable, 'difference between {} and {}'.format(label, last_label), args.annotate, args.vmin, args.vmax)
+
+            # plot energy generation of 1.0 line 
+            if args.min:
+                storage_model = settings[key]['storage']
+                baseload = float(settings[key]['baseload'])
+                min_days = (mean_load[key] - baseload) / mean_load[key]
+                min_gen_line(ax, min_days, 'o', '{} minimum'.format(label), styles[0] )
+                energyLine(viable, storage_model, 0.3, '{} 30% excess'.format(label), styles[0], 'black', ax )
+                energyLine(viable, storage_model, 0.5, '{} 50% excess'.format(label), styles[1], 'black', ax )
+                min_days = (mean_load[last_key] - baseload) / mean_load[last_key]
+                min_gen_line(ax, min_days, 'o', '{} minimum '.format(last_label), styles[0] )
+                energyLine(last_viable, storage_model, 0.3, '{} 30% excess'.format(last_label), styles[0], 'grey', ax )
+                energyLine(last_viable, storage_model, 0.5, '{} 50% excess'.format(last_label), styles[1], 'grey', ax )
+                plt.legend(loc='upper right', fontsize=9)
+
+
+            plt.show()
+
+            # plot contours of the difference variable
+            if args.dvariable:
+                diffContour(merged, diff_variable, diff_variable, 'difference between {} and {}'.format(label, last_label), day_list)
+            plt.show()
               
     last_viable = viable
     last_key = key
@@ -1387,7 +1501,14 @@ if args.heat:
         df = dfs[key]
         top_factor = top_convert[key]
         right_factor = right_convert[key]
-        scatterHeat(df, args.heat, scenario_title, label, args.annotate, args.vmin, args.vmax)
+        ax = scatterHeat(df, args.heat, scenario_title, label, args.annotate, args.vmin, args.vmax)
+        if args.heatcv:
+            cv_vars = args.heatcv.split(',')
+            storage_model = settings[key]['storage']
+            for cvar in cv_vars:
+                storage_line = get_storage_line(df, storage_model, float(cvar), args.cx, args.cy, args.cvariable)
+                ax.plot(storage_line[args.sx],storage_line[args.sy], color='black', )
+        plt.show()
 
 # Plot surface
 if args.surface:
@@ -1408,6 +1529,7 @@ if args.plot:
         label = scenario['title']
         df = dfs[key]
         scatterHeat(df, 'last', 'Store % remaining at end', label, args.annotate, args.vmin, args.vmax)
+        plt.show()
 
 if args.pfit:
     # Plot viable solutions
@@ -1449,21 +1571,22 @@ if args.rate:
         label = scenario['title']
         df = dfs[key]
         scatterHeat(df, 'charge', 'Max charge rate in %peak', label, args.annotate, args.vmin, args.vmax)
+        plt.show()
 
     # Plot max discharge rate. 
     for filename, scenario in scenarios.items():
         label = scenario['title']
         df = dfs[key]
         scatterHeat(df, 'discharge', 'Max discharge rate in %peak', label, args.annotate, args.vmin, args.vmax )
+        plt.show()
 
 
 # Plot constant storage lines
 
 first = True
 markers = ['o', 'v', '+', '<', 'x', 'D', '*', 'X','o', 'v', '+', '<', 'x', 'D', '*', 'X']
-styles = ['solid', 'dotted', 'dashed', 'dashdot', 'solid', 'dotted', 'dashed', 'solid', 'dotted', 'dashed', 'dashdot', 'dashdot', 'solid', 'dotted', 'dashed' ]
 colours = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'olive', 'cyan', 'yellow', 'salmon' ]
-mcolours = ['grey', 'black', 'white' ]
+mcolours = ['grey', 'black', 'gold' ]
 scount=0
 odd=0
 min_vars=[]
@@ -1472,6 +1595,7 @@ if args.pmin:
 
 if not args.nolines:
     pmarkers = { 'energy' : '*', 'cost' : 'X', 'storage' : 'p' }
+    pmarkers = { 'energy' : '*', 'cost' : '*', 'storage' : '*' }
     fig, ax = plt.subplots(constrained_layout=False)
     for key, scenario in scenarios.items():
         df = dfs[key].copy()
@@ -1531,6 +1655,11 @@ if not args.nolines:
             label_formated = label_string.format(args.cvariable, days, units[args.cvariable], label)
             # plot the storage line
             ax.plot(storage_line[args.sx],storage_line[args.sy],label=label_formated, marker=marker_type, linestyle=line_style, color=line_colour, markevery=args.markevery)
+            if args.output:
+                filename = '{}/{}-{}-{}'.format(args.output, key, args.cvariable, days)
+                print('outputing line to {}'.format(filename))
+                lineout = storage_line[[args.sx, args.sy]]
+                lineout.to_csv(filename, float_format='%g', index=False)
             # Plot minimum point if requested
             last = dcount==len(day_list)-1 and scount==len(scenarios)-1
             for mvar in min_vars:
@@ -1567,7 +1696,7 @@ if not args.nolines:
         scount+=1
 
         # plot energy generation of 1.0 line 
-        min_days = mean_load[key] - (baseload * 0.4)
+        min_days = mean_load[key] - (baseload )
         if args.min:
             energy_line = get_storage_line(df, storage_model, min_days, 'f_wind', 'f_pv', 'energy')
             energy_line.plot(x='f_wind',y='f_pv',ax=ax,label='actual minimum: energy {:.2f} days. {}'.format(min_days,label), marker=markers[scount])
@@ -1687,6 +1816,31 @@ if args.pnet:
     plt.ylabel(' Net Electricity Demand (TWh)', fontsize=15)
     if not args.nolegend:
         plt.legend(loc='upper center', fontsize=15)
+    plt.show()
+
+if args.bdemand:
+    bdata = []
+    blabels = []
+    for key, scenario in scenarios.items():
+        label = scenario['title']
+        demand = demands[key]
+        normalise_factor = float(settings[key]['normalise'])
+        if hourly:
+            demand = demand.resample('D').sum()
+        demand = demand * normalise_factor * 1e-6
+        bdata.append(demand.values)
+        blabels.append(label)
+
+    print(bdata)
+    fig = plt.figure(figsize =(10, 7))
+    ax = fig.add_subplot(111)
+    # Creating plot
+    ax.boxplot(bdata, 0, '')
+    # x-axis labels
+    ax.set_xticklabels( blabels )
+    ax.set_ylabel('Electricity Demand (proportion of 2018)', fontsize=11)
+
+    # show plot
     plt.show()
 
 if args.pdemand:

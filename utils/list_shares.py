@@ -23,6 +23,10 @@ import stats
 import readers
 import storage
 
+def norm(x):
+    x_norm = (x-np.min(x))/(np.max(x)-np.min(x))
+    return x_norm
+
 def days2twh(days, one_day, hourly):
     one_day = one_day * 1e-6
     if hourly:
@@ -49,6 +53,15 @@ def regression(X, y):
 #   p = fit.predict(Xp)
     return coeffs
 
+def filter(df, variable, value, operator):
+    tolerence = 0.01
+    if operator == 'equal':
+        df = df[(df[variable] > value-tolerence) & (df[variable] < value+tolerence)]
+    if operator == 'greater':
+        df = df[(df[variable] > value)]
+    if operator == 'less':
+        df = df[(df[variable] < value)]
+    return df
 # main program
 
 # process command line
@@ -65,6 +78,9 @@ parser.add_argument('--units', action="store", dest="units", help='Units', defau
 parser.add_argument('--normalise', action="store", dest="normalise", help='Normalise factor to override the one from settings', type=float, default=0.0)
 parser.add_argument('--pv', action="store", dest="pv", help='A particular value of PV', default=None, type=float)
 parser.add_argument('--wind', action="store", dest="wind", help='A particular value of wind', default=None, type=float)
+parser.add_argument('--gradient', action="store", dest="gradient", help='A particular value of gradient', default=None, type=float)
+parser.add_argument('--storage', action="store", dest="storage", help='A particular value of storage', default=None, type=float)
+parser.add_argument('--operator', action="store", dest="operator", help='Operator for selecting rows: equal, less, greater', default='equal' )
 parser.add_argument('--inrate', action="store_true", dest="inrate", help='Base the charge rate on the energy input, not energy stored', default=False)
 args = parser.parse_args()
 
@@ -72,12 +88,20 @@ stores={}
 durations={}
 hydrogens={}
 labels={}
+max_charge_rate={}
+max_discharge_rate={}
+max_f_pv={}
+min_f_pv={}
+max_f_wind={}
+min_f_wind={}
+max_storage={}
+min_storage={}
 
 # loop round the files
 output_dir = '/home/malcolm/uclan/output/' + args.dir + '/'
 
 if not args.nolist:
-    print('File f_wind f_pv storage    charge discharge cost  energy                                      last  lost slost sum load')
+    print('File f_wind f_pv storage    charge discharge cost  energy                                      last  lost slost sum load gradient')
     print('                 days twh   rate   rate            wind pv   fraction total discharged charged')
 for path in glob.glob(output_dir + 'shares*.csv'):
     if args.debug:
@@ -89,10 +113,50 @@ for path in glob.glob(output_dir + 'shares*.csv'):
             df[col] = 0.0
 
     tolerence = 0.01
+#   gradient_vals = df[['wind_energy', 'pv_energy', 'storage']].diff()
+#   gradient = np.gradient(gradient_vals, 0.1, 0.1)
+#   print('gradient')
+#   print(gradient)
+#   print('x')
+#   print(gradient[0])
+#   magnitude = np.linalg.norm(gradient)
+#   magnitude = np.sqrt(np.dot(gradient)
+#   print('magnitude')
+#   print(magnitude)
+#       df = df[(df[variable] > value-tolerence) & (df[variable] < value+tolerence)]
+    wind_vals = np.unique(df['f_wind'].values)
+#   print(wind_vals)
+    pv_vals = np.unique(df['f_pv'].values)
+#   print(pv_vals)
+    n_pvs=len(pv_vals)
+    n_winds=len(wind_vals)
+    storage_vals = np.zeros(shape=(n_winds,n_pvs))
+#   print(storage_vals)
+#   print('Dimensions {} w {} p'.format(n_winds,n_pvs))
+    for w in range(n_winds):
+        for p in range(n_pvs):
+#           print('{} ,{} , {}, {}'.format(w,p, wind_vals[w], pv_vals[p]))
+            storage_df=df[(df['f_pv'] == pv_vals[p]) & (df['f_wind'] == wind_vals[w])]
+#           print(storage_df)
+            storage_val=storage_df['storage']
+#           print('storage_val')
+#           print(storage_val)
+            if len(storage_val)>0:
+                sval=storage_val.values[0]
+#               print('Settings {} for {} {}'.format(sval,w,p))
+                storage_vals[w,p]=sval
+#   print(storage_vals)
+#   gradients=np.gradient(storage_vals, wind_vals, pv_vals)
+    gradients=np.gradient(norm(storage_vals), norm(wind_vals), norm(pv_vals) )
+#   print(len(wind_vals), len(pv_vals), np.shape(wind_vals), np.shape(pv_vals), np.shape(storage_vals), np.shape(gradients))
     if args.pv:
-        df = df[(df['f_pv'] > args.pv-tolerence) & (df['f_pv'] < args.pv+tolerence)]
+#       df = df[(df['f_pv'] > args.pv-tolerence) & (df['f_pv'] < args.pv+tolerence)]
+        df = filter(df, 'f_pv', args.pv, args.operator)
     if args.wind:
-        df = df[(df['f_wind'] > args.wind-tolerence) & (df['f_wind'] < args.wind+tolerence)]
+#       df = df[(df['f_wind'] > args.wind-tolerence) & (df['f_wind'] < args.wind+tolerence)]
+        df = filter(df, 'f_wind', args.wind, args.operator)
+    if args.storage:
+        df = filter(df, 'storage', args.storage, args.operator)
 
     filename = os.path.basename(path)
     scenario = filename[-7:]
@@ -184,6 +248,10 @@ for path in glob.glob(output_dir + 'shares*.csv'):
     # check energy sum (should be 1.0, ie the load)
     df['energy_sum'] = df['wind_energy'] + df['pv_energy'] + df['base'] + df['variable_energy'] - df['lost'] - df['slost']
 
+    max_charge_rate[label] = 0
+    max_discharge_rate[label] = 0
+
+
     # each row of dataframe
     for index, row in df.iterrows():
         # rates in days per day or days per hour
@@ -202,8 +270,28 @@ for path in glob.glob(output_dir + 'shares*.csv'):
             discharge_rate = storage.days2capacity(row['discharge_rate'], one_day * 1e-3, False)
             discharge = storage.days2energy(row['discharge'], one_day , number_of_days, True)
             charge = storage.days2energy(row['charge'], one_day , number_of_days, True)
+        if charge_rate > max_charge_rate[label]:
+            max_charge_rate[label] = charge_rate
+        if discharge_rate > max_discharge_rate[label]:
+            max_discharge_rate[label] = discharge_rate
+
+        # gradient
+        gradient=0
+        iw=np.where(wind_vals == row['f_wind'])[0][0]
+        ip=np.where(pv_vals == row['f_pv'])[0][0]
+        grad1=gradients[0][iw][ip]
+        grad2=gradients[1][iw][ip]
+        gradient=math.sqrt(grad1**2 + grad2**2)
         if not args.nolist:
-            print('{}  {:.1f}    {:.1f}  {:4.1f} {:4.1f} {:5.2f}  {:5.2f}      {:.3f} {:.2f} {:.2f} {:.2f}     {:.3f} {:.3f}      {:.3f}   {:.2f}  {:.2f} {:.2f} {:.2f} {:.2f}'.format(scenario[0:3], row['f_wind'], row['f_pv'], row['storage'], days2twh(row['storage'], one_day, hourly), charge_rate, discharge_rate, row['cost'], row['wind_energy'], row['pv_energy'], row['fraction'], row['energy'], discharge, charge, row['last'], row['lost'], row['slost'], row['energy_sum'], load ) )
+            if (args.gradient and gradient>args.gradient) or not args.gradient:
+                print('{}  {:.1f}    {:.1f}  {:4.1f} {:4.1f} {:5.2f}  {:5.2f}      {:.3f} {:.2f} {:.2f} {:.2f}     {:.3f} {:.3f}      {:.3f}   {:.2f}  {:.2f} {:.2f} {:.2f} {:.2f} {:4.1f}'.format(scenario[0:3], row['f_wind'], row['f_pv'], row['storage'], days2twh(row['storage'], one_day, hourly), charge_rate, discharge_rate, row['cost'], row['wind_energy'], row['pv_energy'], row['fraction'], row['energy'], discharge, charge, row['last'], row['lost'], row['slost'], row['energy_sum'], load, gradient ) )
+
+    max_f_pv[label] = df['f_pv'].max()
+    min_f_pv[label] = df['f_pv'].min()
+    max_f_wind[label] = df['f_wind'].max()
+    min_f_wind[label] = df['f_wind'].min()
+    max_storage[label] = df['storage'].max()
+    min_storage[label] = df['storage'].min()
 
     if args.fit:
         print('Doing regression {} '.format(scenario[0:3] ))
@@ -226,6 +314,11 @@ for path in glob.glob(output_dir + 'shares*.csv'):
             duration = duration / 24
             duration.index = duration.index / 24
         durations[scenario[0:3]] = duration
+
+print("Label charge_rate discharge_rate f_pv      f_wind")
+print("      max         min            max  min  max  min  max  min")
+for label in max_charge_rate:
+    print("{}   {:4.1f}       {:4.1f}         {:4.1f} {:4.1f} {:4.1f} {:4.1f} {:4.1f} {:4.1f}".format(label, max_charge_rate[label], max_discharge_rate[label], max_f_pv[label], min_f_pv[label], max_f_wind[label], min_f_wind[label], max_storage[label], min_storage[label] ) )
 
 if args.pstore:
     for label,store in stores.items():

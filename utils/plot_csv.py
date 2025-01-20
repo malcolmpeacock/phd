@@ -8,26 +8,74 @@ parser.add_argument('--filename', action="store", dest="filename", help='Filenam
 parser.add_argument('--title', action="store", dest="title", help='title ', default='Title' )
 parser.add_argument('--xlabel', action="store", dest="xlabel", help='xlabel ', default='xlabel' )
 parser.add_argument('--scatter', action="store_true", dest="scatter", help='scatter ', default=False )
+parser.add_argument('--ycol', action="store", dest="ycol", help='ycol ', default=None )
+parser.add_argument('--xcols', action="store", dest="xcols", help='xcols ', default=None )
+parser.add_argument('--exclude', action="store", dest="exclude", help='exclude ', default=None )
 args = parser.parse_args()
 
 dir = '/home/malcolm/uclan/output/csv/'
+markers = ['o', 'v', '+', '<', 'x', 'D', '*', 'X','o', 'v', '+', '<', 'x', 'D', '*', 'X']
 data = pd.read_csv(dir+args.filename, header=0).squeeze()
 
 print(data)
 
-y_label = data.columns[0]
-y = data[y_label]
-print(y)
+excludes=[]
+if args.exclude:
+    excludes = args.exclude.split(',')
 
-markers = ['o', 'v', '+', '<', 'x', 'D', '*', 'X','o', 'v', '+', '<', 'x', 'D', '*', 'X']
-for col in range(len(data.columns)-1):
-    x_label = data.columns[col+1]
-    x = data[x_label]
-    print(x)
-    if args.scatter:
-        plt.scatter(x, y, label = x_label, marker=markers[col+1])
-    else:
-        plt.plot(x, y, label = x_label, marker=markers[col+1])
+if not args.ycol:
+    y_label = data.columns[0]
+    print('First col  default')
+else:
+    y_label = args.ycol
+    print('col from arg ')
+print('Y column: {}'.format(y_label) )
+
+if not args.xcols:
+    print('All x cols  default')
+    xcols = []
+    for col in range(len(data.columns)-1):
+        xcols.append(data.columns[col+1])
+else:
+    xcols = args.xcols.split(',')
+    print('x cols passed in')
+
+# Extract scenarios
+x=[]
+if 'scenario' in data.columns:
+    # Add Extra variables
+    data['lostp'] = data['lost'] / data['energy']
+    data['slostp'] = data['slost'] / data['energy']
+    data['lostd'] = data['lost'].diff()
+    data['slostd'] = data['slost'].diff()
+    print('Grouping by scenario')
+    group = data.groupby('scenario')
+    for scenario, contents in group:
+        if not scenario in excludes:
+            print(contents)
+            y = contents[y_label]
+            col=0
+            for x_label in xcols:
+                col+=1
+                x = contents[x_label]
+                label = '{} : {}'.format(scenario,x_label)
+                print('Label : {} '.format(label) )
+                if args.scatter:
+                    plt.scatter(x, y, label = label, marker=markers[col+1])
+                else:
+                    plt.plot(x, y, label = label, marker=markers[col+1])
+
+else:
+    y = data[y_label]
+    col=0
+    for x_label in xcols:
+        col+=1
+        x = data[x_label]
+        print('X column: {}'.format(x_label) )
+        if args.scatter:
+            plt.scatter(x, y, label = x_label, marker=markers[col])
+        else:
+            plt.plot(x, y, label = x_label, marker=markers[col])
 
 plt.title(args.title)
 plt.xlabel(args.xlabel, fontsize=15)
