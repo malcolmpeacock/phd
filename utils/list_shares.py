@@ -23,6 +23,25 @@ import stats
 import readers
 import storage
 
+def bounds(df, bvars):
+    svars = bvars.split(',')
+    b_var = svars[0]
+    v1 = svars[1]
+    v2 = svars[2]
+    bdf = df[[b_var, v1, v2]]
+    print(bdf)
+    bdf.sort_values(by=[b_var], ascending=True, inplace=True)
+    bdf['d1'] = bdf[v1].diff() / bdf[v1].max()
+    bdf['d1'] = bdf['d1'].abs()
+    bdf['d2'] = bdf[v2].diff() / bdf[v2].max()
+    bdf['d2'] = bdf['d2'].abs()
+    bdf['max'] = bdf[['d1', 'd2']].max(axis=1)
+    bdf.fillna(0, inplace=True)
+    plt.plot(bdf[b_var].values, bdf['max'] )
+    plt.ylabel('max change of {} and {}'.format(v1, v2), fontsize=15)
+    plt.xlabel(b_var, fontsize=15)
+    plt.show()
+
 def norm(x):
     x_norm = (x-np.min(x))/(np.max(x)-np.min(x))
     return x_norm
@@ -81,6 +100,7 @@ parser.add_argument('--wind', action="store", dest="wind", help='A particular va
 parser.add_argument('--gradient', action="store", dest="gradient", help='A particular value of gradient', default=None, type=float)
 parser.add_argument('--storage', action="store", dest="storage", help='A particular value of storage', default=None, type=float)
 parser.add_argument('--operator', action="store", dest="operator", help='Operator for selecting rows: equal, less, greater', default='equal' )
+parser.add_argument('--bounds', action="store", dest="bounds", help='Plot bounds based on variables passed in', default=None )
 parser.add_argument('--inrate', action="store_true", dest="inrate", help='Base the charge rate on the energy input, not energy stored', default=False)
 args = parser.parse_args()
 
@@ -251,6 +271,8 @@ for path in glob.glob(output_dir + 'shares*.csv'):
     max_charge_rate[label] = 0
     max_discharge_rate[label] = 0
 
+    if args.bounds:
+        bounds(df,args.bounds)
 
     # each row of dataframe
     for index, row in df.iterrows():

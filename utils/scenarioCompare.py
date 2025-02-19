@@ -25,6 +25,36 @@ import stats
 import readers
 import storage
 
+def norm(x):
+    x_norm = (x-np.min(x))/(np.max(x)-np.min(x))
+    return x_norm
+
+def addGradient(df):
+    wind_vals = np.unique(df['f_wind'].values)
+    pv_vals = np.unique(df['f_pv'].values)
+    n_pvs=len(pv_vals)
+    n_winds=len(wind_vals)
+    storage_vals = np.zeros(shape=(n_winds,n_pvs))
+    for w in range(n_winds):
+        for p in range(n_pvs):
+            storage_df=df[(df['f_pv'] == pv_vals[p]) & (df['f_wind'] == wind_vals[w])]
+            storage_val=storage_df['storage']
+            if len(storage_val)>0:
+                sval=storage_val.values[0]
+                storage_vals[w,p]=sval
+    gradients=np.gradient(norm(storage_vals), norm(wind_vals), norm(pv_vals) )
+    # set gradients to zero
+    df['sgradient'] = df['storage'] * 0.0
+    grads=gradients[0]
+    # set gradients
+    for w in range(n_winds):
+        for p in range(n_pvs):
+            grad_val = abs(grads[w][p])
+            if grad_val>200:
+                grad_val = 200
+            df['sgradient'].mask((df['f_pv'] == pv_vals[p]) & (df['f_wind'] == wind_vals[w]) , grad_val, inplace=True)
+    df['sgradient'].fillna(200, inplace=True)
+
 def diffContour(df, df_variable, diff_variable, title, day_list):
     print('diffContour')
     colours = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'olive', 'cyan', 'yellow', 'salmon' ]
@@ -217,9 +247,10 @@ def scatterHeat(df, variable, title, label, annotate, vmin, vmax):
     # 2nd axis
 #   axx = ax.secondary_xaxis('top', functions=(top_cf2gw, top_gw2cf))
 #   axx = ax[0].secondary_xaxis('top', functions=(top_cf2gw, top_gw2cf))
-    if (args.sx == 'f_wind' and args.sy=='f_pv') or (args.sx == 'wind_energy' and args.sy=='pv_energy'):
+    if (args.sx=='f_wind' or args.sx == 'wind_energy'):
         axx = ax.secondary_xaxis('top', functions=(top_cf2gw, top_gw2cf))
         axx.set_xlabel('Wind Generation Capacity (GW)')
+    if (args.sy=='f_pv' or args.sy=='pv_energy'):
         axy = ax.secondary_yaxis('right', functions=(right_cf2gw, right_gw2cf))
         axy.set_ylabel('Solar PV Generation Capacity (GW)')
     # plot the colorbar
@@ -503,17 +534,17 @@ if args.scenario == 'hourlyhpev':
     }
 if args.scenario == 'hourlyExisting':
     scenario_title = 'Impact of electricifcation of heating and transport'
-    scenarios = {'hefs' :
+    scenarios = {'ex' :
        {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': ''} 
     }
 if args.scenario == 'hourlyHP41':
     scenario_title = 'Impact of electricifcation of heating and transport'
-    scenarios = {'hefs' :
+    scenarios = {'hp41' :
        {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': ''} 
     }
 if args.scenario == 'hourlyEV':
     scenario_title = 'Impact of electricifcation of heating and transport'
-    scenarios = {'hefs' :
+    scenarios = {'ev' :
        {'file': 'ENS', 'dir' : 'hourly/gbase04ev/', 'title': ''} 
     }
 if args.scenario == 'caesev':
@@ -1169,6 +1200,7 @@ axis_labels = {
     'area' : 'Area under net demand curve',
     'charge_rate' : 'Charge rate (in proportion to load)',
     'discharge_rate' : 'Discharge rate (in proportion to load)',
+    'sgradient' : 'Gradient of storage in wind-pv plane',
     'discharge' : 'store discharge'
 }
 # variables and axis labels
@@ -1181,6 +1213,7 @@ axis_labels_short = {
     'wind_energy' : 'Wind energy ( days )',
     'pv_energy' : 'PV energy ( days )',
     'all_energy' : 'All energy ( days )',
+    'sgradient' : 'Storage Gradient ( % )',
     'excess_energy' : 'Excess energy generated ( in proportion to load )',
     'storage' : 'energy storage (days)',
     'cost' : 'cost ( £/kWh )',
@@ -1196,23 +1229,23 @@ axis_labels_short = {
 
 # variables and axis labels
 units = {
-    'f_pv': 'days',
-    'f_wind': 'days',
-    'energy' : 'days',
-    'all_energy' : 'days',
-    'excess_energy' : 'days',
+    'f_pv': 'x load',
+    'f_wind': 'x load',
+    'energy' : 'x load',
+    'all_energy' : 'x load',
+    'excess_energy' : 'x load',
     'fraction' : '%',
     'cfraction' : '%',
-    'wind_energy' : 'days',
-    'pv_energy' : 'days',
+    'wind_energy' : 'x load',
+    'pv_energy' : 'x load',
     'storage' : 'days',
     'cost' : '£/kWh',
     'last' : '%',
-    'lost' : 'days',
-    'slost' : 'days',
+    'lost' : 'x load',
+    'slost' : 'x load',
     'area' : 'days2',
-    'charge' : 'days',
-    'discharge' : 'days'
+    'charge' : 'x load',
+    'discharge' : 'x load'
 }
 
 # load the demands
@@ -1357,6 +1390,11 @@ for key, scenario in scenarios.items():
     norm_mean = float(settings[key]['normalise_mean'])
     df['energy'] = df['energy'] / norm_mean
     df['storage'] = df['storage'] / norm_mean
+
+    # Calculate gradient
+    # (but seems to cause infinite loop sometimes, so only when needed)
+    if args.heat == 'sgradient':
+        addGradient(df)
 
     # calculate the 'lost' energy
     factor = 1
@@ -1658,7 +1696,11 @@ if not args.nolines:
             if args.output:
                 filename = '{}/{}-{}-{}'.format(args.output, key, args.cvariable, days)
                 print('outputing line to {}'.format(filename))
-                lineout = storage_line[[args.sx, args.sy]]
+                y_abs = storage_line[args.sy] / storage_line[args.sy].max()
+                x_abs = storage_line[args.sx] / storage_line[args.sx].max()
+                gradient = y_abs.diff() / x_abs.diff()
+                storage_line['gradient'] = gradient * 100
+                lineout = storage_line[[args.sx, args.sy, 'gradient']]
                 lineout.to_csv(filename, float_format='%g', index=False)
             # Plot minimum point if requested
             last = dcount==len(day_list)-1 and scount==len(scenarios)-1
@@ -1704,16 +1746,23 @@ if not args.nolines:
             min_gen_line(ax, min_days, markers[scount])
             scount+=1
 
-    plt.title('Constant {} lines {}'.format(args.cvariable, scenario_title) )
+#   plt.title('Constant {} lines {}'.format(args.cvariable, scenario_title) )
     plt.xlabel(axis_labels[args.sx])
     plt.ylabel(axis_labels[args.sy])
     # 2nd axis#
 #   if not first and args.sx == 'f_wind' and args.sy=='f_pv':
-    if (args.sx == 'f_wind' and args.sy=='f_pv') or (args.sx == 'wind_energy' and args.sy=='pv_energy'):
+    if (args.sx == 'f_wind' or args.sx == 'wind_energy'):
         axx = ax.secondary_xaxis('top', functions=(top_cf2gw, top_gw2cf))
         axx.set_xlabel('Wind Generation Capacity (GW)')
+    if (args.sy=='f_pv' or args.sy=='pv_energy'):
         axy = ax.secondary_yaxis('right', functions=(right_cf2gw, right_gw2cf))
         axy.set_ylabel('Solar PV Generation Capacity (GW)')
+    if (args.sy == 'f_wind' or args.sy == 'wind_energy'):
+        axx = ax.secondary_yaxis('right', functions=(right_cf2gw, right_gw2cf))
+        axx.set_ylabel('Wind Generation Capacity (GW)')
+    if (args.sx=='f_pv' or args.sx=='pv_energy'):
+        axy = ax.secondary_xaxis('top', functions=(top_cf2gw, top_gw2cf))
+        axy.set_xlabel('Solar PV Generation Capacity (GW)')
 
     if not args.nolegend:
         plt.legend(loc='best', fontsize=10)
