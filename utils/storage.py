@@ -106,7 +106,7 @@ def storage_line(df, storage_value, method='interp1', wind_parm='f_wind', pv_par
     # linearly interpolate along wind and then pv
     else:
 #       print('storage_line for {} days '.format(storage_value) )
-        variables = ['f_wind', 'f_pv', 'storage', 'last', 'wind_energy', 'pv_energy', 'discharge', 'base', 'cost', 'cost_gen', 'cost_store', 'charge_rate', 'discharge_rate', 'charge', 'variable_energy', 'variable', 'gw_wind', 'gw_pv', 'fraction', 'energy', 'yearly_store_min', 'yearly_store_max', 'lost', 'slost', 'area', 'all_energy', 'excess_energy' ]
+        variables = ['f_wind', 'f_pv', 'storage', 'last', 'wind_energy', 'pv_energy', 'discharge', 'base', 'cost', 'cost_gen', 'cost_store', 'charge_rate', 'discharge_rate', 'charge', 'variable_energy', 'variable', 'gw_wind', 'gw_pv', 'fraction', 'energy', 'yearly_store_min', 'yearly_store_max', 'lost', 'slost', 'area', 'all_energy', 'excess_energy', 'norm_energy', 'sfraction' ]
         if variable not in variables or wind_parm not in variables or pv_parm not in variables:
             print('ERROR variable : {} not in variables list'.format(variable) )
             quit()
@@ -567,6 +567,8 @@ def min_point(storage_line, variable='energy', wind_var='f_wind', pv_var='f_pv')
       'variable_energy' : min_points['variable_energy'].mean(),
       'all_energy'      : min_points['all_energy'].mean(),
       'excess_energy'      : min_points['excess_energy'].mean(),
+      'sfraction'      : min_points['sfraction'].mean(),
+      'norm_energy'      : min_points['norm_energy'].mean(),
       'base' : min_points['base'].mean(),
       'variable' : min_points['variable'].mean(),
       'gw_wind' : min_points['gw_wind'].mean(),

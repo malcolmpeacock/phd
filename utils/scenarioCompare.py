@@ -72,7 +72,7 @@ def diffContour(df, df_variable, diff_variable, title, day_list):
         print('DEBUG var {} days {}'.format(df_variable, days) )
         print(args.cx, args.cy, df_variable)
         print(df)
-        storage_line = get_storage_line(df, storage_model, days, args.cx, args.cy, df_variable)
+        storage_line = get_storage_line(df, storage_model, days, 1.0, args.cx, args.cy, df_variable)
         print(storage_line)
         if len(storage_line) == 0:
             print('Skipping line {: <12} {} {} '.format(key, days, len(storage_line) ))
@@ -102,7 +102,7 @@ def diffContour(df, df_variable, diff_variable, title, day_list):
     plt.legend(loc='upper right', fontsize=9)
 
 def energyLine(df, storage_model, min_days, label, style, color, ax):
-    energy_line = get_storage_line(df, storage_model, min_days, 'f_wind', 'f_pv', 'excess_energy')
+    energy_line = get_storage_line(df, storage_model, min_days, 1.0, 'f_wind', 'f_pv', 'excess_energy')
     ax.plot(energy_line['f_wind'], energy_line['f_pv'], label=label, linestyle=style, color=color  )
 
 # feature correlation
@@ -147,7 +147,7 @@ def get_skline(df, storage_model, days, wind_parm='f_wind', pv_parm='f_pv', vari
     print(contours)
     quit()
 
-def get_storage_line(df, storage_model, days, wind_parm='f_wind', pv_parm='f_pv', variable='storage'):
+def get_storage_line(df, storage_model, days, norm_factor=1.0, wind_parm='f_wind', pv_parm='f_pv', variable='storage'):
     if storage_model == 'new':
         storage_line = df[df[variable] == days].copy()
         storage_line = storage_line.sort_values([wind_parm, pv_parm], ascending=[True, True])
@@ -164,6 +164,8 @@ def get_storage_line(df, storage_model, days, wind_parm='f_wind', pv_parm='f_pv'
     #       but I don't want to rerun everything!
     storage_line['all_energy'] = storage_line['energy'] + (storage_line['variable_energy'] / 818387.7082191781) + storage_line['base']
     storage_line['excess_energy'] = ( storage_line['all_energy'] - mean_load[key] ) / mean_load[key]
+    storage_line['norm_energy'] = storage_line['all_energy'] / norm_factor
+    storage_line['sfraction'] = storage_line['storage'] /( storage_line['all_energy'] * 365 )
     return storage_line
 
 def get_viable(df, last, days):
@@ -1187,10 +1189,12 @@ axis_labels = {
     'energy' : 'Renewable energy generated ( in proportion to load )',
     'all_energy' : 'Total energy generated ( in proportion to load )',
     'excess_energy' : 'Excess energy generated ( in proportion to load )',
+    'norm_energy' : 'Total energy generated ( in proportion to load )',
     'fraction' : 'Wind energy fraction',
     'cfraction' : 'Wind capacity fraction',
     'wind_energy' : 'Wind energy ( days )',
     'pv_energy' : 'PV energy ( days )',
+    'sfraction' : 'Capacity of energy storage ( in proportion to load )',
     'storage' : 'Amount of energy storage (days)',
     'cost' : 'cost ( £/kWh )',
     'last' : 'store level % fill at end',
@@ -1201,7 +1205,7 @@ axis_labels = {
     'charge_rate' : 'Charge rate (in proportion to load)',
     'discharge_rate' : 'Discharge rate (in proportion to load)',
     'sgradient' : 'Gradient of storage in wind-pv plane',
-    'discharge' : 'store discharge'
+    'discharge' : 'store discharge (in proportion to load)'
 }
 # variables and axis labels
 axis_labels_short = {
@@ -1215,7 +1219,9 @@ axis_labels_short = {
     'all_energy' : 'All energy ( days )',
     'sgradient' : 'Storage Gradient ( % )',
     'excess_energy' : 'Excess energy generated ( in proportion to load )',
+    'norm_energy' : 'Normalised energy generated ( in proportion to load )',
     'storage' : 'energy storage (days)',
+    'sfraction' : 'energy storage ( % )',
     'cost' : 'cost ( £/kWh )',
     'last' : 'store level % fill at end',
     'lost' : 'Lost (curtailed) energy (days)',
@@ -1224,7 +1230,7 @@ axis_labels_short = {
     'area' : 'Area under net demand curve',
     'discharge_rate' : 'store discharge rate',
     'charge_rate' : 'store charge rate',
-    'discharge' : 'store discharge'
+    'discharge' : 'store discharge ( % )'
 }
 
 # variables and axis labels
@@ -1234,11 +1240,13 @@ units = {
     'energy' : 'x load',
     'all_energy' : 'x load',
     'excess_energy' : 'x load',
+    'norm_energy' : 'x load',
     'fraction' : '%',
     'cfraction' : '%',
     'wind_energy' : 'x load',
     'pv_energy' : 'x load',
     'storage' : 'days',
+    'sfraction' : '%',
     'cost' : '£/kWh',
     'last' : '%',
     'lost' : 'x load',
@@ -1378,6 +1386,12 @@ for key, scenario in scenarios.items():
     df['energy'] = ( df['wind_energy'] + df['pv_energy'] )
     df['all_energy'] = df['energy'] + (df['variable_energy'] / 818387.7082191781) + df['base']
     df['excess_energy'] = ( df['all_energy'] - mean_load[key] ) / mean_load[key]
+    # normalised energy
+    nfactor=mean_load[key]
+    print('DEBUG NFACTOR', nfactor)
+    df['norm_energy'] = df['all_energy'] / nfactor
+    # normalised storage
+    df['sfraction'] = df['storage'] /( df['all_energy'] * 365 )
     # calculate wind energy fraction
     df['fraction'] = df['wind_energy'] / df['energy']
     df['fraction'].fillna(0.0, inplace=True)
@@ -1544,7 +1558,7 @@ if args.heat:
             cv_vars = args.heatcv.split(',')
             storage_model = settings[key]['storage']
             for cvar in cv_vars:
-                storage_line = get_storage_line(df, storage_model, float(cvar), args.cx, args.cy, args.cvariable)
+                storage_line = get_storage_line(df, storage_model, float(cvar), 1.0, args.cx, args.cy, args.cvariable)
                 ax.plot(storage_line[args.sx],storage_line[args.sy], color='black', )
         plt.show()
 
@@ -1632,8 +1646,7 @@ if args.pmin:
     min_vars = args.pmin.split(',')
 
 if not args.nolines:
-    pmarkers = { 'energy' : '*', 'cost' : 'X', 'storage' : 'p' }
-    pmarkers = { 'energy' : '*', 'cost' : '*', 'storage' : '*' }
+    pmarkers = { 0 : '*', 1 : 'X', 2 : 'p' }
     fig, ax = plt.subplots(constrained_layout=False)
     for key, scenario in scenarios.items():
         df = dfs[key].copy()
@@ -1655,9 +1668,10 @@ if not args.nolines:
               odd=0
             else:
               odd=1
-            storage_line = get_storage_line(df, storage_model, days, args.cx, args.cy, args.cvariable)
+            nfactor=mean_load[key]
+            storage_line = get_storage_line(df, storage_model, days, nfactor, args.cx, args.cy, args.cvariable)
             if len(storage_line) == 0:
-                print('Skipping line {: <12} {} {} '.format(key, days, len(storage_line) ))
+                print('Skipping c line {: <12} {} {} '.format(key, days, len(storage_line) ))
                 continue
 
             # print the minimum energy point in the contour
@@ -1704,13 +1718,13 @@ if not args.nolines:
                 lineout.to_csv(filename, float_format='%g', index=False)
             # Plot minimum point if requested
             last = dcount==len(day_list)-1 and scount==len(scenarios)-1
+            mcount=0
             for mvar in min_vars:
 #               print('VAR {} last {} label {} '.format(mvar, last, label))
-                min_ppoint = min_storage
-                if mvar == 'energy':
-                    min_ppoint = min_energy
-                if mvar == 'cost':
-                    min_ppoint = min_cost
+                mvar_vals=storage_line[mvar].values
+                ip=np.argmin(mvar_vals)
+                xp_val=storage_line[args.sx].values[ip]
+                yp_val=storage_line[args.sy].values[ip]
                 # determine the marker colour
                 # only include the label on the last one so it comes last
                 # in the legend
@@ -1730,7 +1744,10 @@ if not args.nolines:
                             mlabel = 'minimum {}'.format(mvar)
                 # plot the marker. The label determines if the marker appears
                 # in the legend or not - so usually set to None
-                ax.plot(min_ppoint[args.sx], min_ppoint[args.sy], label=mlabel, marker=pmarkers[mvar], color=marker_colour, ms=14)
+                ax.plot(xp_val, yp_val, label=mlabel, marker=pmarkers[mcount], color=marker_colour, ms=14)
+
+                # marker counter
+                mcount+=1
 
             # day counter
             dcount+=1
@@ -1740,7 +1757,7 @@ if not args.nolines:
         # plot energy generation of 1.0 line 
         min_days = mean_load[key] - (baseload )
         if args.min:
-            energy_line = get_storage_line(df, storage_model, min_days, 'f_wind', 'f_pv', 'energy')
+            energy_line = get_storage_line(df, storage_model, min_days, 1.0, 'f_wind', 'f_pv', 'energy')
             energy_line.plot(x='f_wind',y='f_pv',ax=ax,label='actual minimum: energy {:.2f} days. {}'.format(min_days,label), marker=markers[scount])
             scount+=1
             min_gen_line(ax, min_days, markers[scount])
@@ -1887,7 +1904,7 @@ if args.bdemand:
     ax.boxplot(bdata, 0, '')
     # x-axis labels
     ax.set_xticklabels( blabels )
-    ax.set_ylabel('Electricity Demand (proportion of 2018)', fontsize=11)
+    ax.set_ylabel('Daily Electricity Demand (MWh)', fontsize=11)
 
     # show plot
     plt.show()
