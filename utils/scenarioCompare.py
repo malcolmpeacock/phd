@@ -86,7 +86,10 @@ def diffContour(df, df_variable, diff_variable, title, day_list):
         label_string = '{} {:.' + str(args.decimals) + 'f} ({}).'
         label_formated = label_string.format(args.cvariable + ' difference', days, units[diff_variable])
         # plot the storage line
-        plt.plot(storage_line[args.sx],storage_line[args.sy],label=label_formated, marker=marker_type, linestyle=line_style, color=line_colour, markevery=args.markevery)
+        if args.markevery==0:
+            plt.plot(storage_line[args.sx],storage_line[args.sy],label=label_formated, linestyle=line_style, color=line_colour)
+        else:
+            plt.plot(storage_line[args.sx],storage_line[args.sy],label=label_formated, marker=marker_type, linestyle=line_style, color=line_colour, markevery=args.markevery)
         # optionally output the storage line
         if args.output:
             filename = '{}/{}-{}-{}'.format(args.output, 'diff', args.cvariable, days)
@@ -256,7 +259,7 @@ def scatterHeat(df, variable, title, label, annotate, vmin, vmax):
         axy = ax.secondary_yaxis('right', functions=(right_cf2gw, right_gw2cf))
         axy.set_ylabel('Solar PV Generation Capacity (GW)')
     # plot the colorbar
-    cb = plt.colorbar(pad=0.1)
+    cb = plt.colorbar(pad=0.2)
     if variable == 'heat_diff':
         cb.set_label('difference in ' + title)
         plt.title('difference in {} ({} ).'.format(title, label))
@@ -382,16 +385,32 @@ ninja85 = 'ninja85/'
 ninja75 = 'ninja75/'
 scenario_title = ' for different scenarios'
 #
-#scenarios = {'HNS' : 'Half Heat Pumps',
-#             'NNS' : 'No   Heat Pumps'
-#            }
-#scenarios = {'NNH' : 'Scaled Historic Time Series',
-#             'ENS' : 'Synthetic Time Series From Weather'
-#            }
-#scenarios = {'PNH' : 'Scaled Historic Time Series + heat',
-#            'PNS' : 'Synthetic Time Series From Weather + heat'
-#           }
-#scenarios = {'HNS' : {'file': 'HNS', 'dir' : hvh, 'title': 'Half heat pumps, half hydrogen'}, 'PNS' : {'file': 'PNS', 'dir' : hvh, 'title': 'All heat pumps'}, 'FNS' : {'file': 'FNS', 'dir' : hvh, 'title': 'FES 2019 Net Zero: heat pumps, hydrogen and hybrid heat pumps'} }
+if args.scenario == 'newcomp':
+    scenarios = {'old' :
+       {'file': 'ENS', 'dir' : 'new/hvh/', 'title': 'Old with 0.09'},
+                 'new' : 
+       {'file': 'existing09', 'dir' : 'new/new/', 'title': 'New with 0.09'} ,
+                 'new6' : 
+       {'file': 'existing06', 'dir' : 'new/new/', 'title': 'New with 0.06'} ,
+                'hefs' :
+       {'file': 'ENS', 'dir' : 'hourly/gbase04/', 'title': 'Existing heating'}
+    }
+if args.scenario == 'newcomphp':
+    scenarios = {'rerun' :
+       {'file': 'FNS', 'dir' : 'new/hvh/', 'title': 'Old with 0.09'},
+                 'new9' : 
+       {'file': 'hp4109', 'dir' : 'new/new/', 'title': 'New with 0.09'} ,
+                 'new6' : 
+       {'file': 'hp4106', 'dir' : 'new/new/', 'title': 'New with 0.06'} ,
+                'old' :
+       {'file': 'FNS', 'dir' : 'hourly/gbase04/', 'title': 'old HP41 heating'}
+    }
+#
+if args.scenario == 'reduced':
+    scenarios = {'test' :
+       {'file': '3years_hp41', 'dir' : 'new/results/', 'title': 'Test of new seperate script'}
+    }
+#
 if args.scenario == 'historic':
     scenarios = {'historic' :
        {'file': 'ENH', 'dir' : 'demand/', 'title': 'Scaled Historic Time Series'},
@@ -933,6 +952,35 @@ if args.scenario == 'pattern':
                  'kf' : 
        {'file': 'ENS', 'dir' : 'kfwindScaled/', 'title': 'Fragaki. et. al. (onshore scaled to ninja offshore cf )'},
     }
+if args.scenario == 'kfexisting40':
+    scenario_title = 'Daily vs Hourly Time Series'
+    scenarios = {'h40e' :
+       {'file': 'ENS', 'dir' : 'kf_new_eta/hourly40/', 'title': 'Existing heating 40% efficiency, hourly'},
+                 'd40e' : 
+       {'file': 'ENS', 'dir' : 'kf_new_eta/daily40/', 'title': 'Existing heating 40% efficiency, daily'}
+}
+if args.scenario == 'kfexisting85':
+    scenario_title = 'Daily vs Hourly Time Series'
+    scenarios = {'h85e' :
+       {'file': 'ENS', 'dir' : 'kf_new_eta/hourly85/', 'title': 'Existing heating 85% efficiency, hourly'},
+                 'd85e' : 
+       {'file': 'ENS', 'dir' : 'kf_new_eta/daily85/', 'title': 'Existing heating 85% efficiency, daily'}
+}
+if args.scenario == 'kfhp85':
+    scenario_title = 'Daily vs Hourly Time Series'
+    scenarios = {'h85hp' :
+       {'file': 'GNS', 'dir' : 'kf_new_eta/hourly85/', 'title': '41% Heat Pumps 85% efficiency, hourly'},
+                 'd85hp' : 
+       {'file': 'GNS', 'dir' : 'kf_new_eta/daily85/', 'title': '41% Heat Pumps 85% efficiency, daily'}
+}
+if args.scenario == 'kfhp40':
+    scenario_title = 'Daily vs Hourly Time Series'
+    scenarios = {'h40hp' :
+       {'file': 'GNS', 'dir' : 'kf_new_eta/hourly40/', 'title': '41% Heat Pumps 40% efficiency, hourly'},
+                 'd40hp' : 
+       {'file': 'GNS', 'dir' : 'kf_new_eta/daily40/', 'title': '41% Heat Pumps 40% efficiency, daily'}
+}
+#
 if args.scenario == 'patternh':
     scenario_title = 'Impact of wind generation pattern - efficiency 50%'
     scenarios = {'off' :
@@ -1184,8 +1232,8 @@ output_dir = "/home/malcolm/uclan/output"
 
 # variables and axis labels
 axis_labels = {
-    'f_pv': 'Solar PV generation capacity ( in proportion to load )',
-    'f_wind': 'Wind generation capacity ( in proportion to load )',
+    'f_pv': 'Solar PV generation capacity ( Normalised )',
+    'f_wind': 'Wind generation capacity ( Normalised )',
     'energy' : 'Renewable energy generated ( in proportion to load )',
     'all_energy' : 'Total energy generated ( in proportion to load )',
     'excess_energy' : 'Excess energy generated ( in proportion to load )',
@@ -1235,10 +1283,10 @@ axis_labels_short = {
 
 # variables and axis labels
 units = {
-    'f_pv': 'x load',
-    'f_wind': 'x load',
+    'f_pv': 'Normalised Generation',
+    'f_wind': 'Normalised Generation',
     'energy' : 'x load',
-    'all_energy' : 'x load',
+    'all_energy' : '% 2018 load',
     'excess_energy' : 'x load',
     'norm_energy' : 'x load',
     'fraction' : '%',
@@ -1278,12 +1326,21 @@ for key, scenario in scenarios.items():
 #   print(demand)
     demands[key] = demand
 
+    # Print out annual demand in TWh
     ndays = len(demand)
-    annual_energy = demand.sum() * 365 / ndays
+    twh_per_day = 0.81838
+    annual_energy = demand.sum() * 365 * twh_per_day / ndays
+    annual_energy = ( demand.sum() * 34099.48 ) / ( 40.0 * 1000000.0 )
+#   nhours = float(ndays*24)
+#   total_demand_in_hours = float(demand.sum() )
+#   total_years = 40.0
+#   annual_energy = (total_demand_in_hours * twh_per_day) / (nhours*total_years)
+#   print('DEBUG {} {} {} {} {}'.format(nhours, total_demand_in_hours, twh_per_day, total_years, annual_energy))
 #   capacity = annual_energy * 1000.0 / 8760
     capacity = demand.max() * 1000.0 / 24.0
-    print('{: <12} {}  {:.2f}  {:.2f}'.format(key, ndays, annual_energy, capacity))
     capacities[key] = capacity
+    print('{: <12} {}  {:.2f}  {:.2f}'.format(key, ndays, annual_energy, capacity))
+
     path = '{}/{}/settings{}.csv'.format(output_dir, folder, filename)
     if exists(path):
         setting = readers.read_settings(path)
@@ -1313,6 +1370,7 @@ for key, scenario in scenarios.items():
 
     setting['normalise_mean'] = normalise_mean
     settings[key] = setting
+
 
     # set total demand
     demand = demand * normalise_factor
@@ -1349,9 +1407,10 @@ for key, scenario in scenarios.items():
 
 #   print(df)
 
+    norm_setting = float(settings[key]['normalise']) / 1000
     norm_factor = float(settings[key]['normalise']) / ( 24 * 1000 )
-    top_convert[key] = norm_factor
-    right_convert[key] = norm_factor
+    top_convert[key] = norm_setting
+    right_convert[key] = norm_setting
     if args.sx == 'wind_energy':
         wind_cf = 0.3878
         top_convert[key] = norm_factor / wind_cf
@@ -1706,7 +1765,10 @@ if not args.nolines:
             label_string = '{} {:.' + str(args.decimals) + 'f} ({}). {}'
             label_formated = label_string.format(args.cvariable, days, units[args.cvariable], label)
             # plot the storage line
-            ax.plot(storage_line[args.sx],storage_line[args.sy],label=label_formated, marker=marker_type, linestyle=line_style, color=line_colour, markevery=args.markevery)
+            if args.markevery==0:
+                ax.plot(storage_line[args.sx],storage_line[args.sy],label=label_formated, linestyle=line_style, color=line_colour)
+            else:
+                ax.plot(storage_line[args.sx],storage_line[args.sy],label=label_formated, marker=marker_type, linestyle=line_style, color=line_colour, markevery=args.markevery)
             if args.output:
                 filename = '{}/{}-{}-{}'.format(args.output, key, args.cvariable, days)
                 print('outputing line to {}'.format(filename))
